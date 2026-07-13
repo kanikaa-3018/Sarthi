@@ -1,47 +1,38 @@
-import { ShieldCheck, Info, HelpCircle } from "lucide-react";
+import { HelpCircle, Info, ShieldCheck } from "lucide-react";
 import { t, type LanguageCode } from "../i18n";
-import type { CompareResponse } from "../types/api";
+import type { CompareResponse, Product } from "../types/api";
 
 type Props = {
   comparison: CompareResponse;
+  productCatalog: Product[];
   language: LanguageCode;
   experienceMode: "simple" | "standard";
   onContinue: () => void;
   onOpenAudit: () => void;
 };
 
-// Seed database mapping helper to fetch original name & price from variant IDs
-function getSellerNameAndPrice(variantId: string) {
-  const match = variantId.match(/kurti_(\d+)_(\d+)/);
-  if (match) {
-    const clusterIdx = Number(match[1]);
-    const itemIdx = Number(match[2]);
-    const sellers = ["NayiDisha Fashions", "RangSetu Styles", "Sakhi Wholesale"];
-    const sellerName = sellers[(itemIdx + clusterIdx) % sellers.length];
-    
-    const basePrices: Record<number, number> = {
-      1: 449, 2: 399, 3: 699, 4: 329, 5: 379, 6: 549, 7: 499, 8: 459
-    };
-    const base = basePrices[clusterIdx] || 449;
-    const price = base + (itemIdx - 2) * 20;
-    return { sellerName, price };
-  }
-  return { sellerName: "Trusted Seller", price: 449 };
-}
-
-export function CompareSheet({ comparison, language, experienceMode, onContinue, onOpenAudit }: Props) {
+export function CompareSheet({
+  comparison,
+  productCatalog,
+  language,
+  experienceMode,
+  onContinue,
+  onOpenAudit
+}: Props) {
   const ranking = comparison.ranking;
   const fit = comparison.fit;
   const isSimple = experienceMode === "simple";
   const visibleFactors = isSimple ? ranking.top_factors.slice(0, 2) : ranking.top_factors;
-
-  // Retrieve candidate details
-  const winnerDetails = getSellerNameAndPrice(ranking.winner);
-  const alternativeDetails = ranking.alternative ? getSellerNameAndPrice(ranking.alternative) : null;
+  const winnerDetails = getProductDetailsForVariant(ranking.winner, productCatalog);
+  const alternativeDetails = ranking.alternative
+    ? getProductDetailsForVariant(ranking.alternative, productCatalog)
+    : null;
+  const plainReason = visibleFactors.length
+    ? visibleFactors.join(isSimple ? " and " : ", ")
+    : "seller, size, return, and dispatch evidence is stronger";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
-      {/* 7.2 Best Match */}
       <div style={{
         backgroundColor: "var(--bg-surface-muted)",
         border: "1.5px solid var(--accent-primary)",
@@ -51,7 +42,7 @@ export function CompareSheet({ comparison, language, experienceMode, onContinue,
         flexDirection: "column",
         gap: "10px"
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
           <span style={{
             fontSize: "11px",
             fontWeight: 800,
@@ -67,24 +58,31 @@ export function CompareSheet({ comparison, language, experienceMode, onContinue,
             fontSize: "10px",
             fontWeight: 700,
             padding: "2px 6px",
-            borderRadius: "4px"
+            borderRadius: "4px",
+            whiteSpace: "nowrap"
           }}>
-            Highly Recommended
+            Evidence picked
           </span>
         </div>
-        
+
         <div>
+          <span style={{ display: "block", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "2px" }}>
+            {winnerDetails.title}
+          </span>
           <strong style={{ fontSize: "16px", color: "var(--text-primary)" }}>
             {winnerDetails.sellerName}
           </strong>
           <div style={{ display: "flex", gap: "8px", fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
             <span>Rs {winnerDetails.price}</span>
-            <span>•</span>
+            <span>-</span>
             <span>Size: {fit.recommended_size}</span>
           </div>
         </div>
 
-        {/* Why this one bullets */}
+        <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+          In simple words, Sarthi picked this because {plainReason}. It is not choosing only by cheapest price.
+        </p>
+
         <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
           <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-primary)" }}>Why this one:</span>
           {visibleFactors.map((factor, idx) => (
@@ -96,7 +94,6 @@ export function CompareSheet({ comparison, language, experienceMode, onContinue,
         </div>
       </div>
 
-      {/* 7.2 Also Consider Alternative */}
       {!isSimple && ranking.alternative && alternativeDetails && (
         <div style={{
           backgroundColor: "var(--bg-surface)",
@@ -115,24 +112,26 @@ export function CompareSheet({ comparison, language, experienceMode, onContinue,
           }}>
             Also consider
           </span>
-          
+
           <div>
+            <span style={{ display: "block", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "2px" }}>
+              {alternativeDetails.title}
+            </span>
             <strong style={{ fontSize: "14px", color: "var(--text-primary)" }}>
               {alternativeDetails.sellerName}
             </strong>
             <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
               <span>Rs {alternativeDetails.price}</span>
-              <span>•</span>
+              <span>-</span>
               <span>Size: {fit.recommended_size}</span>
             </div>
           </div>
           <span style={{ fontSize: "11px", color: "var(--accent-secondary)", fontStyle: "italic" }}>
-            Lower price option, but historical data shows less evidence about color correctness or longer dispatch.
+            Lower price can still be useful, but Sarthi separates price from return, color, dispatch, and fit proof.
           </span>
         </div>
       )}
 
-      {/* Audit pathway timeline check link */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>
         <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           <Info size={12} />
@@ -147,7 +146,6 @@ export function CompareSheet({ comparison, language, experienceMode, onContinue,
         </button>
       </div>
 
-      {/* Choose action CTA */}
       <button
         onClick={onContinue}
         style={{
@@ -167,4 +165,16 @@ export function CompareSheet({ comparison, language, experienceMode, onContinue,
       </button>
     </div>
   );
+}
+
+function getProductDetailsForVariant(variantId: string, productCatalog: Product[]) {
+  const product = [...productCatalog]
+    .sort((a, b) => b.product_id.length - a.product_id.length)
+    .find((item) => variantId === item.product_id || variantId.startsWith(`${item.product_id}_`));
+
+  return {
+    title: product?.title.split("-")[0].trim() ?? "Selected product",
+    sellerName: product?.seller_name ?? "Mapped seller",
+    price: product?.base_price ?? 0
+  };
 }

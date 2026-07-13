@@ -12,7 +12,9 @@ import {
   Info,
   CheckCircle2,
   X,
-  HelpCircle
+  HelpCircle,
+  Heart,
+  BookmarkCheck
 } from "lucide-react";
 import { compareCluster, getFeed, getProductDetail, askSarthi } from "../api/client";
 import { simpleTrustMeaning, t, type LanguageCode } from "../i18n";
@@ -38,6 +40,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [products, setProducts] = useState<Product[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
+  const [wishlistedProduct, setWishlistedProduct] = useState<Product | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [auditTraceId, setAuditTraceId] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setSelectedVariantId(null);
     setAuditTraceId(null);
     setAutoScan({ status: "idle" });
+    setWishlistedProduct(null);
     setError(null);
     setStep("feed");
     
@@ -101,44 +105,6 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
   const activeClusterId = selectedClusterId || sarthiClusters[0]?.cluster_id || "cluster_floral_blue";
 
-  useEffect(() => {
-    if (!ready || autoScan.status !== "idle" || !products.length) return;
-    const target = selectAutopilotCluster(products);
-    if (!target) return;
-
-    let cancelled = false;
-    setAutoScan({
-      status: "scanning",
-      clusterId: target.clusterId,
-      title: target.title,
-      listingCount: target.listingCount
-    });
-    compareCluster(buyerId, target.clusterId)
-      .then((result) => {
-        if (cancelled) return;
-        setAutoScan({
-          status: "ready",
-          clusterId: target.clusterId,
-          title: target.title,
-          listingCount: target.listingCount,
-          result
-        });
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        setAutoScan({
-          status: "error",
-          clusterId: target.clusterId,
-          title: target.title,
-          message: err.message
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [autoScan.status, buyerId, products, ready]);
-
   // Comparison helper trigger
   async function triggerComparison(targetClusterId = activeClusterId) {
     setLoading(true);
@@ -164,6 +130,36 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setCompareSheetOpen(false);
   }
 
+  async function handleWishlistProduct(product: Product) {
+    setWishlistedProduct(product);
+    setSelectedClusterId(product.cluster_id);
+    setAutoScan({
+      status: "scanning",
+      clusterId: product.cluster_id,
+      title: product.title.split("-")[0].trim(),
+      listingCount: clusterListingCount(products, product.cluster_id)
+    });
+    setError(null);
+    try {
+      const result = await compareCluster(buyerId, product.cluster_id);
+      setComparison(result);
+      setAutoScan({
+        status: "ready",
+        clusterId: product.cluster_id,
+        title: product.title.split("-")[0].trim(),
+        listingCount: clusterListingCount(products, product.cluster_id),
+        result
+      });
+    } catch (err) {
+      setAutoScan({
+        status: "error",
+        clusterId: product.cluster_id,
+        title: product.title.split("-")[0].trim(),
+        message: err instanceof Error ? err.message : "Unable to compare similar listings"
+      });
+    }
+  }
+
   function openAutoScanResult(result: CompareResponse) {
     setComparison(result);
     setSelectedClusterId(autoScan.status === "ready" ? autoScan.clusterId : activeClusterId);
@@ -181,6 +177,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       {step === "feed" ? (
         <MarketplaceHome
           products={visibleProducts}
+          allProducts={products}
           categories={categories}
           selectedCategory={selectedCategory}
           onCategoryChange={setSelectedCategory}
@@ -191,6 +188,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           onSelectCluster={setSelectedClusterId}
           onRunComparison={triggerComparison}
           autoScan={autoScan}
+          wishlistedProduct={wishlistedProduct}
+          hasBuyerIntent={Boolean(searchTerm.trim()) || selectedCategory !== "All" || Boolean(wishlistedProduct)}
+          onQuickSearch={setSearchTerm}
+          onWishlistProduct={handleWishlistProduct}
           onOpenAutoScan={openAutoScanResult}
           onOpenAutoScanProof={(traceId) => {
             setAuditTraceId(traceId);
@@ -244,6 +245,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             
             <CompareSheet
               comparison={comparison}
+              productCatalog={products}
               language={language}
               experienceMode={experienceMode}
               onOpenAudit={() => {
@@ -313,6 +315,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 // Marketplace Feed Component (Responsive Grid view)
 function MarketplaceHome({
   products,
+  allProducts,
   categories,
   selectedCategory,
   onCategoryChange,
@@ -323,6 +326,10 @@ function MarketplaceHome({
   onSelectCluster,
   onRunComparison,
   autoScan,
+  wishlistedProduct,
+  hasBuyerIntent,
+  onQuickSearch,
+  onWishlistProduct,
   onOpenAutoScan,
   onOpenAutoScanProof,
   onSelectProductDirectly,
@@ -330,6 +337,7 @@ function MarketplaceHome({
   language
 }: {
   products: Product[];
+  allProducts: Product[];
   categories: string[];
   selectedCategory: string;
   onCategoryChange: (category: string) => void;
@@ -340,6 +348,10 @@ function MarketplaceHome({
   onSelectCluster: (clusterId: string) => void;
   onRunComparison: (clusterId?: string) => void;
   autoScan: AutoScanState;
+  wishlistedProduct: Product | null;
+  hasBuyerIntent: boolean;
+  onQuickSearch: (value: string) => void;
+  onWishlistProduct: (product: Product) => void;
   onOpenAutoScan: (result: CompareResponse) => void;
   onOpenAutoScanProof: (traceId: string) => void;
   onSelectProductDirectly: (productId: string, variantId: string) => void;
@@ -347,9 +359,48 @@ function MarketplaceHome({
   language: LanguageCode;
 }) {
   const currentCluster = sarthiClusters.find((product) => product.cluster_id === activeClusterId) || sarthiClusters[0];
+  const quickSearches = ["cotton kurti", "kurta set", "office palazzo", "work bag"];
 
   return (
     <div className="marketplace-home" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      {!hasBuyerIntent && (
+        <div style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "12px",
+          padding: "18px",
+          textAlign: "left",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px"
+        }}>
+          <span className="eyebrow" style={{ color: "var(--accent-primary-hover)" }}>Start with what you need</span>
+          <h2 style={{ fontSize: "20px", margin: 0, color: "var(--text-primary)" }}>Search a product, then save one for Sarthi check</h2>
+          <p style={{ fontSize: "13px", margin: 0 }}>
+            Sarthi compares only the product you show interest in. Save any product and it will check similar seller options, size fit, returns, and proof.
+          </p>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {quickSearches.map((item) => (
+              <button
+                key={item}
+                onClick={() => onQuickSearch(item)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "999px",
+                  background: "var(--bg-surface-muted)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border-subtle)",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  textTransform: "capitalize"
+                }}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* Search Input */}
       <div className="phone-input-wrapper" style={{ margin: "4px 0" }}>
@@ -359,7 +410,7 @@ function MarketplaceHome({
         <input
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search catalog kurtis, sets..."
+          placeholder="Search what you want to buy..."
           style={{ paddingLeft: 0, fontSize: "14px" }}
         />
       </div>
@@ -410,8 +461,8 @@ function MarketplaceHome({
               </h2>
               <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0 }}>
                 {autoScan.status === "ready"
-                  ? `${autoScan.title} checked across ${autoScan.listingCount} seller options.`
-                  : `Sarthi is checking seller, return, size, and evidence signals for ${autoScan.title}.`}
+                  ? `${autoScan.title} checked across ${autoScan.listingCount} mapped seller options.`
+                  : `Sarthi is checking similar sellers, return reasons, size fit, price proof, and privacy boundaries for ${autoScan.title}.`}
               </p>
             </div>
           </div>
@@ -470,8 +521,14 @@ function MarketplaceHome({
         </div>
       )}
 
+      {autoScan.status === "error" && (
+        <div className="notice error">
+          Sarthi could not compare {autoScan.title}: {autoScan.message}
+        </div>
+      )}
+
       {/* Screen 1: Inline Cluster prompt if duplicate confusion is detected */}
-      {currentCluster && autoScan.status !== "ready" && (
+      {hasBuyerIntent && currentCluster && autoScan.status !== "ready" && (
         <div style={{
           backgroundColor: "var(--bg-surface-muted)",
           border: "1px dashed var(--accent-primary)",
@@ -486,10 +543,12 @@ function MarketplaceHome({
             <div style={{ background: "var(--accent-primary)", borderRadius: "50%", width: "26px", height: "26px", display: "grid", placeItems: "center", color: "#fff" }}>
               <Sparkles size={13} />
             </div>
-            <strong style={{ fontSize: "14px", color: "var(--text-primary)" }}>3 similar options found</strong>
+            <strong style={{ fontSize: "14px", color: "var(--text-primary)" }}>
+              {clusterListingCount(allProducts, currentCluster.cluster_id)} similar options found
+            </strong>
           </div>
           <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0, lineHeight: 1.4 }}>
-            We detected duplicate seller options for "{currentCluster.title.split("-")[0].trim()}". Let Sarthi find the optimal kept SKU.
+            Save a product you like, or let Sarthi compare this mapped group for "{currentCluster.title.split("-")[0].trim()}".
           </p>
           <button
             onClick={() => onRunComparison(currentCluster.cluster_id)}
@@ -516,15 +575,21 @@ function MarketplaceHome({
       )}
 
       {/* Catalog items heading */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
-        <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>Recommended Kurtis</span>
-        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{products.length} options</span>
-      </div>
+      {hasBuyerIntent && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
+            {searchTerm.trim() ? `Results for "${searchTerm.trim()}"` : "Products you can check"}
+          </span>
+          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{products.length} options</span>
+        </div>
+      )}
 
       {/* Responsive Grid List */}
+      {hasBuyerIntent && products.length > 0 && (
       <div className="web-product-grid">
         {products.map((p) => {
           const strikePrice = Math.round(p.base_price * 1.35);
+          const isSaved = wishlistedProduct?.product_id === p.product_id;
           return (
             <div
               key={p.product_id}
@@ -560,6 +625,35 @@ function MarketplaceHome({
                     borderRadius: "3px"
                   }}>
                     {p.commerce_badge}
+                  </span>
+                )}
+                {p.is_sarthi_eligible ? (
+                  <span style={{
+                    position: "absolute",
+                    bottom: "8px",
+                    left: "8px",
+                    backgroundColor: "var(--success)",
+                    color: "#fff",
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    padding: "3px 6px",
+                    borderRadius: "3px"
+                  }}>
+                    Sarthi mapped
+                  </span>
+                ) : (
+                  <span style={{
+                    position: "absolute",
+                    bottom: "8px",
+                    left: "8px",
+                    backgroundColor: "var(--bg-surface)",
+                    color: "var(--text-secondary)",
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    padding: "3px 6px",
+                    borderRadius: "3px"
+                  }}>
+                    Catalog only
                   </span>
                 )}
               </div>
@@ -599,11 +693,53 @@ function MarketplaceHome({
                   <Truck size={12} />
                   <span>{p.delivery_text || "Free delivery"}</span>
                 </div>
+
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (p.is_sarthi_eligible) {
+                      void onWishlistProduct(p);
+                    }
+                  }}
+                  disabled={!p.is_sarthi_eligible}
+                  style={{
+                    marginTop: "8px",
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                    padding: "8px",
+                    borderRadius: "7px",
+                    border: "1px solid var(--border-subtle)",
+                    background: isSaved ? "var(--accent-primary)" : "var(--bg-surface-muted)",
+                    color: isSaved ? "var(--text-on-accent)" : "var(--text-primary)",
+                    fontSize: "11px",
+                    fontWeight: 800
+                  }}
+                >
+                  {isSaved ? <BookmarkCheck size={13} /> : <Heart size={13} />}
+                  <span>{isSaved ? "Saved for Sarthi" : p.is_sarthi_eligible ? "Save for Sarthi check" : "No comparison yet"}</span>
+                </button>
               </div>
             </div>
           );
         })}
       </div>
+      )}
+
+      {hasBuyerIntent && products.length === 0 && (
+        <div style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "12px",
+          padding: "18px",
+          textAlign: "left"
+        }}>
+          <strong style={{ color: "var(--text-primary)" }}>No matching products found</strong>
+          <p style={{ margin: "6px 0 0", fontSize: "13px" }}>Try a broader search like kurti, saree, bag, or bedsheet.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -634,24 +770,8 @@ function proofCount(result: CompareResponse) {
   ]).size;
 }
 
-function selectAutopilotCluster(products: Product[]) {
-  const clusters = new Map<string, { clusterId: string; title: string; listingCount: number }>();
-  for (const product of products) {
-    if (!product.is_sarthi_eligible) continue;
-    const existing = clusters.get(product.cluster_id);
-    if (existing) {
-      existing.listingCount += 1;
-    } else {
-      clusters.set(product.cluster_id, {
-        clusterId: product.cluster_id,
-        title: product.title.split("-")[0].trim(),
-        listingCount: 1
-      });
-    }
-  }
-  return Array.from(clusters.values())
-    .filter((cluster) => cluster.listingCount > 1)
-    .sort((a, b) => b.listingCount - a.listingCount || a.title.localeCompare(b.title))[0];
+function clusterListingCount(products: Product[], clusterId: string) {
+  return products.filter((product) => product.cluster_id === clusterId).length;
 }
 
 // Screen 3: Responsive Split 2-Column Product Detail Panel
