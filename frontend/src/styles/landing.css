@@ -1,4 +1,4 @@
-﻿/* -------------------------------------------------------------
+/* -------------------------------------------------------------
    LANDING PAGE STYLING
 ------------------------------------------------------------- */
 .landing-shell {
@@ -699,4 +699,405 @@
   font-size: 12px;
   color: var(--forest-green);
 }
+
+/* -------------------------------------------------------------
+   MOBILE AUTHENTICATION FLOW
+   ------------------------------------------------------------- */
+.mobile-auth-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  background-color: var(--bg-canvas);
+}
+
+.mobile-auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 32px 24px;
+  box-shadow: var(--shadow-md);
+}
+
+.mobile-auth-card.auth-entry-card {
+  max-width: 520px;
+}
+
+.auth-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.brand-logo-badge {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  font-size: 24px;
+}
+
+.brand-logo-text {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 24px;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.brand-logo-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.auth-portal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.auth-portal-card {
+  min-height: 94px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.auth-portal-card strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.auth-portal-card span:last-child {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.auth-portal-card.active {
+  border-color: var(--accent-primary);
+  background: var(--bg-surface-muted);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.auth-portal-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--bg-surface-muted);
+  color: var(--accent-primary);
+}
+
+.auth-portal-card.active .auth-portal-icon {
+  background: var(--bg-surface);
+}
+
+.auth-portal-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.auth-portal-lock,
+.auth-security-note,
+.auth-helper-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-portal-lock svg,
+.auth-security-note svg {
+  flex: 0 0 auto;
+  color: var(--accent-primary);
+  margin-top: 1px;
+}
+
+.auth-success-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background-color: var(--bg-surface-muted);
+  border-left: 4px solid var(--success);
+  color: var(--success);
+  padding: 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+
+.auth-success-banner svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.demo-credential-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.demo-credential-box strong,
+.demo-credential-box span {
+  display: block;
+}
+
+.demo-credential-box strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.demo-credential-box span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.demo-credential-box button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-muted);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-helper-text {
+  margin: 0;
+}
+
+.auth-error-banner {
+  background-color: var(--bg-surface-muted);
+  border-left: 4px solid var(--error);
+  color: var(--error);
+  padding: 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.auth-form-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-step-heading {
+  font-size: 20px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.auth-step-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-top: -8px;
+  margin-bottom: 8px;
+}
+
+.phone-input-wrapper {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--bg-surface);
+}
+
+.phone-prefix {
+  padding: 12px;
+  background-color: var(--bg-surface-muted);
+  border-right: 1px solid var(--border-subtle);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.phone-input-wrapper input {
+  border: none;
+  flex: 1;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  background: transparent;
+  outline: none;
+  color: var(--text-primary);
+}
+
+.otp-input-wrapper {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.otp-input-wrapper input {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+  width: 140px;
+  letter-spacing: 0.5em;
+  text-indent: 0.25em;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  outline: none;
+}
+.otp-input-wrapper input:focus {
+  border-color: var(--accent-primary);
+}
+
+.otp-demo-hint {
+  font-size: 11px;
+  color: var(--accent-secondary);
+  text-align: center;
+  font-weight: 500;
+  margin-top: -8px;
+  margin-bottom: 8px;
+}
+
+.auth-primary-btn {
+  background-color: var(--accent-primary);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  transition: background-color 0.2s ease;
+}
+.auth-primary-btn:hover:not(:disabled) {
+  background-color: var(--accent-primary-hover);
+}
+.auth-primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.role-buttons-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.role-select-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  background-color: var(--bg-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+.role-select-card:hover {
+  border-color: var(--accent-primary);
+  background-color: var(--bg-surface-muted);
+}
+
+.role-icon-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.role-icon-circle.bg-buyer {
+  background-color: var(--bg-surface-muted);
+  color: var(--accent-primary);
+}
+.role-icon-circle.bg-seller {
+  background-color: var(--bg-surface-muted);
+  color: var(--accent-secondary);
+}
+
+.role-select-card strong {
+  font-size: 14px;
+  color: var(--text-primary);
+  display: block;
+}
+
+.role-select-card span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.auth-bottom-banner {
+  margin-top: 24px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 560px) {
+  .mobile-auth-card.auth-entry-card {
+    padding: 24px 16px;
+  }
+
+  .auth-portal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-portal-card {
+    min-height: auto;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    justify-content: start;
+  }
+
+  .auth-portal-card span:last-child {
+    grid-column: 2;
+  }
+}
+
 
