@@ -15,7 +15,7 @@ import {
   HelpCircle
 } from "lucide-react";
 import { compareCluster, getFeed, getProductDetail, askSarthi } from "../api/client";
-import { t, type LanguageCode } from "../i18n";
+import { simpleTrustMeaning, t, type LanguageCode } from "../i18n";
 import type { CompareResponse, Product, ProductDetailResponse, AgentResponse } from "../types/api";
 import { CompareSheet } from "./CompareSheet";
 import { CheckoutSheet } from "./CheckoutSheet";
@@ -222,6 +222,8 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             }}
             onOpenCheckout={() => setCheckoutOpen(true)}
             language={language}
+            experienceMode={experienceMode}
+            comparisonTraceId={comparison.trace_id}
           />
         )
       )}
@@ -661,7 +663,9 @@ function ProductDetailPanel({
   onBack,
   onOpenAudit,
   onOpenCheckout,
-  language
+  language,
+  experienceMode,
+  comparisonTraceId
 }: {
   buyerId: string;
   productId: string;
@@ -671,6 +675,8 @@ function ProductDetailPanel({
   onOpenAudit: (traceId: string) => void;
   onOpenCheckout: () => void;
   language: LanguageCode;
+  experienceMode: "simple" | "standard";
+  comparisonTraceId: string;
 }) {
   const [detail, setDetail] = useState<ProductDetailResponse | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState(initialVariantId);
@@ -849,6 +855,16 @@ function ProductDetailPanel({
             </div>
           </div>
 
+          <TrustReceipt
+            detail={detail}
+            language={language}
+            experienceMode={experienceMode}
+            comparisonTraceId={comparisonTraceId}
+            onOpenAudit={onOpenAudit}
+          />
+
+          <AgentCheckTimeline detail={detail} />
+
           {/* Ask Sarthi Block */}
           <div style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "18px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
@@ -951,6 +967,162 @@ function ProductDetailPanel({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TrustReceipt({
+  detail,
+  language,
+  experienceMode,
+  comparisonTraceId,
+  onOpenAudit
+}: {
+  detail: ProductDetailResponse;
+  language: LanguageCode;
+  experienceMode: "simple" | "standard";
+  comparisonTraceId: string;
+  onOpenAudit: (traceId: string) => void;
+}) {
+  const trust = detail.trust_state;
+  const allowed = trust.can_recommend;
+  const sourceStatus = trust.data_freshness.overall_status;
+  const graphFactCount = new Set(detail.graph_paths.flatMap((path) => path.fact_ids)).size;
+
+  return (
+    <div className={`trust-receipt-card ${experienceMode === "simple" ? "simple" : ""}`}>
+      <div className="trust-receipt-top">
+        <div>
+          <span className="eyebrow" style={{ color: "var(--accent-primary-hover)" }}>{t(language, "trustReceipt")}</span>
+          <h3>{trust.headline}</h3>
+        </div>
+        <span className={`trust-receipt-pill ${allowed ? "allowed" : "paused"}`}>
+          {allowed ? t(language, "recommendationAllowed") : t(language, "recommendationPaused")}
+        </span>
+      </div>
+
+      <div className="trust-receipt-section">
+        <span>{t(language, "whatThisMeans")}</span>
+        <strong>
+          {experienceMode === "simple"
+            ? simpleTrustMeaning(trust.status, trust.can_recommend, language)
+            : trust.summary}
+        </strong>
+      </div>
+
+      <div className="trust-receipt-section">
+        <span>{t(language, "nextStep")}</span>
+        <strong>{trust.buyer_guidance}</strong>
+      </div>
+
+      {trust.missing_data.length > 0 && (
+        <div className="compare-simple-note">
+          <Info size={14} />
+          <span>Missing proof: {trust.missing_data.slice(0, 2).join(", ")}</span>
+        </div>
+      )}
+
+      {experienceMode === "standard" && (
+        <div className="trust-receipt-facts">
+          <div>
+            <span>Seller</span>
+            <strong>{labelize(trust.seller_verification.verification_status)}</strong>
+          </div>
+          <div>
+            <span>Evidence</span>
+            <strong>{detail.evidence.evidence_strength}</strong>
+          </div>
+          <div>
+            <span>Sources</span>
+            <strong>{labelize(sourceStatus)}</strong>
+          </div>
+          <div>
+            <span>Orders</span>
+            <strong>{String(detail.evidence.delivered_orders_90d)}</strong>
+          </div>
+          <div>
+            <span>Graph proof</span>
+            <strong>{String(graphFactCount)}</strong>
+          </div>
+          <div>
+            <span>Memory</span>
+            <strong>{detail.privacy.fit_memory_enabled ? "On" : "Off"}</strong>
+          </div>
+        </div>
+      )}
+
+      <button
+        className="btn-action-secondary"
+        onClick={() => onOpenAudit(comparisonTraceId)}
+        style={{ marginTop: "14px", width: "100%", justifyContent: "center" }}
+      >
+        See decision proof
+      </button>
+    </div>
+  );
+}
+
+function AgentCheckTimeline({ detail }: { detail: ProductDetailResponse }) {
+  const trust = detail.trust_state;
+  const sourceHealthy = !trust.data_freshness.blocking;
+  const sellerVerified = trust.seller_verification.verification_status === "verified";
+  const enoughEvidence = ["medium", "strong"].includes(detail.evidence.evidence_strength);
+  const fitConfident = detail.fit.confidence !== "low";
+
+  const checks = [
+    {
+      title: "Seller verification",
+      passed: sellerVerified,
+      body: sellerVerified
+        ? `${detail.product.seller_name} has verified seller status.`
+        : `Seller status is ${labelize(trust.seller_verification.verification_status)}.`
+    },
+    {
+      title: "Return evidence",
+      passed: enoughEvidence,
+      body: `${detail.evidence.delivered_orders_90d} delivered orders and ${detail.evidence.returns_90d} returns checked.`
+    },
+    {
+      title: "Size fit",
+      passed: fitConfident,
+      body: `Recommended size is ${detail.fit.recommended_size} with ${detail.fit.confidence} confidence.`
+    },
+    {
+      title: "Source freshness",
+      passed: sourceHealthy,
+      body: `Data source status is ${labelize(trust.data_freshness.overall_status)}.`
+    },
+    {
+      title: "Privacy boundary",
+      passed: true,
+      body: detail.privacy.fit_memory_enabled
+        ? "Personal fit memory was used only for this buyer."
+        : "Personal fit memory is off; Sarthi used aggregate evidence only."
+    }
+  ];
+
+  return (
+    <div className="agent-check-card">
+      <div className="agent-check-header">
+        <div>
+          <span className="eyebrow" style={{ color: "var(--accent-primary-hover)" }}>Agent checks</span>
+          <h3>What Sarthi verified</h3>
+        </div>
+        <ShieldCheck size={18} />
+      </div>
+      <div className="agent-check-list">
+        {checks.map((check) => (
+          <div key={check.title} className={`agent-check-row ${check.passed ? "passed" : "attention"}`}>
+            <span className="agent-check-icon">
+              {check.passed ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+            </span>
+            <div>
+              <strong>{check.title}</strong>
+              <span>{check.body}</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
