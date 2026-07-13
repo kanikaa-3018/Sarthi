@@ -28,9 +28,16 @@ type Props = {
   experienceMode: "simple" | "standard";
 };
 
+type AutoScanState =
+  | { status: "idle" }
+  | { status: "scanning"; clusterId: string; title: string; listingCount: number }
+  | { status: "ready"; clusterId: string; title: string; listingCount: number; result: CompareResponse }
+  | { status: "error"; clusterId: string; title: string; message: string };
+
 export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
+  const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [auditTraceId, setAuditTraceId] = useState<string | null>(null);
@@ -56,6 +63,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setSelectedProductId(null);
     setSelectedVariantId(null);
     setAuditTraceId(null);
+    setAutoScan({ status: "idle" });
     setError(null);
     setStep("feed");
     
@@ -93,6 +101,44 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
   const activeClusterId = selectedClusterId || sarthiClusters[0]?.cluster_id || "cluster_floral_blue";
 
+  useEffect(() => {
+    if (!ready || autoScan.status !== "idle" || !products.length) return;
+    const target = selectAutopilotCluster(products);
+    if (!target) return;
+
+    let cancelled = false;
+    setAutoScan({
+      status: "scanning",
+      clusterId: target.clusterId,
+      title: target.title,
+      listingCount: target.listingCount
+    });
+    compareCluster(buyerId, target.clusterId)
+      .then((result) => {
+        if (cancelled) return;
+        setAutoScan({
+          status: "ready",
+          clusterId: target.clusterId,
+          title: target.title,
+          listingCount: target.listingCount,
+          result
+        });
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setAutoScan({
+          status: "error",
+          clusterId: target.clusterId,
+          title: target.title,
+          message: err.message
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autoScan.status, buyerId, products, ready]);
+
   // Comparison helper trigger
   async function triggerComparison(targetClusterId = activeClusterId) {
     setLoading(true);
@@ -118,6 +164,15 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setCompareSheetOpen(false);
   }
 
+  function openAutoScanResult(result: CompareResponse) {
+    setComparison(result);
+    setSelectedClusterId(autoScan.status === "ready" ? autoScan.clusterId : activeClusterId);
+    setSelectedProductId(result.selected_product_id);
+    setSelectedVariantId(result.ranking.winner);
+    setStep("detail");
+    setCompareSheetOpen(false);
+  }
+
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
       {error && <div className="notice error" style={{ margin: "10px" }}>{error}</div>}
@@ -135,6 +190,12 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           activeClusterId={activeClusterId}
           onSelectCluster={setSelectedClusterId}
           onRunComparison={triggerComparison}
+          autoScan={autoScan}
+          onOpenAutoScan={openAutoScanResult}
+          onOpenAutoScanProof={(traceId) => {
+            setAuditTraceId(traceId);
+            setAuditDrawerOpen(true);
+          }}
           onSelectProductDirectly={(pId, vId) => {
             compareCluster(buyerId, products.find(p => p.product_id === pId)?.cluster_id || "cluster_floral_blue")
               .then((result) => {
@@ -259,6 +320,9 @@ function MarketplaceHome({
   activeClusterId,
   onSelectCluster,
   onRunComparison,
+  autoScan,
+  onOpenAutoScan,
+  onOpenAutoScanProof,
   onSelectProductDirectly,
   loading,
   language
@@ -273,6 +337,9 @@ function MarketplaceHome({
   activeClusterId: string;
   onSelectCluster: (clusterId: string) => void;
   onRunComparison: (clusterId?: string) => void;
+  autoScan: AutoScanState;
+  onOpenAutoScan: (result: CompareResponse) => void;
+  onOpenAutoScanProof: (traceId: string) => void;
   onSelectProductDirectly: (productId: string, variantId: string) => void;
   loading: boolean;
   language: LanguageCode;
@@ -318,8 +385,91 @@ function MarketplaceHome({
         ))}
       </div>
 
+      {(autoScan.status === "scanning" || autoScan.status === "ready") && (
+        <div style={{
+          backgroundColor: "var(--bg-surface)",
+          border: "1px solid var(--accent-primary)",
+          borderRadius: "12px",
+          padding: "16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          textAlign: "left",
+          boxShadow: "var(--shadow-sm)"
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+            <div style={{ background: "var(--accent-primary)", borderRadius: "8px", width: "32px", height: "32px", display: "grid", placeItems: "center", color: "var(--text-on-accent)", flex: "0 0 auto" }}>
+              <Sparkles size={15} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <span className="eyebrow" style={{ color: "var(--accent-primary-hover)" }}>Sarthi Auto Scan</span>
+              <h2 style={{ fontSize: "16px", margin: "2px 0 4px", color: "var(--text-primary)" }}>
+                {autoScan.status === "ready" ? "One safe option is ready" : "Checking similar listings for you"}
+              </h2>
+              <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0 }}>
+                {autoScan.status === "ready"
+                  ? `${autoScan.title} checked across ${autoScan.listingCount} seller options.`
+                  : `Sarthi is checking seller, return, size, and evidence signals for ${autoScan.title}.`}
+              </p>
+            </div>
+          </div>
+
+          {autoScan.status === "ready" && (
+            <>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: "8px"
+              }}>
+                <AutoScanMetric label="Size" value={autoScan.result.fit.recommended_size} />
+                <AutoScanMetric label="Confidence" value={labelize(autoScan.result.fit.confidence)} />
+                <AutoScanMetric label="Proof" value={`${proofCount(autoScan.result)} facts`} />
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  onClick={() => onOpenAutoScan(autoScan.result)}
+                  style={{
+                    backgroundColor: "var(--accent-primary)",
+                    color: "var(--text-on-accent)",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <CheckCircle2 size={14} />
+                  <span>Open safest option</span>
+                </button>
+                <button
+                  onClick={() => onOpenAutoScanProof(autoScan.result.trace_id)}
+                  style={{
+                    backgroundColor: "var(--bg-surface-muted)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <HelpCircle size={14} />
+                  <span>See proof</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Screen 1: Inline Cluster prompt if duplicate confusion is detected */}
-      {currentCluster && (
+      {currentCluster && autoScan.status !== "ready" && (
         <div style={{
           backgroundColor: "var(--bg-surface-muted)",
           border: "1px dashed var(--accent-primary)",
@@ -454,6 +604,52 @@ function MarketplaceHome({
       </div>
     </div>
   );
+}
+
+function AutoScanMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{
+      background: "var(--bg-surface-muted)",
+      border: "1px solid var(--border-subtle)",
+      borderRadius: "8px",
+      padding: "10px"
+    }}>
+      <span style={{ display: "block", fontSize: "10px", color: "var(--text-secondary)", fontWeight: 800 }}>
+        {label}
+      </span>
+      <strong style={{ display: "block", marginTop: "2px", fontSize: "13px", color: "var(--text-primary)" }}>
+        {value}
+      </strong>
+    </div>
+  );
+}
+
+function proofCount(result: CompareResponse) {
+  return new Set([
+    ...result.ranking.fact_ids,
+    ...result.fit.fact_ids,
+    ...result.graph_path.fact_ids
+  ]).size;
+}
+
+function selectAutopilotCluster(products: Product[]) {
+  const clusters = new Map<string, { clusterId: string; title: string; listingCount: number }>();
+  for (const product of products) {
+    if (!product.is_sarthi_eligible) continue;
+    const existing = clusters.get(product.cluster_id);
+    if (existing) {
+      existing.listingCount += 1;
+    } else {
+      clusters.set(product.cluster_id, {
+        clusterId: product.cluster_id,
+        title: product.title.split("-")[0].trim(),
+        listingCount: 1
+      });
+    }
+  }
+  return Array.from(clusters.values())
+    .filter((cluster) => cluster.listingCount > 1)
+    .sort((a, b) => b.listingCount - a.listingCount || a.title.localeCompare(b.title))[0];
 }
 
 // Screen 3: Responsive Split 2-Column Product Detail Panel
