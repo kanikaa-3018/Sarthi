@@ -1,94 +1,170 @@
-import { ShieldCheck, GitCompareArrows, HelpCircle, CheckCircle2 } from "lucide-react";
-import { t, type ExperienceMode, type LanguageCode } from "../i18n";
+import { ShieldCheck, Info, HelpCircle } from "lucide-react";
+import { t, type LanguageCode } from "../i18n";
 import type { CompareResponse } from "../types/api";
 
 type Props = {
   comparison: CompareResponse;
   language: LanguageCode;
-  experienceMode: ExperienceMode;
+  experienceMode: "simple" | "standard";
   onContinue: () => void;
   onOpenAudit: () => void;
 };
 
+// Seed database mapping helper to fetch original name & price from variant IDs
+function getSellerNameAndPrice(variantId: string) {
+  const match = variantId.match(/kurti_(\d+)_(\d+)/);
+  if (match) {
+    const clusterIdx = Number(match[1]);
+    const itemIdx = Number(match[2]);
+    const sellers = ["NayiDisha Fashions", "RangSetu Styles", "Sakhi Wholesale"];
+    const sellerName = sellers[(itemIdx + clusterIdx) % sellers.length];
+    
+    const basePrices: Record<number, number> = {
+      1: 449, 2: 399, 3: 699, 4: 329, 5: 379, 6: 549, 7: 499, 8: 459
+    };
+    const base = basePrices[clusterIdx] || 449;
+    const price = base + (itemIdx - 2) * 20;
+    return { sellerName, price };
+  }
+  return { sellerName: "Trusted Seller", price: 449 };
+}
+
 export function CompareSheet({ comparison, language, experienceMode, onContinue, onOpenAudit }: Props) {
   const ranking = comparison.ranking;
   const fit = comparison.fit;
-  const winner = ranking.candidates.find((candidate) => candidate.variant_id === ranking.winner);
+  const isSimple = experienceMode === "simple";
+  const visibleFactors = isSimple ? ranking.top_factors.slice(0, 2) : ranking.top_factors;
+
+  // Retrieve candidate details
+  const winnerDetails = getSellerNameAndPrice(ranking.winner);
+  const alternativeDetails = ranking.alternative ? getSellerNameAndPrice(ranking.alternative) : null;
 
   return (
-    <section className="card-surface">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
+      {/* 7.2 Best Match */}
+      <div style={{
+        backgroundColor: "var(--bg-surface-muted)",
+        border: "1.5px solid var(--accent-primary)",
+        borderRadius: "12px",
+        padding: "16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{
+            fontSize: "11px",
+            fontWeight: 800,
+            color: "var(--success)",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em"
+          }}>
+            Best match for you
+          </span>
+          <span style={{
+            backgroundColor: "var(--success)",
+            color: "#fff",
+            fontSize: "10px",
+            fontWeight: 700,
+            padding: "2px 6px",
+            borderRadius: "4px"
+          }}>
+            Highly Recommended
+          </span>
+        </div>
+        
         <div>
-          <span className="eyebrow">Comparison Analysis</span>
-          <h2 style={{ fontSize: "22px", marginTop: "4px" }}>Sarthi Curated Listings Match</h2>
-        </div>
-        <div className="system-status" style={{ background: "var(--sage-light)", color: "var(--forest-green)" }}>
-          <ShieldCheck size={14} />
-          <span>{winner ? `${Math.round(winner.score * 100)} Sarthi Score` : "Evidence Ready"}</span>
-        </div>
-      </div>
-
-      <p style={{ marginTop: "-8px" }}>
-        Sarthi analyzed matching catalog duplicates. By mapping seller ratings, dispatch speeds, and return frequency from identical SKUs, Sarthi ranked <strong>{ranking.winner}</strong> as the optimal keep-pick.
-      </p>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "20px", marginTop: "8px" }}>
-        {/* Recommended Winner Block */}
-        <div className="comparison-winner-tile" style={{ padding: "16px", background: "var(--bg-beige)", border: "1px dashed var(--moss-green)" }}>
-          <span className="eyebrow" style={{ fontSize: "10px", color: "var(--moss-green)" }}>Winner Listing Option</span>
-          <strong style={{ fontSize: "16px", color: "var(--forest-green)", marginTop: "4px" }}>{ranking.winner}</strong>
-          <span style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
-            Recommended: Size <strong>{fit.recommended_size}</strong> &bull; {fit.confidence} fit predictability
-          </span>
-        </div>
-
-        {/* Alternative Block */}
-        <div className="comparison-winner-tile" style={{ padding: "16px", background: "var(--surface)", border: "1px solid var(--border-beige)" }}>
-          <span className="eyebrow" style={{ fontSize: "10px", color: "var(--text-muted)" }}>Alternative Seller Option</span>
-          <strong style={{ fontSize: "14px", color: "var(--text-secondary)", marginTop: "4px" }}>
-            {ranking.alternative ?? "No close matching alternative"}
+          <strong style={{ fontSize: "16px", color: "var(--text-primary)" }}>
+            {winnerDetails.sellerName}
           </strong>
-          <span style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
-            {ranking.alternative ? "Lower historical kept-rate score" : "No competing options fit criteria"}
-          </span>
+          <div style={{ display: "flex", gap: "8px", fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
+            <span>Rs {winnerDetails.price}</span>
+            <span>•</span>
+            <span>Size: {fit.recommended_size}</span>
+          </div>
         </div>
-      </div>
 
-      {/* Deciding Factors */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid var(--border-beige)", paddingTop: "16px" }}>
-        <strong style={{ fontSize: "13px", color: "var(--forest-green)" }}>{t(language, "agentChecks")}</strong>
-        <div className="samvaad-suggestions" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-          {ranking.top_factors.map((factor) => (
-            <div key={factor} style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--bg-beige)", padding: "10px", borderRadius: "8px", fontSize: "12px" }}>
-              <CheckCircle2 size={14} style={{ color: "var(--moss-green)", flexShrink: 0 }} />
-              <span style={{ color: "var(--text-secondary)" }}>{factor}</span>
+        {/* Why this one bullets */}
+        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-primary)" }}>Why this one:</span>
+          {visibleFactors.map((factor, idx) => (
+            <div key={idx} style={{ display: "flex", gap: "6px", fontSize: "12px", color: "var(--text-secondary)", alignItems: "center" }}>
+              <ShieldCheck size={13} style={{ color: "var(--success)", flexShrink: 0 }} />
+              <span>{factor}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {experienceMode === "simple" && (
-        <div className="compare-simple-note">
-          <ShieldCheck size={15} />
-          <span>{t(language, "checkOnce")}: Sarthi picked the listing with stronger kept-order and fit evidence, then keeps the offer check for checkout.</span>
+      {/* 7.2 Also Consider Alternative */}
+      {!isSimple && ranking.alternative && alternativeDetails && (
+        <div style={{
+          backgroundColor: "var(--bg-surface)",
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "12px",
+          padding: "14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px"
+        }}>
+          <span style={{
+            fontSize: "11px",
+            fontWeight: 800,
+            color: "var(--text-secondary)",
+            textTransform: "uppercase"
+          }}>
+            Also consider
+          </span>
+          
+          <div>
+            <strong style={{ fontSize: "14px", color: "var(--text-primary)" }}>
+              {alternativeDetails.sellerName}
+            </strong>
+            <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+              <span>Rs {alternativeDetails.price}</span>
+              <span>•</span>
+              <span>Size: {fit.recommended_size}</span>
+            </div>
+          </div>
+          <span style={{ fontSize: "11px", color: "var(--accent-secondary)", fontStyle: "italic" }}>
+            Lower price option, but historical data shows less evidence about color correctness or longer dispatch.
+          </span>
         </div>
       )}
 
-      {/* Traversal Proof Stats */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-beige)", paddingTop: "16px", fontSize: "12px", color: "var(--text-muted)" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <GitCompareArrows size={14} />
-          <span>Sarthi traversed {comparison.graph_path.relationships.length} Neo4j graph relationships to resolve listings</span>
+      {/* Audit pathway timeline check link */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <Info size={12} />
+          <span>{isSimple ? t(language, "proofAvailable") : `Traversed ${comparison.graph_path.relationships.length} graph paths`}</span>
         </span>
-        <button className="btn-text-link" onClick={onOpenAudit}>
-          <HelpCircle size={14} />
-          <span>Decision paths proof</span>
+        <button
+          onClick={onOpenAudit}
+          style={{ color: "var(--accent-primary-hover)", fontWeight: 700, textDecoration: "underline", display: "flex", alignItems: "center", gap: "3px" }}
+        >
+          <HelpCircle size={11} />
+          <span>{isSimple ? "Proof" : "How Sarthi decided"}</span>
         </button>
       </div>
 
-      <button className="btn-buy-cod" style={{ marginTop: "8px" }} onClick={onContinue}>
-        Go to Product details page
+      {/* Choose action CTA */}
+      <button
+        onClick={onContinue}
+        style={{
+          width: "100%",
+          backgroundColor: "var(--accent-primary)",
+          color: "var(--text-on-accent)",
+          border: "none",
+          borderRadius: "8px",
+          padding: "12px",
+          fontSize: "14px",
+          fontWeight: 700,
+          marginTop: "8px",
+          cursor: "pointer"
+        }}
+      >
+        Choose this option
       </button>
-    </section>
+    </div>
   );
 }

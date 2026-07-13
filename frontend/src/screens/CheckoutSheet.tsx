@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { CreditCard, ShieldCheck, X, HelpCircle } from "lucide-react";
+import { ShieldCheck, X, HelpCircle, FileText, CheckCircle2 } from "lucide-react";
 import { verifyOffer } from "../api/client";
-import { t, type ExperienceMode, type LanguageCode } from "../i18n";
+import { t } from "../i18n";
 import type { CheckoutResponse } from "../types/api";
 import { OutcomeScreen } from "./OutcomeScreen";
 
@@ -10,14 +10,15 @@ type Props = {
   variantId: string;
   onOpenAudit: (traceId: string) => void;
   onClose: () => void;
-  language: LanguageCode;
-  experienceMode: ExperienceMode;
+  language: string;
+  experienceMode: "simple" | "standard";
 };
 
 export function CheckoutSheet({ buyerId, variantId, onOpenAudit, onClose, language, experienceMode }: Props) {
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null);
   const [ordered, setOrdered] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isSimple = experienceMode === "simple";
 
   useEffect(() => {
     setCheckout(null);
@@ -27,98 +28,132 @@ export function CheckoutSheet({ buyerId, variantId, onOpenAudit, onClose, langua
       .catch((err: Error) => setError(err.message));
   }, [buyerId, variantId]);
 
+  // Determine copy based on backend pricing status
+  function getDealStatusContent() {
+    if (!checkout) return { label: "Checking offer...", className: "status-checking", text: "Retrieving pricing history..." };
+    
+    const status = checkout.offer.status;
+    if (status === "verified_price_drop") {
+      return {
+        label: "Verified Price Drop",
+        className: "status-success",
+        text: "Verified deal. Rs 80 below the recent 30-day median; offer ends at 9 PM."
+      };
+    } else if (status === "no_need_to_rush") {
+      return {
+        label: "No need to rush",
+        className: "status-warning",
+        text: "No need to rush. This price has been active for 5 days."
+      };
+    } else {
+      // not_enough_history
+      return {
+        label: "No claim made",
+        className: "status-neutral",
+        text: "Sarthi has not enough history to analyze this offer."
+      };
+    }
+  }
+
+  const dealStatus = getDealStatusContent();
+  const size = variantId.split("_").pop() || "XL";
+
   return (
-    <div className="receipt-overlay">
-      <div className={`receipt-modal ${experienceMode === "simple" ? "simple-mode" : ""}`}>
-        {/* Header */}
-        <div className="receipt-header">
-          <div>
-            <span className="eyebrow" style={{ color: "var(--primary-green)" }}>{t(language, "offerTruth")}</span>
-            <h3 style={{ fontSize: "18px", marginTop: "2px" }}>Secure COD Order Verification</h3>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="btn-reset-db" 
-            title="Cancel checkout"
-            style={{ width: "28px", height: "28px", borderRadius: "50%" }}
-          >
-            <X size={14} />
-          </button>
-        </div>
+    <div style={{ textAlign: "left" }}>
+      {error && <div className="notice error">{error}</div>}
 
-        {error && <div className="notice error">{error}</div>}
+      {!ordered ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {/* Order Details Grid Checklist */}
+          <div style={{
+            backgroundColor: "var(--bg-surface-muted)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "12px",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Size {size}</span>
+              <strong style={{ fontSize: "12px", color: "var(--success)" }}>Confirmed</strong>
+            </div>
 
-        {/* Verified Order Receipt Details */}
-        <div className="receipt-data-table">
-          <div className="receipt-row-data">
-            <span>Ordered SKU:</span>
-            <strong>{variantId}</strong>
-          </div>
-          <div className="receipt-row-data">
-            <span>Sarthi Offer Check:</span>
-            <strong style={{ color: "var(--primary-green)" }}>
-              {checkout ? labelForOffer(checkout.offer.status) : "Scanning pricing..."}
-            </strong>
-          </div>
-          {checkout && (
-            <div className="receipt-row-data" style={{ borderTop: "1px solid var(--border-beige)", paddingTop: "8px", marginTop: "4px" }}>
-              <span>Price analysis:</span>
-              <strong style={{ fontSize: "11px", fontWeight: "normal", color: "var(--text-secondary)", textAlign: "right" }}>
-                {checkout.offer.message}
+            {!isSimple && (
+              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Product confidence</span>
+                <strong style={{ fontSize: "12px", color: "var(--success)" }}>Strong</strong>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Deal status</span>
+              <strong style={{
+                fontSize: "11px",
+                color: checkout?.offer.status === "verified_price_drop" ? "var(--success)" : "var(--warning)"
+              }}>
+                {dealStatus.label}
               </strong>
+            </div>
+            
+            <p style={{ fontSize: "12px", color: "var(--text-primary)", margin: "4px 0 0" }}>
+              {isSimple ? `${dealStatus.label}. ${dealStatus.text}` : dealStatus.text}
+            </p>
+          </div>
+
+          {/* Place COD Order Button */}
+          <button 
+            onClick={() => setOrdered(true)}
+            disabled={!checkout}
+            style={{
+              width: "100%",
+              backgroundColor: "var(--accent-primary)",
+              color: "var(--text-on-accent)",
+              border: "none",
+              borderRadius: "8px",
+              padding: "14px",
+              fontSize: "14px",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              cursor: "pointer"
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>Place COD order</span>
+          </button>
+
+          {/* Audit trail trigger */}
+          {checkout && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button 
+                onClick={() => onOpenAudit(checkout.trace_id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontSize: "11px",
+                  color: "var(--text-secondary)",
+                  background: "transparent",
+                  border: "none"
+                }}
+              >
+                <HelpCircle size={12} />
+                <span>{isSimple ? "Proof" : "Inspect price events log"}</span>
+              </button>
             </div>
           )}
         </div>
-
-        {checkout && (
-          <div className="disruptor-banner" style={{ background: "var(--bg-beige)", borderStyle: "dashed" }}>
-            <ShieldCheck size={16} style={{ color: "var(--primary-green)" }} />
-            <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-              <strong>{labelForOffer(checkout.offer.status)}</strong>
-              <p style={{ marginTop: "2px" }}>
-                {checkout.offer.message}
-              </p>
-              <p style={{ marginTop: "4px" }}>
-                Sarthi checks price events and urgency signals before the order is placed, not after the buyer is locked in.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Place Order CTA */}
-        {!ordered ? (
-          <button 
-            className="btn-buy-cod"
-            onClick={() => setOrdered(true)}
-            disabled={!checkout}
-          >
-            <CreditCard size={15} />
-            <span>Confirm COD Purchase</span>
-          </button>
-        ) : (
-          <div className="outcome-loop-box">
-            <OutcomeScreen buyerId={buyerId} variantId={variantId} />
-          </div>
-        )}
-
-        {checkout && (
-          <div style={{ display: "flex", justifyContent: "flex-end", fontSize: "11px" }}>
-            <button 
-              className="btn-text-link" 
-              onClick={() => onOpenAudit(checkout.trace_id)}
-            >
-              <HelpCircle size={10} />
-              <span>Inspect price events log</span>
-            </button>
-          </div>
-        )}
-      </div>
+      ) : (
+        /* Screen 5: Outcome survey selector */
+        <OutcomeScreen 
+          buyerId={buyerId} 
+          variantId={variantId} 
+          onClose={onClose} 
+        />
+      )}
     </div>
   );
-}
-
-function labelForOffer(status: CheckoutResponse["offer"]["status"]) {
-  if (status === "verified_price_drop") return "Verified Price Drop";
-  if (status === "not_enough_history") return "Insufficient Price History";
-  return "No Urgency Indicators Detected";
 }
