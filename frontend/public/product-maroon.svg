@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 900" role="img" aria-label="Maroon kurta set product visual">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbf4ed"/>
+      <stop offset="1" stop-color="#eee4da"/>
+    </linearGradient>
+    <linearGradient id="cloth" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#651d41"/>
+      <stop offset="1" stop-color="#2b163f"/>
+    </linearGradient>
+    <pattern id="motif" width="78" height="78" patternUnits="userSpaceOnUse">
+      <path d="M39 16c18 13 18 33 0 46-18-13-18-33 0-46Z" fill="#ffc857" opacity=".55"/>
+      <path d="M18 39c13-17 29-17 42 0-13 17-29 17-42 0Z" fill="#ff4fd8" opacity=".32"/>
+      <circle cx="39" cy="39" r="5" fill="#fff4d1"/>
+    </pattern>
+  </defs>
+  <rect width="720" height="900" rx="38" fill="url(#bg)"/>
+  <path d="M162 142h396l62 126-86 52-34-70v486c0 44-29 72-76 72H296c-47 0-76-28-76-72V250l-34 70-86-52 62-126Z" fill="url(#cloth)"/>
+  <path d="M162 142h396l62 126-86 52-34-70v486c0 44-29 72-76 72H296c-47 0-76-28-76-72V250l-34 70-86-52 62-126Z" fill="url(#motif)" opacity=".84"/>
+  <path d="M288 142c13 45 37 70 72 70s59-25 72-70" fill="none" stroke="#ffe39a" stroke-width="16" stroke-linecap="round"/>
+  <path d="M235 312h250M235 690h250" stroke="#ffe39a" stroke-width="9" stroke-linecap="round" opacity=".68"/>
+</svg>

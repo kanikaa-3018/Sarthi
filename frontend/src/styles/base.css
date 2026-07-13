@@ -1,0 +1,118 @@
+﻿:root {
+  /* Color Palette from slide-1.png & theme.png */
+  --bg-beige: #faf9f5;
+  --bg-sand: #e4e1d8;
+  --border-beige: #d7d3c7;
+  
+  --sage-green: #b4b897;
+  --moss-green: #849573;
+  --primary-green: #2f6f4e;
+  --forest-green: #1e3525;
+  --forest-green-hover: #142419;
+  --sage-light: #f1efe9;
+  
+  --text-primary: #1e2521;
+  --text-secondary: #515b55;
+  --text-muted: #7d8780;
+  
+  --surface: #fffdfb;
+  --accent-gold: #c29547;
+  --accent-gold-bg: #fcf6e8;
+  
+  --danger-red: #b93c3c;
+  --danger-red-bg: #fdf3f3;
+  --danger-red-border: #f8dbdb;
+  
+  --shadow-sm: 0 1px 3px rgba(30, 53, 37, 0.05);
+  --shadow-md: 0 6px 18px rgba(30, 53, 37, 0.04);
+  --shadow-lg: 0 12px 32px rgba(30, 53, 37, 0.06);
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  color: var(--text-primary);
+  background-color: var(--bg-beige);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-beige);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-beige);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-beige);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--moss-green);
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  color: var(--forest-green);
+  line-height: 1.2;
+}
+
+p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Buttons & Inputs */
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  transition: var(--transition);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+select, textarea, input {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  background-color: var(--surface);
+  border: 1px solid var(--border-beige);
+  border-radius: 8px;
+  padding: 8px 12px;
+  outline: none;
+  transition: var(--transition);
+}
+select:focus, textarea:focus, input:focus {
+  border-color: var(--forest-green);
+  box-shadow: 0 0 0 2px var(--sage-light);
+}
+
+.app-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--forest-green);
+  font-weight: 800;
+}
+
