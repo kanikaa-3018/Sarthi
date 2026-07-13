@@ -1,0 +1,228 @@
+﻿/* -------------------------------------------------------------
+   RESPONSIVENESS (MOBILE-FIRST COMPATIBILITY)
+------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+  .auth-panel,
+  .auth-context {
+    padding: 32px 24px;
+  }
+  .product-assistant-layout {
+    grid-template-columns: 1fr;
+  }
+  .market-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sarthi-confidence-rail,
+  .market-hero {
+    grid-template-columns: 1fr;
+  }
+  .right-sidebar {
+    position: static;
+  }
+  .seller-console-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-review-grid {
+    grid-template-columns: 1fr;
+  }
+  .seller-onboarding-grid {
+    grid-template-columns: 1fr;
+  }
+  .trust-center-grid {
+    grid-template-columns: 1fr;
+  }
+  .seller-stats-band {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .admin-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .gallery-section {
+    grid-template-columns: 1fr;
+  }
+  .gallery-image-box {
+    max-width: 320px;
+    margin: 0 auto;
+  }
+  .header-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .header-controls {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .accessibility-controls,
+  .workspace-switcher {
+    max-width: 100%;
+  }
+  .accessibility-controls {
+    flex: 1 1 240px;
+    justify-content: space-between;
+  }
+  .language-control {
+    min-width: 0;
+  }
+  .language-control select {
+    max-width: 160px;
+    width: 100%;
+  }
+  .auth-mode-grid {
+    grid-template-columns: 1fr;
+  }
+  .market-hero,
+  .market-grid-section,
+  .sarthi-confidence-rail {
+    padding: 16px;
+  }
+  .market-offer-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .market-product-grid {
+    gap: 10px;
+  }
+  .market-product-body {
+    padding: 9px;
+  }
+  .workspace-switcher {
+    order: -1;
+  }
+  .trust-receipt-facts {
+    grid-template-columns: 1fr;
+  }
+  .samvaad-suggestions {
+    grid-template-columns: 1fr;
+  }
+  .proof-blocks-grid {
+    grid-template-columns: 1fr;
+  }
+  .hero-section {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .hero-tagline, .cta-group {
+    align-self: center;
+  }
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+  .arch-container {
+    grid-template-columns: 1fr;
+  }
+  .seller-console-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .seller-toolbar-controls {
+    justify-content: stretch;
+  }
+  .seller-toolbar-controls label,
+  .seller-toolbar-controls select,
+  .seller-scope-chip,
+  .admin-refresh-button {
+    width: 100%;
+  }
+  .seller-stats-band {
+    grid-template-columns: 1fr;
+  }
+  .admin-stats-grid,
+  .admin-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .seller-listing-card {
+    grid-template-columns: 1fr;
+  }
+  .seller-listing-image {
+    max-width: 220px;
+  }
+  .seller-listing-topline,
+  .section-heading-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .seller-score-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .seller-action-item {
+    grid-template-columns: 1fr;
+  }
+  .onboarding-state-row,
+  .onboarding-form-row,
+  .draft-form-split,
+  .listing-draft-row {
+    grid-template-columns: 1fr;
+  }
+  .draft-row-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-card-topline,
+  .admin-action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .trust-hero-section,
+  .trust-card-header {
+    flex-direction: column;
+  }
+  .trust-control-row,
+  .fit-preference-row,
+  .fit-preference-row select,
+  .fit-preference-row button {
+    width: 100%;
+  }
+  .memory-record-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .audit-fact-detail-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .product-assistant-layout,
+  .seller-console-shell,
+  .trust-center-shell,
+  .admin-review-shell {
+    padding: 14px;
+  }
+  .accessibility-controls,
+  .workspace-switcher,
+  .account-chip {
+    width: 100%;
+  }
+  .workspace-switcher button {
+    flex: 1;
+    padding-inline: 8px;
+  }
+  .mode-toggle {
+    flex: 1;
+  }
+  .market-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .market-rating-row,
+  .market-price-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .market-product-title {
+    min-height: 56px;
+  }
+}
