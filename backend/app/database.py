@@ -288,6 +288,8 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    _apply_lightweight_migrations(conn)
+    conn.commit()
     return conn
 
 
@@ -299,6 +301,16 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 
 def _apply_lightweight_migrations(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS seller_corrections (
+          product_id TEXT PRIMARY KEY,
+          l_chest REAL NOT NULL,
+          xl_chest REAL NOT NULL,
+          corrected_at TEXT NOT NULL
+        )
+        """
+    )
     _migrate_accounts_admin_role(conn)
     _migrate_seller_document_assets(conn)
     conn.execute(
@@ -316,18 +328,27 @@ def _apply_lightweight_migrations(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
-    product_additions = {
-        "image_url": "TEXT NOT NULL DEFAULT ''",
-        "rating": "REAL NOT NULL DEFAULT 4.0",
-        "rating_count": "INTEGER NOT NULL DEFAULT 0",
-        "commerce_badge": "TEXT NOT NULL DEFAULT ''",
-        "delivery_text": "TEXT NOT NULL DEFAULT ''",
-        "is_sarthi_eligible": "INTEGER NOT NULL DEFAULT 1",
-    }
-    for column, definition in product_additions.items():
-        if column not in product_columns:
-            conn.execute(f"ALTER TABLE products ADD COLUMN {column} {definition}")
+    if _table_exists(conn, "products"):
+        product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
+        product_additions = {
+            "image_url": "TEXT NOT NULL DEFAULT ''",
+            "rating": "REAL NOT NULL DEFAULT 4.0",
+            "rating_count": "INTEGER NOT NULL DEFAULT 0",
+            "commerce_badge": "TEXT NOT NULL DEFAULT ''",
+            "delivery_text": "TEXT NOT NULL DEFAULT ''",
+            "is_sarthi_eligible": "INTEGER NOT NULL DEFAULT 1",
+        }
+        for column, definition in product_additions.items():
+            if column not in product_columns:
+                conn.execute(f"ALTER TABLE products ADD COLUMN {column} {definition}")
+
+
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
 
 
 def _migrate_accounts_admin_role(conn: sqlite3.Connection) -> None:
@@ -367,6 +388,8 @@ def _migrate_accounts_admin_role(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_seller_document_assets(conn: sqlite3.Connection) -> None:
+    if not _table_exists(conn, "seller_verification_documents"):
+        return
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(seller_verification_documents)").fetchall()}
     additions = {
         "file_name": "TEXT NOT NULL DEFAULT ''",
