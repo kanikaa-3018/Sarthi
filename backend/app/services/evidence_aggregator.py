@@ -19,6 +19,7 @@ def build_variant_evidence(conn: sqlite3.Connection, variant_id: str) -> dict:
         """,
         (variant_id,),
     ).fetchall()
+    rows = [dict(row) for row in rows]
     delivered = [row for row in rows if row["status"] in ("delivered_kept", "returned", "exchanged")]
     returns = [row for row in rows if row["status"] == "returned"]
     fit_feedback = [row for row in rows if row["return_reason"] in ("too_small", "too_large") or row["status"] == "delivered_kept"]
@@ -68,6 +69,9 @@ def build_variant_evidence(conn: sqlite3.Connection, variant_id: str) -> dict:
 
 
 def top_return_reason(conn: sqlite3.Connection, variant_id: str) -> dict | None:
+    variant = get_variant(conn, variant_id)
+    if not variant:
+        return None
     row = conn.execute(
         """
         SELECT return_reason, COUNT(*) AS count, GROUP_CONCAT(fact_id) AS fact_ids

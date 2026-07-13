@@ -138,6 +138,11 @@ class ListingDraftRequest(BaseModel):
     image_url: str
 
 
+class MeasurementCorrectionRequest(BaseModel):
+    l_chest: float
+    xl_chest: float
+
+
 class ReviewDecisionRequest(BaseModel):
     notes: str = ""
 
@@ -497,6 +502,44 @@ def my_seller_panel(
             return build_seller_panel(conn, account["seller_id"], cluster_id=cluster_id, size=size)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/seller/listings/{product_id}/correct-measurement")
+def correct_measurement(
+    product_id: str,
+    request: MeasurementCorrectionRequest,
+    account: dict = Depends(require_seller),
+) -> dict:
+    from datetime import datetime
+    if request.l_chest <= 0 or request.xl_chest <= 0 or request.l_chest >= request.xl_chest:
+        raise HTTPException(
+            status_code=400,
+            detail="Measurement correction must use positive values with XL chest greater than L chest",
+        )
+
+    with get_connection(settings.database_path) as conn:
+        row = conn.execute("SELECT seller_id FROM products WHERE product_id = ?", (product_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Product not found")
+        if row["seller_id"] != account["seller_id"]:
+            raise HTTPException(status_code=403, detail="Cannot edit another seller's listing")
+            
+        now = datetime.now().isoformat()
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO seller_corrections (product_id, l_chest, xl_chest, corrected_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (product_id, request.l_chest, request.xl_chest, now),
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "product_id": product_id,
+        "l_chest": request.l_chest,
+        "xl_chest": request.xl_chest,
+        "status": "pending_future_outcome_validation",
+    }
 
 
 @app.get("/seller/me/onboarding")

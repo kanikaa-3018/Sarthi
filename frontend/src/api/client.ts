@@ -222,6 +222,13 @@ export function createListingDraft(payload: {
   });
 }
 
+export function correctMeasurement(productId: string, payload: { l_chest: number; xl_chest: number }) {
+  return request<{ ok: boolean; status: string }>(`/seller/listings/${encodeURIComponent(productId)}/correct-measurement`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function submitListingDraft(draftId: string) {
   return request<SellerOnboardingResponse>(`/seller/me/listing-drafts/${encodeURIComponent(draftId)}/submit`, {
     method: "POST"
