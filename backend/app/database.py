@@ -186,6 +186,55 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS proof_requests (
+      request_id TEXT PRIMARY KEY,
+      buyer_id TEXT NOT NULL REFERENCES buyers(buyer_id),
+      seller_id TEXT NOT NULL REFERENCES sellers(seller_id),
+      product_id TEXT NOT NULL REFERENCES products(product_id),
+      variant_id TEXT REFERENCES variants(variant_id),
+      attribute TEXT NOT NULL,
+      buyer_question TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('open', 'resolved', 'dismissed')),
+      request_count INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      resolved_at TEXT,
+      resolution_proof_id TEXT,
+      fact_id TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS seller_evidence_assets (
+      proof_id TEXT PRIMARY KEY,
+      seller_id TEXT NOT NULL REFERENCES sellers(seller_id),
+      product_id TEXT NOT NULL REFERENCES products(product_id),
+      attribute TEXT NOT NULL,
+      proof_type TEXT NOT NULL CHECK(proof_type IN ('daylight_photo', 'fabric_closeup', 'measurement_chart', 'packaging_photo', 'seller_note')),
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      asset_url TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK(status IN ('submitted', 'verified', 'rejected')),
+      created_at TEXT NOT NULL,
+      reviewed_at TEXT,
+      fact_id TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS expectation_contracts (
+      contract_id TEXT PRIMARY KEY,
+      buyer_id TEXT NOT NULL REFERENCES buyers(buyer_id),
+      product_id TEXT NOT NULL REFERENCES products(product_id),
+      variant_id TEXT NOT NULL REFERENCES variants(variant_id),
+      status TEXT NOT NULL CHECK(status IN ('active', 'kept', 'broken', 'expired')),
+      contract_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      outcome_order_id TEXT,
+      broken_dimension TEXT,
+      fact_id TEXT NOT NULL
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS recommendation_traces (
       trace_id TEXT PRIMARY KEY,
       buyer_id TEXT NOT NULL,
@@ -279,6 +328,11 @@ SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_price_variant ON price_events(variant_id)",
     "CREATE INDEX IF NOT EXISTS idx_fact_source ON fact_records(source_table, source_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_account ON auth_sessions(account_id)",
+    "CREATE INDEX IF NOT EXISTS idx_proof_requests_seller ON proof_requests(seller_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_proof_requests_product ON proof_requests(product_id, attribute)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_assets_product ON seller_evidence_assets(product_id, attribute, status)",
+    "CREATE INDEX IF NOT EXISTS idx_expectation_contracts_buyer ON expectation_contracts(buyer_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_expectation_contracts_variant ON expectation_contracts(variant_id, status)",
 ]
 
 
@@ -328,6 +382,66 @@ def _apply_lightweight_migrations(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS proof_requests (
+          request_id TEXT PRIMARY KEY,
+          buyer_id TEXT NOT NULL REFERENCES buyers(buyer_id),
+          seller_id TEXT NOT NULL REFERENCES sellers(seller_id),
+          product_id TEXT NOT NULL REFERENCES products(product_id),
+          variant_id TEXT REFERENCES variants(variant_id),
+          attribute TEXT NOT NULL,
+          buyer_question TEXT NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('open', 'resolved', 'dismissed')),
+          request_count INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          resolved_at TEXT,
+          resolution_proof_id TEXT,
+          fact_id TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS seller_evidence_assets (
+          proof_id TEXT PRIMARY KEY,
+          seller_id TEXT NOT NULL REFERENCES sellers(seller_id),
+          product_id TEXT NOT NULL REFERENCES products(product_id),
+          attribute TEXT NOT NULL,
+          proof_type TEXT NOT NULL CHECK(proof_type IN ('daylight_photo', 'fabric_closeup', 'measurement_chart', 'packaging_photo', 'seller_note')),
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          asset_url TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL CHECK(status IN ('submitted', 'verified', 'rejected')),
+          created_at TEXT NOT NULL,
+          reviewed_at TEXT,
+          fact_id TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS expectation_contracts (
+          contract_id TEXT PRIMARY KEY,
+          buyer_id TEXT NOT NULL REFERENCES buyers(buyer_id),
+          product_id TEXT NOT NULL REFERENCES products(product_id),
+          variant_id TEXT NOT NULL REFERENCES variants(variant_id),
+          status TEXT NOT NULL CHECK(status IN ('active', 'kept', 'broken', 'expired')),
+          contract_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          completed_at TEXT,
+          outcome_order_id TEXT,
+          broken_dimension TEXT,
+          fact_id TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_proof_requests_seller ON proof_requests(seller_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_proof_requests_product ON proof_requests(product_id, attribute)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_evidence_assets_product ON seller_evidence_assets(product_id, attribute, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_expectation_contracts_buyer ON expectation_contracts(buyer_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_expectation_contracts_variant ON expectation_contracts(variant_id, status)")
     if _table_exists(conn, "products"):
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
         product_additions = {
@@ -408,6 +522,9 @@ def clear_db(conn: sqlite3.Connection) -> None:
     tables = [
         "recommendation_traces",
         "scenario_metadata",
+        "expectation_contracts",
+        "seller_evidence_assets",
+        "proof_requests",
         "listing_drafts",
         "reviewer_audit_events",
         "seller_verification_documents",

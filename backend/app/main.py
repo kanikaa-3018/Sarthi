@@ -20,10 +20,14 @@ from app.scenarios import get_scenario, list_scenarios, scenario_to_dict
 from app.seed import reset_seed_database
 from app.services.duplicate_detection import candidate_variants_for_cluster
 from app.services.fit_predictor import predict_fit
+from app.services.knowledge_graph import answer_knowledge_graph_question, build_cluster_knowledge_graph
 from app.services.kept_order_ranker import rank_for_kept_order
 from app.services.offer_verifier import verify_offer
 from app.services.product_detail import build_product_detail
 from app.services.privacy import delete_personal_memory, privacy_summary
+from app.services.proof_requests import build_seller_evidence_coach, submit_seller_evidence_asset
+from app.services.regret_firewall import build_regret_firewall_decision
+from app.services.sku_truth_passport import build_sku_truth_passport
 from app.services.auth import (
     account_for_token,
     authenticate_account,
@@ -48,6 +52,11 @@ from app.services.seller_onboarding import (
 )
 from app.services.seller_panel import build_seller_panel, list_sellers
 from app.services.system_readiness import build_system_readiness
+from app.services.expectation_contracts import (
+    complete_expectation_contract,
+    create_expectation_contract,
+    get_expectation_contract,
+)
 
 
 app = FastAPI(title="Sarthi API", version="0.1.0")
@@ -57,6 +66,8 @@ FitPreference = Literal["comfort", "regular"]
 OutcomeStatus = Literal["delivered_kept", "returned", "exchanged", "rto"]
 ReturnReason = Literal["too_small", "too_large", "color_different", "fabric_different", "damaged"]
 DocumentType = Literal["gst_certificate", "pan_card", "address_proof", "bank_proof"]
+ProofAttribute = Literal["transparency", "fabric", "color", "size", "packaging", "offer"]
+ProofType = Literal["daylight_photo", "fabric_closeup", "measurement_chart", "packaging_photo", "seller_note"]
 BuyerLanguage = Literal[
     "hinglish",
     "english",
@@ -84,6 +95,7 @@ class OutcomeRequest(BaseModel):
     variant_id: str
     status: OutcomeStatus
     return_reason: ReturnReason | None = None
+    contract_id: str | None = None
 
     @model_validator(mode="after")
     def validate_return_reason_contract(self) -> "OutcomeRequest":
@@ -145,6 +157,43 @@ class MeasurementCorrectionRequest(BaseModel):
 
 class ReviewDecisionRequest(BaseModel):
     notes: str = ""
+
+
+class KnowledgeGraphChatRequest(BaseModel):
+    buyer_id: str
+    cluster_id: str
+    query: str
+    preferred_fit: FitPreference = "comfort"
+
+
+class RegretFirewallRequest(BaseModel):
+    buyer_id: str
+    product_id: str | None = None
+    cluster_id: str | None = None
+    query: str = ""
+    preferred_fit: FitPreference = "comfort"
+    create_missing_proof_request: bool = True
+
+    @model_validator(mode="after")
+    def validate_context(self) -> "RegretFirewallRequest":
+        if not self.product_id and not self.cluster_id:
+            raise ValueError("product_id or cluster_id is required")
+        return self
+
+
+class SellerEvidenceAssetRequest(BaseModel):
+    product_id: str
+    attribute: ProofAttribute
+    proof_type: ProofType
+    title: str
+    description: str
+    asset_url: str
+
+
+class ExpectationContractRequest(BaseModel):
+    buyer_id: str
+    variant_id: str
+    preferred_fit: FitPreference = "comfort"
 
 
 def _extract_bearer_token(authorization: str | None) -> str:
@@ -504,6 +553,38 @@ def my_seller_panel(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/seller/me/evidence-coach")
+def seller_evidence_coach(account: dict = Depends(require_seller)) -> dict:
+    with get_connection(settings.database_path) as conn:
+        try:
+            return build_seller_evidence_coach(conn, account["seller_id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/seller/me/evidence-assets")
+def seller_submit_evidence_asset(
+    request: SellerEvidenceAssetRequest,
+    account: dict = Depends(require_seller),
+) -> dict:
+    with get_connection(settings.database_path) as conn:
+        try:
+            result = submit_seller_evidence_asset(
+                conn,
+                seller_id=account["seller_id"],
+                product_id=request.product_id,
+                attribute=request.attribute,
+                proof_type=request.proof_type,
+                title=request.title,
+                description=request.description,
+                asset_url=request.asset_url,
+            )
+            conn.commit()
+            return result
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/seller/listings/{product_id}/correct-measurement")
 def correct_measurement(
     product_id: str,
@@ -636,6 +717,96 @@ def product_detail(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/products/{product_id}/sku-passport")
+def sku_truth_passport(
+    product_id: str,
+    buyer_id: str | None = None,
+    variant_id: str | None = None,
+    preferred_fit: FitPreference = "comfort",
+    account: dict = Depends(require_buyer),
+) -> dict:
+    resolved_buyer_id = buyer_id or account["buyer_id"]
+    _assert_buyer_owner(account, resolved_buyer_id)
+    with get_connection(settings.database_path) as conn:
+        if variant_id is None:
+            variants = conn.execute(
+                """
+                SELECT variant_id
+                FROM variants
+                WHERE product_id = ?
+                ORDER BY CASE size
+                  WHEN 'XL' THEN 0
+                  WHEN 'L' THEN 1
+                  WHEN 'M' THEN 2
+                  ELSE 3
+                END
+                LIMIT 1
+                """,
+                (product_id,),
+            ).fetchone()
+            if not variants:
+                raise HTTPException(status_code=404, detail="Product not found")
+            variant_id = variants["variant_id"]
+        try:
+            passport = build_sku_truth_passport(conn, resolved_buyer_id, variant_id, preferred_fit)
+            if passport["product"]["product_id"] != product_id:
+                raise HTTPException(status_code=400, detail="variant_id does not belong to product_id")
+            return passport
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/decision/regret-firewall")
+def regret_firewall(
+    request: RegretFirewallRequest,
+    account: dict = Depends(require_buyer),
+) -> dict:
+    _assert_buyer_owner(account, request.buyer_id)
+    with get_connection(settings.database_path) as conn:
+        try:
+            return build_regret_firewall_decision(
+                conn,
+                buyer_id=request.buyer_id,
+                product_id=request.product_id,
+                cluster_id=request.cluster_id,
+                query=request.query,
+                preferred_fit=request.preferred_fit,
+                create_missing_proof_request=request.create_missing_proof_request,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/expectation-contracts")
+def expectation_contract_create(
+    request: ExpectationContractRequest,
+    account: dict = Depends(require_buyer),
+) -> dict:
+    _assert_buyer_owner(account, request.buyer_id)
+    with get_connection(settings.database_path) as conn:
+        try:
+            return create_expectation_contract(
+                conn,
+                buyer_id=request.buyer_id,
+                variant_id=request.variant_id,
+                preferred_fit=request.preferred_fit,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/expectation-contracts/{contract_id}")
+def expectation_contract_get(
+    contract_id: str,
+    account: dict = Depends(require_buyer),
+) -> dict:
+    with get_connection(settings.database_path) as conn:
+        contract = get_expectation_contract(conn, contract_id, account["buyer_id"])
+        if not contract:
+            raise HTTPException(status_code=404, detail="Expectation contract not found")
+        return contract
+
+
 @app.post("/compare")
 def compare(request: CompareRequest, account: dict = Depends(require_buyer)) -> dict:
     _assert_buyer_owner(account, request.buyer_id)
@@ -669,6 +840,72 @@ def compare(request: CompareRequest, account: dict = Depends(require_buyer)) -> 
             "ranking": ranking,
             "fit": fit,
             "graph_path": graph,
+        }
+
+
+@app.get("/knowledge-graph/clusters/{cluster_id}")
+def cluster_knowledge_graph(
+    cluster_id: str,
+    buyer_id: str | None = None,
+    preferred_fit: FitPreference = "comfort",
+    account: dict = Depends(require_buyer),
+) -> dict:
+    resolved_buyer_id = buyer_id or account["buyer_id"]
+    _assert_buyer_owner(account, resolved_buyer_id)
+    with get_connection(settings.database_path) as conn:
+        try:
+            return build_cluster_knowledge_graph(conn, resolved_buyer_id, cluster_id, preferred_fit)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/knowledge-graph/chat")
+def cluster_knowledge_graph_chat(
+    request: KnowledgeGraphChatRequest,
+    account: dict = Depends(require_buyer),
+) -> dict:
+    _assert_buyer_owner(account, request.buyer_id)
+    with get_connection(settings.database_path) as conn:
+        try:
+            graph = build_cluster_knowledge_graph(
+                conn,
+                request.buyer_id,
+                request.cluster_id,
+                request.preferred_fit,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        answer = answer_knowledge_graph_question(graph, request.query)
+        fact_ids = answer["fact_ids"] or graph["fact_ids"][:8]
+        graph_path = {
+            "path_type": "cluster_knowledge_graph_query",
+            "available_from": "sqlite_dynamic_graph",
+            "nodes": answer["matched_node_ids"] or [node["id"] for node in graph["nodes"][:6]],
+            "relationships": [
+                edge["label"]
+                for edge in graph["edges"]
+                if edge["source"] in answer["matched_node_ids"] or edge["target"] in answer["matched_node_ids"]
+            ][:8],
+            "fact_ids": fact_ids,
+            "summary": answer["summary"],
+        }
+        winner_variant_id = graph["ranking"]["winner"] if graph.get("ranking") else None
+        trace_id = create_trace(
+            conn,
+            buyer_id=request.buyer_id,
+            product_id=graph.get("selected_product_id"),
+            variant_id=winner_variant_id,
+            intent=["knowledge_graph_chat"],
+            tools_used=["build_cluster_knowledge_graph", "answer_knowledge_graph_question", "traverse_dynamic_cluster_graph"],
+            fact_ids=fact_ids,
+            graph_paths=[graph_path],
+        )
+        conn.commit()
+        return {
+            "trace_id": trace_id,
+            "answer": answer,
+            "graph_path": graph_path,
         }
 
 
@@ -728,11 +965,23 @@ def simulate_order(request: OutcomeRequest, account: dict = Depends(require_buye
                 request.status,
                 request.return_reason,
             )
+            contract_update = None
+            if request.contract_id:
+                contract_update = complete_expectation_contract(
+                    conn,
+                    contract_id=request.contract_id,
+                    buyer_id=request.buyer_id,
+                    outcome_order_id=outcome["order_id"],
+                    status=request.status,
+                    return_reason=request.return_reason,
+                )
+                conn.commit()
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         graph_status = _sync_graph_best_effort()
         return {
             "outcome": outcome,
+            "expectation_contract": contract_update,
             "graph_sync": graph_status,
             "memory": list_fit_memory(conn, request.buyer_id),
         }
