@@ -5,20 +5,29 @@ import type {
   AuditTrace,
   BuyerMemoryResponse,
   CheckoutResponse,
+  ClusterKnowledgeGraph,
   CompareResponse,
   DeleteMemoryResponse,
+  ExpectationContract,
   FeedResponse,
+  KnowledgeGraphChatResponse,
   MemorySettingsResponse,
   OutcomeResponse,
   Product,
   ProductDetailResponse,
   PrivacySummary,
+  ProofAttribute,
+  ProofCoverageItem,
+  RegretDecisionResponse,
   Scenario,
   Seller,
+  SellerEvidenceAssetResponse,
+  SellerEvidenceCoachResponse,
   SellerOnboardingResponse,
   SellerPanelResponse,
   SellerSignupSession,
   SourceHealth,
+  SkuTruthPassport,
   SystemReadiness
 } from "../types/api";
 import type { LanguageCode } from "../i18n";
@@ -158,6 +167,24 @@ export function getSellerPanel(clusterId?: string) {
   );
 }
 
+export function getSellerEvidenceCoach() {
+  return request<SellerEvidenceCoachResponse>("/seller/me/evidence-coach");
+}
+
+export function submitSellerEvidenceAsset(payload: {
+  product_id: string;
+  attribute: ProofAttribute;
+  proof_type: ProofCoverageItem["recommended_proof_type"];
+  title: string;
+  description: string;
+  asset_url: string;
+}) {
+  return request<SellerEvidenceAssetResponse>("/seller/me/evidence-assets", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getSellerOnboarding() {
   return request<SellerOnboardingResponse>("/seller/me/onboarding");
 }
@@ -241,6 +268,30 @@ export function getProductDetail(buyerId: string, productId: string) {
   );
 }
 
+export function getSkuTruthPassport(buyerId: string, productId: string, variantId?: string) {
+  const params = new URLSearchParams({ buyer_id: buyerId });
+  if (variantId) params.set("variant_id", variantId);
+  return request<SkuTruthPassport>(`/products/${encodeURIComponent(productId)}/sku-passport?${params.toString()}`);
+}
+
+export function runRegretFirewall(payload: {
+  buyer_id: string;
+  product_id?: string;
+  cluster_id?: string;
+  query?: string;
+  preferred_fit?: "comfort" | "regular";
+  create_missing_proof_request?: boolean;
+}) {
+  return request<RegretDecisionResponse>("/decision/regret-firewall", {
+    method: "POST",
+    body: JSON.stringify({
+      preferred_fit: "comfort",
+      create_missing_proof_request: true,
+      ...payload
+    })
+  });
+}
+
 export function compareCluster(buyerId: string, clusterId: string) {
   return request<CompareResponse>("/compare", {
     method: "POST",
@@ -248,6 +299,31 @@ export function compareCluster(buyerId: string, clusterId: string) {
       buyer_id: buyerId,
       cluster_id: clusterId,
       preferred_fit: "comfort"
+    })
+  });
+}
+
+export function getClusterKnowledgeGraph(buyerId: string, clusterId: string) {
+  const params = new URLSearchParams({
+    buyer_id: buyerId,
+    preferred_fit: "comfort"
+  });
+  return request<ClusterKnowledgeGraph>(
+    `/knowledge-graph/clusters/${encodeURIComponent(clusterId)}?${params.toString()}`
+  );
+}
+
+export function askKnowledgeGraph(payload: {
+  buyer_id: string;
+  cluster_id: string;
+  query: string;
+  preferred_fit?: "comfort" | "regular";
+}) {
+  return request<KnowledgeGraphChatResponse>("/knowledge-graph/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      preferred_fit: "comfort",
+      ...payload
     })
   });
 }
@@ -275,11 +351,30 @@ export function verifyOffer(buyerId: string, variantId: string) {
   });
 }
 
+export function createExpectationContract(payload: {
+  buyer_id: string;
+  variant_id: string;
+  preferred_fit?: "comfort" | "regular";
+}) {
+  return request<ExpectationContract>("/expectation-contracts", {
+    method: "POST",
+    body: JSON.stringify({
+      preferred_fit: "comfort",
+      ...payload
+    })
+  });
+}
+
+export function getExpectationContract(contractId: string) {
+  return request<ExpectationContract>(`/expectation-contracts/${encodeURIComponent(contractId)}`);
+}
+
 export function simulateOutcome(payload: {
   buyer_id: string;
   variant_id: string;
   status: "delivered_kept" | "returned";
   return_reason?: string;
+  contract_id?: string;
 }) {
   return request<OutcomeResponse>("/orders/simulate", {
     method: "POST",

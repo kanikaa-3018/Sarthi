@@ -50,7 +50,7 @@ const PORTAL_COPY: Record<AuthPortal, {
     title: "Buyer app",
     shortLabel: "Buyer",
     description: "Shop with simple proof before you place an order.",
-    lockText: "Only buyer accounts can open shopping and personal trust settings."
+    lockText: "Buyer-only shopping and trust settings."
   },
   seller: {
     title: "Seller portal",
@@ -182,7 +182,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
   }
 
   return (
-    <div className="mobile-auth-container" style={{ minHeight: "auto", padding: "40px 0" }}>
+    <div className="mobile-auth-container auth-entry-shell">
       <div className="mobile-auth-card auth-entry-card">
         <div className="auth-brand-lockup">
           <div className="brand-logo-badge">S</div>
@@ -267,7 +267,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
         <form onSubmit={flow === "signin" ? handleSignin : handleSignup} className="auth-form-step">
           <div className="auth-security-note">
             <ShieldCheck size={15} />
-            <span>Role is checked by the backend before opening any workspace.</span>
+            <span>Backend checks role before opening a workspace.</span>
           </div>
 
           {flow === "signin" && (
@@ -406,8 +406,8 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
         </form>
       </div>
 
-      <div className="auth-bottom-banner" style={{ marginTop: "16px" }}>
-        <ShieldCheck size={14} style={{ marginRight: 4 }} />
+      <div className="auth-bottom-banner">
+        <ShieldCheck size={14} />
         <span>Private buyer memory, seller verification, and reviewer audit logs stay separated.</span>
       </div>
     </div>

@@ -105,71 +105,78 @@ export function App() {
 
   return (
     <div className="web-app-container">
-      {/* Universal Standard Site Header */}
-      <header className="web-header">
-        <div className="web-header-container">
-          <div className="web-brand-lockup" onClick={() => session && setView(defaultView(session.account.role))}>
+      <header className="web-header commerce-header">
+        <div className="web-header-container commerce-header-container">
+          <button
+            className="web-brand-lockup commerce-brand"
+            type="button"
+            onClick={() => session && setView(defaultView(session.account.role))}
+          >
             <div className="web-brand-badge">S</div>
-            <div>
-              <h1 className="web-brand-title">Sarthi</h1>
-              <span style={{ fontSize: "10px", color: "var(--text-secondary)", display: "block", marginTop: "-3px" }}>
-                Truth-first pre-purchase confidence
-              </span>
+            <div className="commerce-brand-copy">
+              <span className="web-brand-title">Sarthi</span>
+              <span className="web-brand-subtitle">Truth-first shopping</span>
             </div>
-          </div>
+          </button>
 
           {session && (
-            <div className="web-header-actions">
-              <div className="workspace-nav" aria-label="Workspace navigation">
+            <>
+              <nav className="commerce-nav" aria-label="Primary navigation">
                 {role === "buyer" && (
                   <>
-                    <button className={view === "buyer" ? "active" : ""} onClick={() => setView("buyer")}>
+                    <button
+                      type="button"
+                      className={view === "buyer" ? "active" : ""}
+                      onClick={() => setView("buyer")}
+                    >
                       <Store size={14} />
                       <span>{t(language, "shop")}</span>
                     </button>
-                    <button className={view === "trust" ? "active" : ""} onClick={() => setView("trust")}>
+                    <button
+                      type="button"
+                      className={view === "trust" ? "active" : ""}
+                      onClick={() => setView("trust")}
+                    >
                       <ShieldCheck size={14} />
                       <span>{t(language, "trust")}</span>
                     </button>
                   </>
                 )}
                 {role === "seller" && (
-                  <span className="workspace-lock-chip">
+                  <span className="commerce-role-lock">
                     <Store size={14} />
                     {t(language, "sellerConsole")}
                   </span>
                 )}
                 {role === "admin" && (
-                  <span className="workspace-lock-chip">
+                  <span className="commerce-role-lock">
                     <ClipboardCheck size={14} />
                     {t(language, "reviewQueue")}
                   </span>
                 )}
-              </div>
+              </nav>
+
+              <div className="web-header-actions commerce-actions">
 
               {/* Reset database helper */}
               {role === "admin" && (
-                <button className="web-header-btn" onClick={handleResetDatabase} title="Reset database">
+                <button
+                  className="web-header-btn commerce-icon-btn"
+                  type="button"
+                  onClick={handleResetDatabase}
+                  title="Reset database"
+                >
                   <RefreshCcw size={14} />
                   <span className="hide-on-mobile">Reset Facts</span>
                 </button>
               )}
 
               {/* Language Switcher */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "var(--bg-surface-muted)", border: "1px solid var(--border-subtle)", padding: "4px 8px", borderRadius: "6px" }}>
-                <Globe size={14} style={{ color: "var(--text-secondary)" }} />
+              <label className="web-header-select commerce-select" aria-label="Choose language">
+                <Globe size={14} />
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value as LanguageCode)}
-                  style={{
-                    fontSize: "12px",
-                    border: "none",
-                    background: "transparent",
-                    color: "var(--text-primary)",
-                    fontWeight: 600,
-                    outline: "none",
-                    cursor: "pointer"
-                  }}
                 >
                   {LANGUAGE_OPTIONS.map((opt) => (
                     <option key={opt.code} value={opt.code}>
@@ -177,11 +184,11 @@ export function App() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
 
               {role === "buyer" && (
                 <button
-                  className="web-header-btn"
+                  className="web-header-btn commerce-mode-btn"
                   type="button"
                   onClick={() => setExperienceMode(experienceMode === "simple" ? "standard" : "simple")}
                   aria-pressed={experienceMode === "simple"}
@@ -196,29 +203,33 @@ export function App() {
 
               {/* Dark/Light mode toggle */}
               <button
-                className="web-header-btn"
+                className="web-header-btn commerce-icon-btn"
+                type="button"
                 onClick={() => setTheme(resolvedTheme === "light" ? "dark" : "light")}
                 title="Toggle Theme"
-                style={{ padding: "8px 10px" }}
               >
                 {resolvedTheme === "light" ? <Moon size={15} /> : <Sun size={15} />}
               </button>
 
               {/* User Identity Chip */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-primary)", fontWeight: 600, borderLeft: "1px solid var(--border-subtle)", paddingLeft: "12px" }}>
-                <User size={14} style={{ color: "var(--accent-secondary)" }} />
-                <span className="hide-on-mobile">{session.account.display_name}</span>
-                <span className="role-pill">{role}</span>
+              <div className="web-user-menu commerce-account">
+                <User size={14} />
+                <span className="commerce-account-name">
+                  <strong>{session.account.display_name}</strong>
+                  <small>{role}</small>
+                </span>
                 <button
+                  className="web-logout-btn"
+                  type="button"
                   onClick={handleLogout}
                   disabled={loggingOut}
-                  style={{ color: "var(--error)", background: "transparent", border: "none", display: "grid", placeItems: "center", padding: "4px" }}
                   title="Logout"
                 >
                   <LogOut size={15} />
                 </button>
               </div>
             </div>
+            </>
           )}
         </div>
       </header>

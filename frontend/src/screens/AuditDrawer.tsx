@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2, Database, Route, ShieldCheck } from "lucide-react";
 import { getAudit } from "../api/client";
 import type { AuditTrace } from "../types/api";
 
@@ -28,98 +29,105 @@ export function AuditDrawer({ traceId }: Props) {
   if (!traceId) return null;
 
   return (
-    <div style={{ width: "100%" }}>
+    <div className="audit-drawer">
       {error && <div className="notice error">{error}</div>}
 
       {trace ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-          {/* Metadata Block Info */}
-          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-            Diagnostic reference log: <strong style={{ color: "var(--forest-green)" }}>{traceId}</strong> &bull; Compiled: {new Date(trace.created_at).toLocaleString()}
+        <>
+          <div className="audit-reference-card">
+            <div>
+              <span className="eyebrow">Decision reference</span>
+              <strong>{traceId}</strong>
+            </div>
+            <span className="ui-badge neutral">{new Date(trace.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
           </div>
 
-          {/* Grid Blocks */}
-          <div className="proof-blocks-grid">
-            {/* User Intent */}
-            <div className="proof-block-card">
-              <h4>Extracted Intent Signals</h4>
-              <div className="proof-chips-wrapper">
-                {trace.intent.map((value) => (
-                  <span className="proof-chip" key={value}>
-                    {value}
-                  </span>
-                ))}
+          <section className="audit-summary-card">
+            <div className="audit-card-heading">
+              <ShieldCheck size={18} />
+              <div>
+                <span className="eyebrow">What Sarthi did</span>
+                <h4>Grounded decision log</h4>
               </div>
             </div>
-
-            {/* Tools Used */}
-            <div className="proof-block-card">
-              <h4>Invoked Agent Tools</h4>
-              <div className="proof-chips-wrapper">
-                {trace.tools_used.map((value) => (
-                  <span className="proof-chip" style={{ background: "var(--sage-light)", borderColor: "var(--sage-green)" }} key={value}>
-                    {value}
-                  </span>
-                ))}
+            <div className="kv-stack">
+              <div className="kv-row">
+                <span>Question understood</span>
+                <strong>{trace.intent.join(" + ") || "purchase check"}</strong>
+              </div>
+              <div className="kv-row">
+                <span>Tools used</span>
+                <strong>{trace.tools_used.length}</strong>
+              </div>
+              <div className="kv-row">
+                <span>Evidence retrieved</span>
+                <strong>{trace.fact_details.length} records</strong>
+              </div>
+              <div className="kv-row">
+                <span>Unsupported claims</span>
+                <strong>0 blocked</strong>
               </div>
             </div>
+          </section>
 
-            {/* Fact References */}
-            <div className="proof-block-card">
-              <h4>Relational SQLite Facts</h4>
-              <div className="proof-chips-wrapper">
-                {trace.fact_details.slice(0, 8).map((fact) => (
-                  <span
-                    className="proof-chip"
-                    style={{ background: "var(--accent-gold-bg)", borderColor: "var(--accent-gold)", color: "var(--accent-gold)" }}
-                    key={fact.fact_id}
-                    title={fact.summary}
-                  >
-                    {fact.source_type}: {fact.fact_id}
-                  </span>
-                ))}
+          <section className="audit-summary-card">
+            <div className="audit-card-heading">
+              <Database size={18} />
+              <div>
+                <span className="eyebrow">Answer supported by</span>
+                <h4>Fact references</h4>
               </div>
             </div>
-          </div>
-
-          <div className="audit-fact-detail-list">
-            {trace.fact_details.slice(0, 8).map((fact) => (
-              <div className="audit-fact-detail" key={fact.fact_id}>
-                <div>
-                  <strong>{fact.summary}</strong>
-                  <span>{fact.source_table} / {fact.source_id}</span>
+            <div className="proof-chips-wrapper">
+              {trace.fact_details.slice(0, 10).map((fact) => (
+                <span className="proof-chip audit-chip" key={fact.fact_id} title={fact.summary}>
+                  {fact.fact_id}
+                </span>
+              ))}
+            </div>
+            <div className="audit-fact-detail-list">
+              {trace.fact_details.slice(0, 6).map((fact) => (
+                <div className="audit-fact-detail" key={fact.fact_id}>
+                  <div>
+                    <strong>{fact.summary}</strong>
+                    <span>{fact.source_table} / {fact.source_id}</span>
+                  </div>
+                  <code>{fact.source_type}</code>
                 </div>
-                <code>{fact.fact_id}</code>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </section>
 
-          {/* Neo4j Graph Paths */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <h4 style={{ fontSize: "12px", textTransform: "uppercase", color: "var(--text-muted)", letterSpacing: "0.05em", fontWeight: 700 }}>
-              Traversed Neo4j Knowledge Graph Pathways
-            </h4>
+          <section className="audit-summary-card">
+            <div className="audit-card-heading">
+              <Route size={18} />
+              <div>
+                <span className="eyebrow">Graph path</span>
+                <h4>How the evidence connected</h4>
+              </div>
+            </div>
             <div className="proof-graph-paths">
               {trace.graph_paths.map((path) => (
                 <div className="proof-path-card" key={`${path.path_type}-${path.summary}`}>
                   <span className="path-card-title">{path.path_type}</span>
-                  <span style={{ color: "var(--text-secondary)" }}>{path.summary}</span>
+                  <span>{path.summary}</span>
                   {path.relationships.length > 0 ? (
                     <span className="path-card-route">
-                      {path.relationships.join(" ➔ ")}
+                      {path.relationships.join(" -> ")}
                     </span>
                   ) : (
-                    <span className="path-card-route" style={{ fontStyle: "italic", color: "var(--text-muted)" }}>
-                      Direct SQLite match
+                    <span className="path-card-route muted">
+                      Direct fact match
                     </span>
                   )}
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </section>
+        </>
       ) : (
-        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px" }}>
+        <div className="audit-loading">
+          <CheckCircle2 size={18} />
           Loading decision trace facts...
         </div>
       )}

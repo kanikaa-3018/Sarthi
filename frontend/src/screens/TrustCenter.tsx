@@ -103,7 +103,7 @@ export function TrustCenter({ buyerId }: Props) {
           </p>
         </div>
         <button className="btn-reset-db" onClick={load} disabled={busy} title="Refresh trust center">
-          <RefreshCcw size={15} style={{ animation: busy ? "spin 1s linear infinite" : "none" }} />
+          <RefreshCcw size={15} className={busy ? "spin-icon" : ""} />
         </button>
       </section>
 
@@ -155,7 +155,6 @@ export function TrustCenter({ buyerId }: Props) {
                 <select value={preferredFit} onChange={(event) => setPreferredFit(event.target.value)}>
                   <option value="comfort">Comfort fit</option>
                   <option value="regular">Regular fit</option>
-                  <option value="snug">Snug fit</option>
                 </select>
                 <button className="btn-primary" onClick={savePreference} disabled={busy}>
                   Save preference

@@ -98,7 +98,7 @@ export function AdminReviewPanel() {
           </p>
         </div>
         <button className="admin-refresh-button" onClick={refreshQueue} disabled={loading}>
-          <RefreshCcw size={15} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} />
+          <RefreshCcw size={15} className={loading ? "spin-icon" : ""} />
           Refresh
         </button>
       </section>

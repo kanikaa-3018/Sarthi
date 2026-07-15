@@ -64,6 +64,10 @@ export type RankingResult = {
       outcome_quality: number;
       expectation_match: number;
       fulfilment_reliability: number;
+      seller_trust: number;
+      review_signal: number;
+      rating_signal: number;
+      price_value: number;
       uncertainty_penalty: number;
     };
     fact_ids: string[];
@@ -87,6 +91,112 @@ export type GraphPath = {
   relationships: string[];
   fact_ids: string[];
   summary: string;
+};
+
+export type KnowledgeGraphNode = {
+  id: string;
+  type:
+    | "cluster"
+    | "buyer_context"
+    | "seller"
+    | "product"
+    | "sku"
+    | "evidence"
+    | "reviews"
+    | "fabric"
+    | "rating"
+    | "price"
+    | "return_reason";
+  label: string;
+  subtitle: string;
+  status: string;
+  score: number | null;
+  fact_ids: string[];
+  data: Record<string, any>;
+};
+
+export type KnowledgeGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+  weight: number;
+  fact_ids: string[];
+};
+
+export type SellerGraphContext = {
+  product: Product;
+  seller: {
+    seller_id: string;
+    name: string;
+    verification: SellerVerification;
+  };
+  variant: Variant;
+  evidence: VariantEvidence;
+  fit: FitPrediction;
+  reviews: Array<{
+    review_id: string;
+    product_id: string;
+    variant_id: string | null;
+    attribute: string;
+    sentiment: string;
+    text: string;
+    rating: number;
+    fact_id: string;
+  }>;
+  top_return_reason: {
+    return_reason: string;
+    count: number;
+    fact_ids: string[];
+  } | null;
+  price_context: {
+    latest_price: number;
+    campaign: Record<string, any> | null;
+    inventory: Record<string, any> | null;
+  };
+  candidate: RankingResult["candidates"][number] | null;
+  node_ids: Record<string, string>;
+};
+
+export type ClusterKnowledgeGraph = {
+  buyer_id: string;
+  cluster: {
+    cluster_id: string;
+    label: string;
+    category: string;
+    listing_count: number;
+  };
+  summary: {
+    title: string;
+    body: string;
+    dynamic: boolean;
+    source_health: SourceHealth;
+    fact_count: number;
+  };
+  ranking: RankingResult | null;
+  selected_product_id: string | null;
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  seller_context: SellerGraphContext[];
+  fact_ids: string[];
+  chat_suggestions: string[];
+};
+
+export type KnowledgeGraphAnswer = {
+  query: string;
+  title: string;
+  summary: string;
+  reasons: string[];
+  matched_node_ids: string[];
+  highlighted_edge_ids: string[];
+  fact_ids: string[];
+  follow_up_questions: string[];
+};
+
+export type KnowledgeGraphChatResponse = {
+  trace_id: string;
+  answer: KnowledgeGraphAnswer;
+  graph_path: GraphPath;
 };
 
 export type CompareResponse = {
@@ -127,6 +237,100 @@ export type ProductDetailResponse = {
   trust_state: ProductTrustState;
   graph_paths: GraphPath[];
   privacy: PrivacySummary;
+};
+
+export type ProofAttribute = "transparency" | "fabric" | "color" | "size" | "packaging" | "offer";
+
+export type ProofCoverageItem = {
+  attribute: ProofAttribute;
+  sufficient: boolean;
+  evidence_count: number;
+  source_summary: string;
+  recommended_proof_type: "daylight_photo" | "fabric_closeup" | "measurement_chart" | "packaging_photo" | "seller_note";
+  fact_ids: string[];
+};
+
+export type EvidenceGap = {
+  attribute: ProofAttribute;
+  severity?: "high" | "medium" | "low";
+  title: string;
+  summary: string;
+  recommended_proof_type: ProofCoverageItem["recommended_proof_type"];
+  coverage?: ProofCoverageItem;
+  fact_ids?: string[];
+};
+
+export type ProofRequest = {
+  request_id: string;
+  seller_id: string;
+  product_id: string;
+  variant_id: string | null;
+  attribute: ProofAttribute;
+  status: "open" | "resolved" | "dismissed";
+  request_count: number;
+  created_at: string;
+  updated_at: string;
+  fact_id: string;
+};
+
+export type SkuTruthPassport = {
+  buyer_id: string;
+  product: Product;
+  variant: Variant;
+  truth_summary: {
+    headline: string;
+    status: ProductTrustState["status"];
+    confidence: ProductTrustState["confidence"];
+    can_recommend: boolean;
+    buyer_guidance: string;
+  };
+  outcome_evidence: VariantEvidence;
+  fit: FitPrediction;
+  avoidable_issue: AvoidableIssue | null;
+  offer_truth: OfferCheck;
+  review_evidence: ProductDetailResponse["review_evidence"];
+  proof_coverage: Record<ProofAttribute, ProofCoverageItem>;
+  evidence_gaps: EvidenceGap[];
+  open_proof_requests: ProofRequest[];
+  conflicts: ProductDetailResponse["conflicts"];
+  trust_state: ProductTrustState;
+  fact_ids: string[];
+};
+
+export type RegretDecisionResponse = {
+  trace_id: string;
+  buyer_id: string;
+  context: {
+    product_id: string;
+    cluster_id: string;
+    category: string;
+    garment_type: string;
+  };
+  decision: {
+    code:
+      | "buy"
+      | "buy_without_rush"
+      | "buy_with_one_check"
+      | "change_size"
+      | "ask_seller_proof"
+      | "low_evidence"
+      | "skip";
+    label: string;
+    summary: string;
+    primary_action: string;
+    confidence: "low" | "medium" | "high" | "blocked";
+  };
+  selected: {
+    product: Product;
+    variant: Variant;
+    recommended_size: string;
+  };
+  ranking: RankingResult;
+  sku_truth_passport: SkuTruthPassport;
+  missing_proof: EvidenceGap | null;
+  proof_request: ProofRequest | null;
+  graph_paths: GraphPath[];
+  fact_ids: string[];
 };
 
 export type DataSourceStatus = {
@@ -223,6 +427,46 @@ export type OfferCheck = {
   variant_id: string;
   status: "verified_price_drop" | "no_need_to_rush" | "not_enough_history";
   message: string;
+  buyer_guidance: string;
+  truth_basis:
+    | "price_drop"
+    | "timer_reset"
+    | "scarcity"
+    | "no_verified_urgency"
+    | "insufficient_history";
+  price_evidence: {
+    latest_price: number | null;
+    reference_price: number | null;
+    price_delta: number | null;
+    price_event_count: number;
+    current_price_age_days: number | null;
+    points: Array<{
+      price: number;
+      event_type: string;
+      created_at: string;
+      fact_id: string;
+    }>;
+  };
+  campaign_evidence: {
+    campaign_id: string;
+    start_at: string;
+    end_at: string;
+    timer_reset_count: number;
+    fact_id: string;
+  } | null;
+  inventory_evidence: {
+    available_to_promise: number;
+    sales_velocity_24h: number;
+    captured_at: string;
+    fact_id: string;
+  } | null;
+  checks: Array<{
+    key: "price_history" | "campaign_timer" | "inventory_pressure";
+    label: string;
+    status: "positive" | "neutral" | "caution";
+    detail: string;
+    fact_ids: string[];
+  }>;
   fact_ids: string[];
 };
 
@@ -230,6 +474,38 @@ export type CheckoutResponse = {
   trace_id: string;
   offer: OfferCheck;
   graph_path: GraphPath;
+};
+
+export type ExpectationContractItem = {
+  dimension: "fit" | "fabric" | "color" | "dispatch" | "offer" | "packaging" | "delivery" | "unknown";
+  claim: string;
+  confidence: "unknown" | "weak" | "medium" | "strong" | "low" | "high";
+  buyer_action: string;
+  fact_ids: string[];
+};
+
+export type ExpectationContract = {
+  contract_id: string;
+  buyer_id: string;
+  product_id: string;
+  variant_id: string;
+  status: "active" | "kept" | "broken" | "expired";
+  contract: {
+    title: string;
+    summary: string;
+    items: ExpectationContractItem[];
+    fact_ids: string[];
+    privacy: {
+      buyer_visible: boolean;
+      seller_visible_as_aggregate_only: boolean;
+      raw_private_memory_exposed: boolean;
+    };
+  };
+  created_at: string;
+  completed_at: string | null;
+  outcome_order_id: string | null;
+  broken_dimension: string | null;
+  fact_id: string;
 };
 
 export type OutcomeResponse = {
@@ -245,6 +521,7 @@ export type OutcomeResponse = {
       retained_size?: string;
     };
   };
+  expectation_contract: ExpectationContract | null;
   graph_sync: {
     available: boolean;
     reason?: string;
@@ -409,6 +686,43 @@ export type SellerPanelResponse = {
     summary: string;
   };
   fact_ids: string[];
+};
+
+export type SellerEvidenceCoachTask = {
+  type: "missing_buyer_proof" | "broken_expectation";
+  priority: "high" | "medium" | "low";
+  product_id: string;
+  product_title: string;
+  attribute: ProofAttribute;
+  title: string;
+  rationale: string;
+  recommended_proof_type: ProofCoverageItem["recommended_proof_type"];
+  buyer_demand: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  fact_ids: string[];
+};
+
+export type SellerEvidenceCoachResponse = {
+  seller_id: string;
+  open_task_count: number;
+  resolved_request_count: number;
+  tasks: SellerEvidenceCoachTask[];
+  privacy_guard: {
+    safe_for_seller: boolean;
+    summary: string;
+  };
+};
+
+export type SellerEvidenceAssetResponse = {
+  proof_id: string;
+  seller_id: string;
+  product_id: string;
+  attribute: ProofAttribute;
+  proof_type: ProofCoverageItem["recommended_proof_type"];
+  status: "verified" | "submitted" | "rejected";
+  fact_id: string;
+  resolved_open_requests: number;
 };
 
 export type SellerVerificationDocument = {
