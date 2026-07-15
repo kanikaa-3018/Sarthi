@@ -1,4 +1,18 @@
-import { HelpCircle, Info, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  HelpCircle,
+  Info,
+  Layers,
+  Palette,
+  RotateCcw,
+  Ruler,
+  ShieldCheck,
+  Star,
+  Tag,
+  Truck
+} from "lucide-react";
 import { t, type LanguageCode } from "../i18n";
 import type { CompareResponse, Product } from "../types/api";
 
@@ -11,6 +25,8 @@ type Props = {
   onOpenAudit: () => void;
 };
 
+type CandidateScore = CompareResponse["ranking"]["candidates"][number];
+
 export function CompareSheet({
   comparison,
   productCatalog,
@@ -19,6 +35,7 @@ export function CompareSheet({
   onContinue,
   onOpenAudit
 }: Props) {
+  const [alternativeOpen, setAlternativeOpen] = useState(false);
   const ranking = comparison.ranking;
   const fit = comparison.fit;
   const isSimple = experienceMode === "simple";
@@ -27,144 +44,155 @@ export function CompareSheet({
   const alternativeDetails = ranking.alternative
     ? getProductDetailsForVariant(ranking.alternative, productCatalog)
     : null;
-  const plainReason = visibleFactors.length
-    ? visibleFactors.join(isSimple ? " and " : ", ")
-    : "seller, size, return, and dispatch evidence is stronger";
+  const candidateRows = ranking.candidates.map((candidate, index) => ({
+    candidate,
+    details: getProductDetailsForVariant(candidate.variant_id, productCatalog),
+    index,
+    isWinner: candidate.variant_id === ranking.winner,
+    isAlternative: candidate.variant_id === ranking.alternative
+  }));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
-      <div style={{
-        backgroundColor: "var(--bg-surface-muted)",
-        border: "1.5px solid var(--accent-primary)",
-        borderRadius: "12px",
-        padding: "16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px"
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
-          <span style={{
-            fontSize: "11px",
-            fontWeight: 800,
-            color: "var(--success)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em"
-          }}>
-            Best match for you
-          </span>
-          <span style={{
-            backgroundColor: "var(--success)",
-            color: "#fff",
-            fontSize: "10px",
-            fontWeight: 700,
-            padding: "2px 6px",
-            borderRadius: "4px",
-            whiteSpace: "nowrap"
-          }}>
-            Evidence picked
-          </span>
+    <div className="compare-sheet">
+      <section className="compare-best-card interactive-lift">
+        <div className="compare-card-header">
+          <div className="compare-title-row">
+            <span className="compare-icon-badge positive">
+              <CheckCircle2 size={15} />
+            </span>
+            <div>
+              <span className="eyebrow">Best match for you</span>
+              <h3>{winnerDetails.sellerName}</h3>
+            </div>
+          </div>
+          <span className="ui-badge positive">Evidence picked</span>
         </div>
 
-        <div>
-          <span style={{ display: "block", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "2px" }}>
-            {winnerDetails.title}
-          </span>
-          <strong style={{ fontSize: "16px", color: "var(--text-primary)" }}>
-            {winnerDetails.sellerName}
-          </strong>
-          <div style={{ display: "flex", gap: "8px", fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
-            <span>Rs {winnerDetails.price}</span>
-            <span>-</span>
-            <span>Size: {fit.recommended_size}</span>
+        <div className="compare-kv-panel">
+          <div className="kv-row">
+            <span>Product</span>
+            <strong>{winnerDetails.title}</strong>
+          </div>
+          <div className="kv-row">
+            <span>Price</span>
+            <strong className="compare-price">Rs {winnerDetails.price}</strong>
+          </div>
+          <div className="kv-row">
+            <span>Size</span>
+            <strong>
+              <span className="ui-badge neutral">{fit.recommended_size}</span>
+            </strong>
           </div>
         </div>
 
-        <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.45 }}>
-          In simple words, Sarthi picked this because {plainReason}. It is not choosing only by cheapest price.
-        </p>
-
-        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-primary)" }}>Why this one:</span>
-          {visibleFactors.map((factor, idx) => (
-            <div key={idx} style={{ display: "flex", gap: "6px", fontSize: "12px", color: "var(--text-secondary)", alignItems: "center" }}>
-              <ShieldCheck size={13} style={{ color: "var(--success)", flexShrink: 0 }} />
+        <div className="compare-reason-list">
+          <span className="compare-section-label">Why this one</span>
+          {visibleFactors.map((factor) => (
+            <div className="reason-row" key={factor}>
+              <FactorIcon factor={factor} />
               <span>{factor}</span>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
       {!isSimple && ranking.alternative && alternativeDetails && (
-        <div style={{
-          backgroundColor: "var(--bg-surface)",
-          border: "1px solid var(--border-subtle)",
-          borderRadius: "12px",
-          padding: "14px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px"
-        }}>
-          <span style={{
-            fontSize: "11px",
-            fontWeight: 800,
-            color: "var(--text-secondary)",
-            textTransform: "uppercase"
-          }}>
-            Also consider
-          </span>
-
-          <div>
-            <span style={{ display: "block", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "2px" }}>
-              {alternativeDetails.title}
-            </span>
-            <strong style={{ fontSize: "14px", color: "var(--text-primary)" }}>
-              {alternativeDetails.sellerName}
-            </strong>
-            <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
-              <span>Rs {alternativeDetails.price}</span>
-              <span>-</span>
-              <span>Size: {fit.recommended_size}</span>
+        <section className={`compare-alternative-card ${alternativeOpen ? "open" : ""}`}>
+          <button
+            type="button"
+            className="compare-alternative-toggle"
+            onClick={() => setAlternativeOpen((open) => !open)}
+            aria-expanded={alternativeOpen}
+          >
+            <div>
+              <span className="eyebrow">Also consider</span>
+              <strong>{alternativeDetails.sellerName}</strong>
+              <small>Rs {alternativeDetails.price} | Size {fit.recommended_size}</small>
             </div>
+            <ChevronDown size={16} />
+          </button>
+          {alternativeOpen && (
+            <div className="compare-alternative-body">
+              <div className="reason-row">
+                <Tag size={16} />
+                <span>Useful if price is the priority, but it scored lower after return, color, dispatch, and fit checks.</span>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {!isSimple && (
+        <div className="compare-engine-card">
+          <div className="compare-engine-header">
+            <div>
+              <span className="eyebrow">Automated ranking engine</span>
+              <h4>All mapped seller options</h4>
+            </div>
+            <span className="ui-badge neutral">{candidateRows.length} checked</span>
           </div>
-          <span style={{ fontSize: "11px", color: "var(--accent-secondary)", fontStyle: "italic" }}>
-            Lower price can still be useful, but Sarthi separates price from return, color, dispatch, and fit proof.
-          </span>
+          <p>
+            Sarthi ranks the saved product cluster by kept-order score. It uses fit, avoidable returns,
+            expectation match, dispatch reliability, seller trust, and graph proof. It does not use ad position.
+          </p>
+          <div className="compare-candidate-list">
+            {candidateRows.map(({ candidate, details, index, isWinner, isAlternative }) => (
+              <div
+                key={candidate.variant_id}
+                className={`compare-candidate-row ${isWinner ? "winner" : ""} ${isAlternative ? "alternative" : ""}`}
+              >
+                <div className="compare-rank-pill">
+                  {isWinner ? <CheckCircle2 size={13} /> : <span>{index + 1}</span>}
+                </div>
+                <div className="compare-candidate-main">
+                  <strong>{details.sellerName}</strong>
+                  <small>{details.title} | Rs {details.price}</small>
+                  <div className="compare-factor-chips">
+                    <span><Ruler size={12} /> Fit {factorPercent(candidate, "fit_match")}</span>
+                    <span><RotateCcw size={12} /> Returns {factorPercent(candidate, "outcome_quality")}</span>
+                    <span><ShieldCheck size={12} /> Trust {factorPercent(candidate, "seller_trust")}</span>
+                    <span><Truck size={12} /> Dispatch {factorPercent(candidate, "fulfilment_reliability")}</span>
+                  </div>
+                </div>
+                <div className="compare-score-cell">
+                  <strong>{Math.round(candidate.score * 100)}</strong>
+                  <span>/100</span>
+                  <i style={{ width: `${Math.round(candidate.score * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <div className="compare-sheet-footer">
+        <span>
           <Info size={12} />
-          <span>{isSimple ? t(language, "proofAvailable") : `Traversed ${comparison.graph_path.relationships.length} graph paths`}</span>
+          {isSimple ? t(language, "proofAvailable") : `Traversed ${comparison.graph_path.relationships.length} graph paths`}
         </span>
-        <button
-          onClick={onOpenAudit}
-          style={{ color: "var(--accent-primary-hover)", fontWeight: 700, textDecoration: "underline", display: "flex", alignItems: "center", gap: "3px" }}
-        >
-          <HelpCircle size={11} />
-          <span>{isSimple ? "Proof" : "How Sarthi decided"}</span>
+        <button type="button" onClick={onOpenAudit}>
+          <HelpCircle size={12} />
+          {isSimple ? "Proof" : "How Sarthi decided"}
         </button>
       </div>
 
-      <button
-        onClick={onContinue}
-        style={{
-          width: "100%",
-          backgroundColor: "var(--accent-primary)",
-          color: "var(--text-on-accent)",
-          border: "none",
-          borderRadius: "8px",
-          padding: "12px",
-          fontSize: "14px",
-          fontWeight: 700,
-          marginTop: "8px",
-          cursor: "pointer"
-        }}
-      >
+      <button className="compare-primary-cta" type="button" onClick={onContinue}>
         Choose this option
       </button>
     </div>
   );
+}
+
+function FactorIcon({ factor }: { factor: string }) {
+  const normalized = factor.toLowerCase();
+  if (normalized.includes("fit") || normalized.includes("size")) return <Ruler size={16} />;
+  if (normalized.includes("return") || normalized.includes("outcome")) return <RotateCcw size={16} />;
+  if (normalized.includes("dispatch") || normalized.includes("fulfil")) return <Truck size={16} />;
+  if (normalized.includes("review") || normalized.includes("rating")) return <Star size={16} />;
+  if (normalized.includes("price") || normalized.includes("value")) return <Tag size={16} />;
+  if (normalized.includes("color")) return <Palette size={16} />;
+  if (normalized.includes("fabric")) return <Layers size={16} />;
+  return <ShieldCheck size={16} />;
 }
 
 function getProductDetailsForVariant(variantId: string, productCatalog: Product[]) {
@@ -177,4 +205,10 @@ function getProductDetailsForVariant(variantId: string, productCatalog: Product[
     sellerName: product?.seller_name ?? "Mapped seller",
     price: product?.base_price ?? 0
   };
+}
+
+type CandidateFactor = Exclude<keyof CandidateScore["factors"], "uncertainty_penalty">;
+
+function factorPercent(candidate: CandidateScore, factor: CandidateFactor) {
+  return `${Math.round(candidate.factors[factor] * 100)}%`;
 }

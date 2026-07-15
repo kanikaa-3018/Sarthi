@@ -1,20 +1,28 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, X, HelpCircle, FileText, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, HelpCircle, CheckCircle2, Clock, PackageCheck, Tag } from "lucide-react";
 import { verifyOffer } from "../api/client";
-import { t } from "../i18n";
-import type { CheckoutResponse } from "../types/api";
+import type { CheckoutResponse, ExpectationContract, OfferCheck } from "../types/api";
 import { OutcomeScreen } from "./OutcomeScreen";
 
 type Props = {
   buyerId: string;
   variantId: string;
+  expectationContract: ExpectationContract | null;
   onOpenAudit: (traceId: string) => void;
   onClose: () => void;
   language: string;
   experienceMode: "simple" | "standard";
 };
 
-export function CheckoutSheet({ buyerId, variantId, onOpenAudit, onClose, language, experienceMode }: Props) {
+export function CheckoutSheet({
+  buyerId,
+  variantId,
+  expectationContract,
+  onOpenAudit,
+  onClose,
+  language,
+  experienceMode
+}: Props) {
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null);
   const [ordered, setOrdered] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,96 +38,85 @@ export function CheckoutSheet({ buyerId, variantId, onOpenAudit, onClose, langua
 
   // Determine copy based on backend pricing status
   function getDealStatusContent() {
-    if (!checkout) return { label: "Checking offer...", className: "status-checking", text: "Retrieving pricing history..." };
-    
+    if (!checkout) {
+      return {
+        label: "Checking offer",
+        badgeVariant: "neutral",
+        text: "Retrieving pricing history..."
+      } as const;
+    }
+
     const status = checkout.offer.status;
     if (status === "verified_price_drop") {
       return {
         label: "Verified Price Drop",
-        className: "status-success",
-        text: "Verified deal. Rs 80 below the recent 30-day median; offer ends at 9 PM."
-      };
-    } else if (status === "no_need_to_rush") {
+        badgeVariant: "positive",
+        text: checkout.offer.message
+      } as const;
+    }
+    if (status === "no_need_to_rush") {
       return {
         label: "No need to rush",
-        className: "status-warning",
-        text: "No need to rush. This price has been active for 5 days."
-      };
-    } else {
-      // not_enough_history
-      return {
-        label: "No claim made",
-        className: "status-neutral",
-        text: "Sarthi has not enough history to analyze this offer."
-      };
+        badgeVariant: "neutral",
+        text: checkout.offer.message
+      } as const;
     }
+    return {
+      label: "No claim made",
+      badgeVariant: "neutral",
+      text: checkout.offer.message
+    } as const;
   }
 
   const dealStatus = getDealStatusContent();
   const size = variantId.split("_").pop() || "XL";
 
   return (
-    <div style={{ textAlign: "left" }}>
+    <div className="checkout-sheet-root">
       {error && <div className="notice error">{error}</div>}
 
       {!ordered ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div className="checkout-flow">
           {/* Order Details Grid Checklist */}
-          <div style={{
-            backgroundColor: "var(--bg-surface-muted)",
-            border: "1px solid var(--border-subtle)",
-            borderRadius: "12px",
-            padding: "16px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px"
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Size {size}</span>
-              <strong style={{ fontSize: "12px", color: "var(--success)" }}>Confirmed</strong>
+          <div className="checkout-check-card">
+            <div className="kv-row">
+              <span>Size</span>
+              <strong>{size.toUpperCase()} <span className="ui-badge positive">Confirmed</span></strong>
             </div>
 
             {!isSimple && (
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Product confidence</span>
-                <strong style={{ fontSize: "12px", color: "var(--success)" }}>Strong</strong>
+              <div className="kv-row">
+                <span>Product confidence</span>
+                <strong>Strong</strong>
               </div>
             )}
 
-            <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Deal status</span>
-              <strong style={{
-                fontSize: "11px",
-                color: checkout?.offer.status === "verified_price_drop" ? "var(--success)" : "var(--warning)"
-              }}>
+            <div className="kv-row">
+              <span>Deal status</span>
+              <strong className={`ui-badge ${dealStatus.badgeVariant}`}>
                 {dealStatus.label}
               </strong>
             </div>
-            
-            <p style={{ fontSize: "12px", color: "var(--text-primary)", margin: "4px 0 0" }}>
+
+            <p className="checkout-supporting-copy">
               {isSimple ? `${dealStatus.label}. ${dealStatus.text}` : dealStatus.text}
             </p>
           </div>
 
+          {checkout && <OfferTruthEvidence offer={checkout.offer} isSimple={isSimple} />}
+
+          {expectationContract && (
+            <CheckoutExpectationContract
+              contract={expectationContract}
+              isSimple={isSimple}
+            />
+          )}
+
           {/* Place COD Order Button */}
-          <button 
+          <button
+            className="checkout-primary-cta"
             onClick={() => setOrdered(true)}
             disabled={!checkout}
-            style={{
-              width: "100%",
-              backgroundColor: "var(--accent-primary)",
-              color: "var(--text-on-accent)",
-              border: "none",
-              borderRadius: "8px",
-              padding: "14px",
-              fontSize: "14px",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              cursor: "pointer"
-            }}
           >
             <CheckCircle2 size={16} />
             <span>Place COD order</span>
@@ -127,18 +124,9 @@ export function CheckoutSheet({ buyerId, variantId, onOpenAudit, onClose, langua
 
           {/* Audit trail trigger */}
           {checkout && (
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button 
+            <div className="checkout-footer-action">
+              <button
                 onClick={() => onOpenAudit(checkout.trace_id)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  fontSize: "11px",
-                  color: "var(--text-secondary)",
-                  background: "transparent",
-                  border: "none"
-                }}
               >
                 <HelpCircle size={12} />
                 <span>{isSimple ? "Proof" : "Inspect price events log"}</span>
@@ -151,9 +139,141 @@ export function CheckoutSheet({ buyerId, variantId, onOpenAudit, onClose, langua
         <OutcomeScreen 
           buyerId={buyerId} 
           variantId={variantId} 
+          contractId={expectationContract?.contract_id ?? null}
           onClose={onClose} 
         />
       )}
     </div>
   );
+}
+
+function OfferTruthEvidence({
+  offer,
+  isSimple
+}: {
+  offer: OfferCheck;
+  isSimple: boolean;
+}) {
+  const priceDelta = offer.price_evidence.price_delta;
+  const campaign = offer.campaign_evidence;
+  const inventory = offer.inventory_evidence;
+  const facts = [
+    {
+      label: "Current price",
+      value: offer.price_evidence.latest_price === null ? "Unknown" : `Rs ${offer.price_evidence.latest_price}`,
+      helper:
+        offer.price_evidence.reference_price === null
+          ? `${offer.price_evidence.price_event_count} price event(s)`
+          : `Reference Rs ${offer.price_evidence.reference_price}`,
+      icon: <Tag size={15} />
+    },
+    {
+      label: "Price movement",
+      value:
+        priceDelta === null
+          ? "Not enough history"
+          : priceDelta > 0
+            ? `Rs ${priceDelta} lower`
+            : priceDelta < 0
+              ? `Rs ${Math.abs(priceDelta)} higher`
+              : "No change",
+      helper:
+        offer.price_evidence.current_price_age_days === null
+          ? "Age unavailable"
+          : `${offer.price_evidence.current_price_age_days} day(s) at current price`,
+      icon: <Clock size={15} />
+    },
+    {
+      label: "Stock signal",
+      value: inventory ? `${inventory.available_to_promise} units` : "No snapshot",
+      helper: inventory ? `${inventory.sales_velocity_24h} sales velocity signal` : "Not used for urgency",
+      icon: <PackageCheck size={15} />
+    }
+  ];
+
+  return (
+    <div className="offer-truth-card">
+      <div className="offer-truth-header">
+        <div>
+          <span className="eyebrow">Offer Sach Check</span>
+          <h4>{offer.buyer_guidance}</h4>
+        </div>
+        <span>{offer.fact_ids.length} facts</span>
+      </div>
+
+      <div className="offer-fact-grid">
+        {facts.map((fact) => (
+          <div key={fact.label}>
+            <span>{fact.icon}{fact.label}</span>
+            <strong>{fact.value}</strong>
+            <small>{fact.helper}</small>
+          </div>
+        ))}
+      </div>
+
+      {!isSimple && (
+        <div className="offer-check-list">
+          {offer.checks.map((check) => (
+            <div key={check.key} className={`offer-check-row ${check.status}`}>
+              <span>{check.label}</span>
+              <strong>{check.detail}</strong>
+            </div>
+          ))}
+          {campaign && (
+            <p>
+              Campaign window is server-recorded from {formatDate(campaign.start_at)} to {formatDate(campaign.end_at)}.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CheckoutExpectationContract({
+  contract,
+  isSimple
+}: {
+  contract: ExpectationContract;
+  isSimple: boolean;
+}) {
+  const items = contract.contract.items.slice(0, isSimple ? 3 : 5);
+  return (
+    <div className="checkout-contract-card">
+      <div className="checkout-contract-header">
+        <div>
+          <span className="eyebrow">Locked for this order</span>
+          <strong>Expectation contract active</strong>
+        </div>
+        <span>{contract.contract.fact_ids.length} facts</span>
+      </div>
+      <div className="checkout-contract-list">
+        {items.map((item) => (
+          <div key={item.dimension}>
+            <span>{labelize(item.dimension)}</span>
+            <strong>{item.claim}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="checkout-contract-privacy">
+        <ShieldCheck size={14} />
+        <span>Private memory stays buyer-only. Feedback later updates aggregate evidence after quality checks.</span>
+      </div>
+    </div>
+  );
+}
+
+function labelize(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
