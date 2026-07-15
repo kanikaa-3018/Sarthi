@@ -79,3 +79,17 @@ def test_memory_preference_update_is_visible_in_memory_center(tmp_path):
 
     assert memory
     assert all(row["preferred_fit"] == "regular" for row in memory)
+
+
+def test_memory_preference_rejects_unsupported_fit_modes(tmp_path):
+    client = _client(tmp_path)
+    client.post("/seed/reset")
+    headers = buyer_headers(client, "buyer_asha")
+
+    response = client.patch(
+        "/buyers/buyer_asha/memory",
+        json={"preferred_fit": "snug"},
+        headers=headers,
+    )
+
+    assert response.status_code == 422

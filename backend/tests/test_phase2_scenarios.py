@@ -88,6 +88,16 @@ def test_verified_deal_uses_price_and_campaign_facts(tmp_path):
 
     assert offer["status"] == "verified_price_drop"
     assert "Verified deal" in offer["message"]
+    assert offer["truth_basis"] == "price_drop"
+    assert offer["price_evidence"]["latest_price"] is not None
+    assert offer["price_evidence"]["reference_price"] is not None
+    assert offer["price_evidence"]["price_delta"] > 0
+    assert offer["campaign_evidence"]["timer_reset_count"] == 0
+    assert {check["key"] for check in offer["checks"]} == {
+        "price_history",
+        "campaign_timer",
+        "inventory_pressure",
+    }
     assert any(fact_id.startswith("fact_scenario_deal_price") for fact_id in offer["fact_ids"])
     assert "fact_campaign_kurti_2_2_xl" in offer["fact_ids"]
 
@@ -107,6 +117,10 @@ def test_no_rush_offer_keeps_dark_pattern_copy_factual(tmp_path):
 
     assert offer["status"] == "no_need_to_rush"
     assert "No need to rush" in offer["message"]
+    assert offer["truth_basis"] == "timer_reset"
+    assert offer["campaign_evidence"]["timer_reset_count"] >= 2
+    assert offer["price_evidence"]["price_event_count"] >= 3
+    assert "timer" in offer["checks"][1]["detail"].lower()
     assert "fake" not in offer["message"].lower()
     assert "manipulative" not in offer["message"].lower()
 
