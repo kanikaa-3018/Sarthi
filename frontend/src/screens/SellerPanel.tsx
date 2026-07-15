@@ -1,708 +1,981 @@
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import {
   AlertTriangle,
-  BarChart3,
   CheckCircle2,
-  ClipboardList,
-  EyeOff,
-  FileCheck2,
-  FileUp,
-  Gauge,
-  PackageCheck,
-  Plus,
+  ChevronRight,
+  TrendingUp,
   RefreshCcw,
-  Send,
-  ShieldCheck,
-  Store
+  Sparkles,
+  Info,
+  X,
+  Plus
 } from "lucide-react";
-import {
-  createListingDraft,
-  getSellerOnboarding,
-  getSellerPanel,
-  submitListingDraft,
-  submitSellerDocument
-} from "../api/client";
-import type { ListingDraft, SellerOnboardingResponse, SellerPanelListing, SellerPanelResponse } from "../types/api";
-
-type DraftForm = {
-  title: string;
-  category: string;
-  garment_type: string;
-  fabric: string;
-  color_family: string;
-  base_price: string;
-  image_url: string;
-};
+import { getSellerPanel, correctMeasurement, getSellerEvidenceCoach, submitSellerEvidenceAsset, getSellerOnboarding, submitSellerDocument, createListingDraft, submitListingDraft } from "../api/client";
+import type { SellerPanelResponse, SellerPanelListing, SellerEvidenceCoachResponse, SellerEvidenceCoachTask, SellerOnboardingResponse, SellerVerificationDocument, ListingDraft } from "../types/api";
 
 export function SellerPanel() {
-  const [selectedClusterId, setSelectedClusterId] = useState<string | undefined>();
   const [panel, setPanel] = useState<SellerPanelResponse | null>(null);
+  const [evidenceCoach, setEvidenceCoach] = useState<SellerEvidenceCoachResponse | null>(null);
   const [onboarding, setOnboarding] = useState<SellerOnboardingResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [onboardingBusy, setOnboardingBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedClusterId, setSelectedClusterId] = useState<string>("");
+
+  const [activeTab, setActiveTab] = useState<"performance" | "onboarding">("performance");
+
+  // Modals/Sheets
+  const [activeWhyListing, setActiveWhyListing] = useState<SellerPanelListing | null>(null);
+  const [activeFixListing, setActiveFixListing] = useState<SellerPanelListing | null>(null);
+
+  // Fix Form inputs
+  const [lChest, setLChest] = useState("38");
+  const [xlChest, setXlChest] = useState("40");
+  const [fixSuccess, setFixSuccess] = useState(false);
+  const [fixLoading, setFixLoading] = useState(false);
+  const [proofSubmittingId, setProofSubmittingId] = useState<string | null>(null);
+  const [activeProofTask, setActiveProofTask] = useState<SellerEvidenceCoachTask | null>(null);
+  const [proofTitle, setProofTitle] = useState("");
+  const [proofDescription, setProofDescription] = useState("");
+  const [proofAssetUrl, setProofAssetUrl] = useState("");
+
+  // Onboarding submissions
   const [docType, setDocType] = useState<"gst_certificate" | "pan_card" | "address_proof" | "bank_proof">("gst_certificate");
-  const [docReference, setDocReference] = useState("");
-  const [docFile, setDocFile] = useState<File | null>(null);
-  const [draftForm, setDraftForm] = useState<DraftForm>({
-    title: "Blue Floral Cotton Kurti New Seller Listing",
-    category: "women_kurtis",
-    garment_type: "kurti",
-    fabric: "cotton blend",
-    color_family: "blue",
-    base_price: "459",
-    image_url: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab"
-  });
+  const [docRef, setDocRef] = useState("");
+  const [docFileName, setDocFileName] = useState("");
+  const [docFileBase64, setDocFileBase64] = useState("");
+  const [docSubmitting, setDocSubmitting] = useState(false);
+  const [docSuccess, setDocSuccess] = useState<string | null>(null);
+
+  // Listing Draft inputs
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftCategory, setDraftCategory] = useState("Ethnic Wear");
+  const [draftGarmentType, setDraftGarmentType] = useState("kurti");
+  const [draftFabric, setDraftFabric] = useState("cotton");
+  const [draftColor, setDraftColor] = useState("Green");
+  const [draftPrice, setDraftPrice] = useState("499");
+  const [draftImageUrl, setDraftImageUrl] = useState("");
+  const [draftCreating, setDraftCreating] = useState(false);
+  const [draftSuccess, setDraftSuccess] = useState<string | null>(null);
+  const [draftSubmittingId, setDraftSubmittingId] = useState<string | null>(null);
 
   useEffect(() => {
-    getSellerOnboarding()
-      .then(setOnboarding)
-      .catch((err: Error) => setError(err.message));
     void loadPanel();
   }, []);
 
   async function loadPanel(clusterId?: string) {
     setLoading(true);
     setError(null);
+    setDocSuccess(null);
+    setDraftSuccess(null);
     try {
-      const payload = await getSellerPanel(clusterId);
-      setPanel(payload);
-      setSelectedClusterId(payload.cluster.cluster_id);
-    } catch (err) {
-      setPanel(null);
-      const message = err instanceof Error ? err.message : "Could not load seller evidence";
-      if (!message.includes("No listings found")) {
-        setError(message);
+      const onboardingPayload = await getSellerOnboarding();
+      setOnboarding(onboardingPayload);
+
+      // Auto toggle to onboarding if not approved yet
+      if (onboardingPayload?.seller_verification.verification_status !== "verified") {
+        setActiveTab("onboarding");
+      } else {
+        setActiveTab("performance");
       }
+
+      try {
+        const [payload, coach] = await Promise.all([
+          getSellerPanel(clusterId),
+          getSellerEvidenceCoach()
+        ]);
+        setPanel(payload);
+        setEvidenceCoach(coach);
+        setSelectedClusterId(payload.cluster.cluster_id);
+      } catch (e) {
+        console.warn("Seller performance details not available:", e);
+        setPanel(null);
+        setEvidenceCoach(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load seller panel");
     } finally {
       setLoading(false);
     }
   }
 
-  async function refreshOnboarding() {
-    setOnboardingBusy(true);
+  function openProofTask(task: SellerEvidenceCoachTask) {
+    setActiveProofTask(task);
+    setProofTitle(task.title);
+    setProofDescription(`Evidence submitted to resolve ${task.attribute} questions for ${task.product_title.split("-")[0].trim()}.`);
+    setProofAssetUrl("");
+  }
+
+  function closeProofTask() {
+    setActiveProofTask(null);
+    setProofTitle("");
+    setProofDescription("");
+    setProofAssetUrl("");
+  }
+
+  async function handleSubmitProof(event: React.FormEvent) {
+    event.preventDefault();
+    if (!activeProofTask) return;
+    const task = activeProofTask;
+    setProofSubmittingId(proofTaskId(task));
     setError(null);
     try {
-      setOnboarding(await getSellerOnboarding());
+      await submitSellerEvidenceAsset({
+        product_id: task.product_id,
+        attribute: task.attribute,
+        proof_type: task.recommended_proof_type,
+        title: proofTitle.trim(),
+        description: proofDescription.trim(),
+        asset_url: proofAssetUrl.trim()
+      });
+      closeProofTask();
+      await loadPanel(selectedClusterId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not refresh onboarding");
+      setError(err instanceof Error ? err.message : "Could not submit proof");
     } finally {
-      setOnboardingBusy(false);
+      setProofSubmittingId(null);
     }
   }
 
-  async function handleDocumentSubmit() {
-    if (!docFile) {
-      setError("Upload a PDF or image before submitting verification evidence.");
-      return;
-    }
-    setOnboardingBusy(true);
+  async function handleFixSubmit(e: React.FormEvent, productId: string) {
+    e.preventDefault();
+    setFixLoading(true);
+    setFixSuccess(false);
     setError(null);
     try {
-      const contentBase64 = await readFileAsBase64(docFile);
-      setOnboarding(await submitSellerDocument({
+      await correctMeasurement(productId, {
+        l_chest: Number(lChest),
+        xl_chest: Number(xlChest)
+      });
+      setFixSuccess(true);
+      // Reload seller evidence to reflect smoothing in rank and kept rates!
+      await loadPanel(selectedClusterId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error saving correction.");
+    } finally {
+      setFixLoading(false);
+    }
+  }
+
+  async function handleDocSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setDocSubmitting(true);
+    setError(null);
+    setDocSuccess(null);
+    try {
+      const ref = docRef.trim();
+      const name = docFileName.trim() || `${docType}.pdf`;
+      const base64 = docFileBase64 || "JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iag==";
+      await submitSellerDocument({
         document_type: docType,
-        reference: docReference,
-        file_name: docFile.name,
-        mime_type: docFile.type || "application/pdf",
-        content_base64: contentBase64
-      }));
-      setDocReference("");
-      setDocFile(null);
+        reference: ref,
+        file_name: name,
+        mime_type: name.endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+        content_base64: base64
+      });
+      setDocSuccess(`Document "${labelize(docType)}" submitted successfully.`);
+      setDocRef("");
+      setDocFileName("");
+      setDocFileBase64("");
+      await loadPanel(selectedClusterId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not submit document");
+      setError(err instanceof Error ? err.message : "Error submitting document");
     } finally {
-      setOnboardingBusy(false);
+      setDocSubmitting(false);
     }
   }
 
-  async function handleDraftCreate() {
-    setOnboardingBusy(true);
-    setError(null);
-    try {
-      setOnboarding(await createListingDraft({
-        ...draftForm,
-        base_price: Number(draftForm.base_price)
-      }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create listing draft");
-    } finally {
-      setOnboardingBusy(false);
+  function handleAutoFillDoc(type: "gst_certificate" | "pan_card" | "address_proof" | "bank_proof") {
+    setDocType(type);
+    if (type === "gst_certificate") {
+      setDocRef("GSTIN27AAAC1234A1Z1");
+      setDocFileName("gst_certificate.pdf");
+      setDocFileBase64("JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iag==");
+    } else if (type === "pan_card") {
+      setDocRef("ABCDE1234F");
+      setDocFileName("pan_card.jpg");
+      setDocFileBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+    } else if (type === "address_proof") {
+      setDocRef("UID123456789012");
+      setDocFileName("aadhaar_card.pdf");
+      setDocFileBase64("JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iag==");
+    } else if (type === "bank_proof") {
+      setDocRef("IFSCBKID0001234");
+      setDocFileName("cancelled_cheque.jpg");
+      setDocFileBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
     }
+  }
+
+  async function handleCreateDraft(e: React.FormEvent) {
+    e.preventDefault();
+    setDraftCreating(true);
+    setError(null);
+    setDraftSuccess(null);
+    try {
+      await createListingDraft({
+        title: draftTitle.trim(),
+        category: draftCategory,
+        garment_type: draftGarmentType,
+        fabric: draftFabric,
+        color_family: draftColor,
+        base_price: Number(draftPrice),
+        image_url: draftImageUrl.trim() || "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500&auto=format&fit=crop"
+      });
+      setDraftSuccess("Listing draft created successfully.");
+      setDraftTitle("");
+      setDraftPrice("499");
+      setDraftImageUrl("");
+      await loadPanel(selectedClusterId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error creating listing draft");
+    } finally {
+      setDraftCreating(false);
+    }
+  }
+
+  function handleAutoFillDraft() {
+    setDraftTitle("Premium Cotton Printed Anarkali Kurta");
+    setDraftCategory("Ethnic Wear");
+    setDraftGarmentType("kurti");
+    setDraftFabric("cotton");
+    setDraftColor("Green");
+    setDraftPrice("650");
+    setDraftImageUrl("https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500&auto=format&fit=crop");
   }
 
   async function handleDraftSubmit(draftId: string) {
-    setOnboardingBusy(true);
+    setDraftSubmittingId(draftId);
     setError(null);
+    setDraftSuccess(null);
     try {
-      setOnboarding(await submitListingDraft(draftId));
+      await submitListingDraft(draftId);
+      setDraftSuccess("Listing draft submitted to admin review queue!");
+      await loadPanel(selectedClusterId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not submit listing draft");
+      setError(err instanceof Error ? err.message : "Error submitting listing draft");
     } finally {
-      setOnboardingBusy(false);
+      setDraftSubmittingId(null);
     }
+  }
+
+  if (loading && !onboarding && !panel) {
+    return <div className="seller-loading-state">Loading seller center...</div>;
   }
 
   return (
     <main className="seller-console-shell">
-      {error && <div className="notice error">{error}</div>}
-
       <section className="seller-console-toolbar">
         <div className="seller-title-block">
           <span className="eyebrow">Seller Console</span>
-          <h2>Duplicate Listing Decision Center</h2>
+          <h2>{panel?.seller.name ?? onboarding?.seller.name ?? "Seller center"}</h2>
           <p>
-            Aggregate marketplace evidence explains why similar seller listings rank differently without exposing buyer memory.
+            Improve listing trust with aggregate return, fit, dispatch, and proof signals. Buyer personal memory is never shown here.
           </p>
         </div>
 
         <div className="seller-toolbar-controls">
-          {panel && (
-            <div className="seller-scope-chip">
-              <ShieldCheck size={14} />
-              <span>{panel.seller.name}</span>
-            </div>
+          {activeTab === "performance" && panel && (
+            <label>
+              Product cluster
+              <select
+                value={selectedClusterId}
+                onChange={(e) => {
+                  setSelectedClusterId(e.target.value);
+                  void loadPanel(e.target.value);
+                }}
+              >
+                {panel.seller.cluster_ids.map((clusterId) => (
+                  <option key={clusterId} value={clusterId}>
+                    {clusterLabel(clusterId)}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-
-          <label>
-            <span>Duplicate cluster</span>
-            <select
-              value={selectedClusterId ?? ""}
-              onChange={(event) => {
-                const nextClusterId = event.target.value;
-                setSelectedClusterId(nextClusterId);
-                void loadPanel(nextClusterId);
-              }}
-              disabled={!panel?.seller.cluster_ids.length}
-            >
-              {(panel?.seller.cluster_ids ?? []).map((clusterId) => (
-                <option key={clusterId} value={clusterId}>
-                  {clusterId}
-                </option>
-              ))}
-            </select>
-          </label>
-
+          <span className="seller-scope-chip">
+            <CheckCircle2 size={14} />
+            {labelize(onboarding?.seller_verification.verification_status ?? panel?.seller_verification.verification_status ?? "pending")}
+          </span>
           <button
+            type="button"
             className="btn-reset-db seller-refresh-btn"
             onClick={() => loadPanel(selectedClusterId)}
-            title="Refresh seller evidence"
-            disabled={loading || !selectedClusterId}
+            title="Refresh seller console"
           >
-            <RefreshCcw size={15} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} />
+            <RefreshCcw size={16} className={loading ? "spin-icon" : ""} />
           </button>
         </div>
       </section>
 
-      {onboarding && (
-        <SellerOnboardingSection
-          onboarding={onboarding}
-          busy={onboardingBusy}
-          docType={docType}
-          docReference={docReference}
-          docFile={docFile}
-          draftForm={draftForm}
-          onDocTypeChange={setDocType}
-          onDocReferenceChange={setDocReference}
-          onDocFileChange={setDocFile}
-          onDraftFormChange={setDraftForm}
-          onDocumentSubmit={handleDocumentSubmit}
-          onDraftCreate={handleDraftCreate}
-          onDraftSubmit={handleDraftSubmit}
-          onRefresh={refreshOnboarding}
-        />
-      )}
+      <div className="workspace-nav" style={{ marginBottom: "16px", alignSelf: "flex-start" }}>
+        <button
+          type="button"
+          className={activeTab === "performance" ? "active" : ""}
+          onClick={() => setActiveTab("performance")}
+          disabled={!panel}
+        >
+          Active Performance & Doubt Inbox
+        </button>
+        <button
+          type="button"
+          className={activeTab === "onboarding" ? "active" : ""}
+          onClick={() => setActiveTab("onboarding")}
+        >
+          Verification & Catalog Drafts {onboarding && onboarding.listing_drafts.length > 0 && `(${onboarding.listing_drafts.length})`}
+        </button>
+      </div>
 
-      {panel ? (
+      {error && <div className="notice error">{error}</div>}
+      {docSuccess && <div className="notice success">{docSuccess}</div>}
+      {draftSuccess && <div className="notice success">{draftSuccess}</div>}
+
+      {/* Tab 1: Active Performance & Doubt Inbox */}
+      {activeTab === "performance" && panel && (
         <>
           <section className="seller-stats-band">
-            <MetricTile
-              icon={<ShieldCheck size={18} />}
-              label="Verification"
-              value={panel.seller_verification.verification_status}
-              detail={`GST ${panel.seller_verification.gst_status}`}
-            />
-            <MetricTile
-              icon={<Store size={18} />}
-              label="Seller listings"
-              value={String(panel.seller_listings.length)}
-              detail={`${panel.cluster.listing_count} listings in cluster`}
-            />
-            <MetricTile
-              icon={<PackageCheck size={18} />}
-              label="Delivered evidence"
-              value={String(panel.cluster.stats.delivered_orders_90d)}
-              detail={`${panel.cluster.stats.returns_90d} returns tracked`}
-            />
-            <MetricTile
-              icon={<Gauge size={18} />}
-              label="Cluster return median"
-              value={formatPercent(panel.cluster.stats.median_return_rate)}
-              detail={`${panel.cluster.stats.minimum_orders_for_strong_decision}+ orders for strong evidence`}
-            />
-            <MetricTile
-              icon={<RefreshCcw size={18} />}
-              label="Data freshness"
-              value={panel.data_freshness.overall_status}
-              detail={`${panel.data_freshness.sources.length} source contracts`}
-            />
+            <div className="seller-metric-tile">
+              <span className="seller-metric-icon"><TrendingUp size={16} /></span>
+              <span>Cluster</span>
+              <strong>{panel.cluster.listing_count}</strong>
+              <small>{panel.cluster.seller_count} seller option(s)</small>
+            </div>
+            <div className="seller-metric-tile">
+              <span className="seller-metric-icon"><AlertTriangle size={16} /></span>
+              <span>Median returns</span>
+              <strong>{panel.cluster.stats.median_return_rate === null ? "N/A" : `${Math.round(panel.cluster.stats.median_return_rate * 100)}%`}</strong>
+              <small>{panel.cluster.stats.delivered_orders_90d} delivered orders</small>
+            </div>
+            <div className="seller-metric-tile">
+              <span className="seller-metric-icon"><CheckCircle2 size={16} /></span>
+              <span>Verification</span>
+              <strong>{labelize(panel.seller_verification.verification_status)}</strong>
+              <small>{labelize(panel.seller_verification.data_access_level)}</small>
+            </div>
+            <div className="seller-metric-tile">
+              <span className="seller-metric-icon"><RefreshCcw size={16} /></span>
+              <span>Source health</span>
+              <strong>{labelize(panel.data_freshness.overall_status)}</strong>
+              <small>{panel.fact_ids.length} facts connected</small>
+            </div>
+            <div className="seller-metric-tile">
+              <span className="seller-metric-icon"><Sparkles size={16} /></span>
+              <span>Buyer proof asks</span>
+              <strong>{evidenceCoach?.open_task_count ?? 0}</strong>
+              <small>{evidenceCoach?.resolved_request_count ?? 0} resolved</small>
+            </div>
           </section>
 
           <section className="seller-console-grid">
             <div className="seller-main-column">
-              <section className="seller-section">
+              <section className="seller-live-section seller-section">
                 <div className="section-heading-row">
                   <div>
-                    <span className="eyebrow">Your listings</span>
+                    <span className="eyebrow">Your live options</span>
                     <h3>{panel.cluster.label}</h3>
                   </div>
                   <span className="seller-size-pill">Size {panel.cluster.size}</span>
                 </div>
-
                 <div className="seller-listing-stack">
-                  {panel.seller_listings.map((listing) => (
-                    <SellerListingCard key={listing.variant.variant_id} listing={listing} />
-                  ))}
+                  {panel.seller_listings.map((listing) => {
+                    const isActionNeeded = listing.decision_status === "needs_seller_action";
+                    const filledSegments = listing.cluster_position
+                      ? Math.max(1, 4 - Math.min(listing.cluster_position, 3))
+                      : 0;
+                    return (
+                      <article
+                        key={listing.variant.variant_id}
+                        className={`seller-listing-card ${isActionNeeded ? "needs-action" : ""}`}
+                      >
+                        <div className="seller-listing-image">
+                          <img src={listing.product.image_url || "/product-blue.svg"} alt={listing.product.title} />
+                        </div>
+
+                        <div className="seller-listing-body">
+                          <div className="seller-listing-topline">
+                            <div>
+                              <h4>{listing.product.title.split("-")[0].trim()}</h4>
+                              <span>SKU {listing.variant.variant_id}</span>
+                            </div>
+                            <span className={`ui-badge ${isActionNeeded ? "caution" : "positive"}`}>
+                              {isActionNeeded ? "Needs action" : "Eligible"}
+                            </span>
+                          </div>
+
+                          <div className="seller-rank-line">
+                            <div className="rank-dots" aria-hidden="true">
+                              {[1, 2, 3].map((dot) => (
+                                <span key={dot} className={dot <= filledSegments ? "filled" : ""} />
+                              ))}
+                            </div>
+                            <strong>
+                              {listing.cluster_position
+                                ? `You're #${listing.cluster_position} of ${panel.cluster.listing_count} comparable listings`
+                                : "Rank pending until enough evidence"}
+                            </strong>
+                          </div>
+
+                          <div className="seller-score-row compact">
+                            <div className="seller-data-point">
+                              <span>Kept score</span>
+                              <strong>{listing.metrics.kept_rate ? `${Math.round(listing.metrics.kept_rate * 100)}%` : "N/A"}</strong>
+                            </div>
+                            <div className="seller-data-point">
+                              <span>Fit accuracy</span>
+                              <strong>{listing.metrics.fit_as_expected_rate ? `${Math.round(listing.metrics.fit_as_expected_rate * 100)}%` : "N/A"}</strong>
+                            </div>
+                            <div className="seller-data-point">
+                              <span>Dispatch</span>
+                              <strong>{listing.metrics.median_dispatch_hours}h</strong>
+                            </div>
+                          </div>
+
+                          <div className="seller-card-actions">
+                            <button className="seller-secondary-action" onClick={() => setActiveWhyListing(listing)}>
+                              Why ranked here
+                            </button>
+
+                            <button
+                              className="seller-primary-action"
+                              onClick={() => {
+                                setActiveFixListing(listing);
+                                setFixSuccess(false);
+                              }}
+                            >
+                              Fix it
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
 
               <section className="seller-section">
                 <div className="section-heading-row">
                   <div>
-                    <span className="eyebrow">Competing duplicate listings</span>
-                    <h3>How the decision differs across sellers</h3>
+                    <span className="eyebrow">Comparable listings</span>
+                    <h3>Masked cluster context</h3>
                   </div>
+                  <span className="seller-size-pill">Aggregate only</span>
                 </div>
-                <CompetitorTable listings={panel.competing_listings} />
+                <div className="seller-table-wrap">
+                  <table className="seller-table">
+                    <thead>
+                      <tr>
+                        <th>Seller listing</th>
+                        <th>Kept rate</th>
+                        <th>Top issue</th>
+                        <th>Rank</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {panel.competing_listings.map((comp, idx) => (
+                        <tr key={comp.variant.variant_id}>
+                          <td>Competitor listing #{idx + 1}</td>
+                          <td>{comp.metrics.kept_rate ? `${Math.round(comp.metrics.kept_rate * 100)}%` : "N/A"}</td>
+                          <td>{comp.top_issue ? labelize(comp.top_issue.return_reason) : "None"}</td>
+                          <td>#{idx + 2}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             </div>
 
             <aside className="seller-side-column">
-              <section className="seller-section policy-section">
-                <div className="policy-icon">
-                  <BarChart3 size={18} />
-                </div>
-                <span className="eyebrow">Decision policy</span>
-                <h3>{panel.decision_policy.name}</h3>
-                <div className="weight-list">
-                  {Object.entries(panel.decision_policy.weights).map(([key, value]) => (
-                    <div key={key} className="weight-row">
-                      <span>{labelize(key)}</span>
-                      <strong>{Math.round(value * 100)}%</strong>
+              {evidenceCoach && (
+                <section className="seller-evidence-coach">
+                  <div className="seller-section-heading">
+                    <div>
+                      <span className="eyebrow">Buyer doubt inbox</span>
+                      <h3>Evidence requests from shoppers</h3>
                     </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className="seller-section privacy-section">
-                <div className="privacy-title">
-                  <EyeOff size={18} />
-                  <h3>Privacy guard</h3>
-                </div>
-                <p>{panel.privacy_guard.summary}</p>
-                <div className="policy-list">
-                  {panel.decision_policy.inputs_not_used.map((input) => (
-                    <span key={input}>{input}</span>
-                  ))}
-                </div>
-              </section>
-
-              <section className="seller-section privacy-section">
-                <div className="privacy-title">
-                  <ShieldCheck size={18} />
-                  <h3>Seller verification</h3>
-                </div>
-                <p>
-                  Status is <strong>{panel.seller_verification.verification_status}</strong>. Data access is <strong>{panel.seller_verification.data_access_level}</strong>.
-                </p>
-                <div className="policy-list">
-                  <span>Pickup pincode: {panel.seller_verification.pickup_pincode ?? "Not available"}</span>
-                  <span>KYC: {panel.seller_verification.kyc_status}</span>
-                  <span>GST: {panel.seller_verification.gst_status}</span>
-                  {panel.seller_verification.restricted_reason && (
-                    <span>{panel.seller_verification.restricted_reason}</span>
+                    <strong>{evidenceCoach.open_task_count} open</strong>
+                  </div>
+                  {evidenceCoach.tasks.length === 0 ? (
+                    <p className="seller-empty-copy">{evidenceCoach.privacy_guard.summary}</p>
+                  ) : (
+                    <div className="seller-proof-task-list">
+                      {evidenceCoach.tasks.map((task) => {
+                        const taskId = proofTaskId(task);
+                        return (
+                          <article key={taskId} className="seller-proof-task">
+                            <div>
+                              <span>{task.priority}</span>
+                              <strong>{task.title}</strong>
+                              <p>{task.rationale}</p>
+                              <small>
+                                {task.type === "broken_expectation" ? "Expectation gap" : "Buyer proof request"} |{" "}
+                                {task.product_title.split("-")[0].trim()} | {task.recommended_proof_type.replace(/_/g, " ")}
+                              </small>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openProofTask(task)}
+                              disabled={proofSubmittingId === taskId}
+                            >
+                              {proofSubmittingId === taskId
+                                ? "Submitting"
+                                : task.type === "broken_expectation"
+                                  ? "Add fix proof"
+                                  : "Add proof"}
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
                   )}
-                </div>
-              </section>
+                </section>
+              )}
 
-              <section className="seller-section facts-section">
-                <span className="eyebrow">Audit facts</span>
-                <h3>Evidence IDs</h3>
-                <div className="fact-chip-cloud">
-                  {panel.fact_ids.slice(0, 12).map((factId) => (
-                    <span key={factId}>{factId}</span>
-                  ))}
+              <section className="seller-section">
+                <div className="seller-section-heading">
+                  <div>
+                    <span className="eyebrow">Privacy boundary</span>
+                    <h3>What sellers can see</h3>
+                  </div>
+                  <strong>{panel.privacy_guard.safe_for_seller ? "Safe" : "Check"}</strong>
                 </div>
+                <p className="seller-empty-copy">{panel.privacy_guard.summary}</p>
               </section>
             </aside>
           </section>
         </>
-      ) : (
-        <section className="seller-section seller-empty-state">
-          {loading
-            ? "Loading seller evidence..."
-            : onboarding?.seller.product_count === 0
-              ? "Seller application is saved and pending verification. Listing evidence will appear after products are onboarded."
-              : "No duplicate-listing evidence is available for this seller yet."}
+      )}
+
+      {/* Tab 2: Verification & Catalog Drafts (Onboarding) */}
+      {activeTab === "onboarding" && onboarding && (
+        <section className="seller-onboarding-workspace">
+          <div className="seller-console-grid">
+            <div className="seller-main-column">
+              {/* Document upload card */}
+              <div className="seller-section">
+                <div className="section-heading-row">
+                  <div>
+                    <span className="eyebrow">Identity verification</span>
+                    <h3>Verification Documents</h3>
+                  </div>
+                </div>
+
+                <div className="seller-doc-uploader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", margin: "16px 0" }}>
+                  <form onSubmit={handleDocSubmit} className="seller-proof-form-body" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <strong>Upload New Document</strong>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "700" }}>Document Type</span>
+                      <select value={docType} onChange={(e) => setDocType(e.target.value as any)}>
+                        <option value="gst_certificate">GST Certificate</option>
+                        <option value="pan_card">PAN Card</option>
+                        <option value="address_proof">Address Proof (Aadhaar / Utility)</option>
+                        <option value="bank_proof">Bank Proof (Cancelled Cheque)</option>
+                      </select>
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "700" }}>Reference Number</span>
+                      <input value={docRef} onChange={(e) => setDocRef(e.target.value)} placeholder="e.g. GSTIN / Document ID" required />
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "700" }}>File Name</span>
+                      <input value={docFileName} onChange={(e) => setDocFileName(e.target.value)} placeholder="e.g. gst.pdf" />
+                    </label>
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
+                      <button type="button" className="seller-secondary-action" onClick={() => handleAutoFillDoc(docType)}>
+                        Auto-fill Mock Info
+                      </button>
+                      <button type="submit" className="seller-primary-action" disabled={docSubmitting || !docRef.trim()}>
+                        {docSubmitting ? "Submitting..." : "Submit Document"}
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="submitted-docs-list">
+                    <strong>Uploaded Proof References ({onboarding.documents.length})</strong>
+                    {onboarding.documents.length === 0 ? (
+                      <p style={{ fontStyle: "italic", fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>No documents uploaded yet. Identity verification requires GST & PAN card reference.</p>
+                    ) : (
+                      <div className="admin-card-stack" style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {onboarding.documents.map((doc) => (
+                          <div key={doc.document_id} className="admin-doc-row" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "10px", padding: "10px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <strong>{labelize(doc.document_type)}</strong>
+                              <span className={`ui-badge ${doc.status === "approved" ? "positive" : doc.status === "rejected" ? "caution" : "neutral"}`}>
+                                {doc.status}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>Ref: {doc.reference}</div>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>File: {doc.file_name}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Listing Drafts section */}
+              <div className="seller-section" style={{ marginTop: "20px" }}>
+                <div className="section-heading-row">
+                  <div>
+                    <span className="eyebrow">Catalog creation</span>
+                    <h3>Listing Drafts</h3>
+                  </div>
+                </div>
+
+                <div className="seller-draft-workspace" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "20px", margin: "16px 0" }}>
+                  {/* Create Draft Form */}
+                  <form onSubmit={handleCreateDraft} className="seller-proof-form-body" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <strong>Create Catalog Listing Draft</strong>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "700" }}>Product Title</span>
+                      <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="e.g. Cotton Ethnic Kurta" required />
+                    </label>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Category</span>
+                        <input value={draftCategory} onChange={(e) => setDraftCategory(e.target.value)} required />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Garment Type</span>
+                        <input value={draftGarmentType} onChange={(e) => setDraftGarmentType(e.target.value)} required />
+                      </label>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Fabric</span>
+                        <input value={draftFabric} onChange={(e) => setDraftFabric(e.target.value)} required />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Color Family</span>
+                        <input value={draftColor} onChange={(e) => setDraftColor(e.target.value)} required />
+                      </label>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "10px" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Base Price (Rs)</span>
+                        <input type="number" value={draftPrice} onChange={(e) => setDraftPrice(e.target.value)} required />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Image URL (Optional)</span>
+                        <input value={draftImageUrl} onChange={(e) => setDraftImageUrl(e.target.value)} placeholder="https://..." />
+                      </label>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
+                      <button type="button" className="seller-secondary-action" onClick={handleAutoFillDraft}>
+                        Auto-fill Sample Draft
+                      </button>
+                      <button type="submit" className="seller-primary-action" disabled={draftCreating || !draftTitle.trim()}>
+                        {draftCreating ? "Creating..." : "Save Draft"}
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Drafts List */}
+                  <div className="seller-drafts-list">
+                    <strong>Current Drafts ({onboarding.listing_drafts.length})</strong>
+                    {onboarding.listing_drafts.length === 0 ? (
+                      <p style={{ fontStyle: "italic", fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>No drafts saved yet. Create a draft to start publishing catalog products.</p>
+                    ) : (
+                      <div className="admin-card-stack" style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {onboarding.listing_drafts.map((draft) => (
+                          <div key={draft.draft_id} className="admin-doc-row" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "10px", padding: "10px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div>
+                                <strong style={{ fontSize: "13px" }}>{draft.title}</strong>
+                                <div style={{ fontSize: "10px", color: "var(--text-secondary)" }}>ID: {draft.draft_id} | Rs {draft.base_price}</div>
+                              </div>
+                              <span className={`ui-badge ${draft.status === "approved" ? "positive" : draft.status === "submitted" ? "neutral" : "caution"}`}>
+                                {draft.status}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
+                              Readiness: <strong>{labelize(draft.readiness_status)}</strong>
+                            </div>
+                            {draft.status === "draft" && (
+                              <button
+                                type="button"
+                                style={{ marginTop: "8px", padding: "5px 10px", fontSize: "11px", borderRadius: "6px", width: "100%" }}
+                                className="seller-primary-action"
+                                onClick={() => void handleDraftSubmit(draft.draft_id)}
+                                disabled={draftSubmittingId === draft.draft_id}
+                              >
+                                {draftSubmittingId === draft.draft_id ? "Submitting..." : "Submit to Admin"}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside className="seller-side-column">
+              <div className="seller-section">
+                <span className="eyebrow">Onboarding Steps</span>
+                <h3>Next Actions</h3>
+                <div className="policy-list" style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {onboarding.next_actions.map((act, idx) => (
+                    <div key={idx} style={{ padding: "10px", background: "var(--bg-canvas)", borderLeft: `3px solid var(--${act.priority === "high" ? "error" : act.priority === "medium" ? "warning" : "success"})`, borderRadius: "4px" }}>
+                      <strong style={{ fontSize: "12px", display: "block" }}>{act.title}</strong>
+                      <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{act.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="seller-section" style={{ marginTop: "16px" }}>
+                <span className="eyebrow">Trust Constraints</span>
+                <h3>Verification Policy</h3>
+                <ul className="policy-list" style={{ paddingLeft: "16px", marginTop: "8px", fontSize: "12px", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {onboarding.policy.buyer_feed_blocked_until.map((item, i) => (
+                    <li key={i}>{labelize(item)}</li>
+                  ))}
+                </ul>
+              </div>
+            </aside>
+          </div>
         </section>
+      )}
+
+      {/* Screen 2: Why Ranked Here Bottom Sheet */}
+      {activeWhyListing && (
+        <div className="bottom-sheet-overlay" onClick={() => setActiveWhyListing(null)}>
+          <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
+            <div className="bottom-sheet-header">
+              <div>
+                <span className="eyebrow sheet-eyebrow-primary">Why You're Ranked Here</span>
+                <h3 className="sheet-title">Factual Indicators</h3>
+              </div>
+              <button className="bottom-sheet-close" onClick={() => setActiveWhyListing(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="seller-why-body">
+              <p>
+                This is a second view into Sarthi's ranking graph. These factors reflect comparable listing performance.
+              </p>
+
+              <div className="seller-why-metrics">
+                <div className="kv-row">
+                  <span>Size accuracy</span>
+                  <strong>
+                    {Math.round((activeWhyListing.metrics.fit_as_expected_rate ?? 1.0) * 100)}%
+                  </strong>
+                </div>
+
+                <div className="kv-row">
+                  <span>Color match</span>
+                  <strong>
+                    {activeWhyListing.metrics.delivered_orders_90d
+                      ? Math.round((1 - activeWhyListing.metrics.color_mismatch_returns / activeWhyListing.metrics.delivered_orders_90d) * 100)
+                      : 100}%
+                  </strong>
+                </div>
+
+                <div className="kv-row">
+                  <span>Dispatch median</span>
+                  <strong>
+                    {activeWhyListing.metrics.median_dispatch_hours} hours
+                  </strong>
+                </div>
+              </div>
+
+              {/* Bullet factors list */}
+              <div className="seller-why-reasons">
+                <strong>Deciding factors analyzed</strong>
+                {activeWhyListing.action_items.map((action, idx) => (
+                  <div key={idx} className="reason-row">
+                    <Info size={15} />
+                    <span>{action.rationale}</span>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={() => setActiveWhyListing(null)} className="seller-primary-action">
+                Close details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Screen 3: Fix It Bottom Sheet */}
+      {activeFixListing && (
+        <div className="bottom-sheet-overlay" onClick={() => setActiveFixListing(null)}>
+          <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
+            <div className="bottom-sheet-header">
+              <div>
+                <span className="eyebrow sheet-eyebrow-danger">Fix Listing Metrics</span>
+                <h3 className="sheet-title">Update Size Chest Specs</h3>
+              </div>
+              <button className="bottom-sheet-close" onClick={() => setActiveFixListing(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="seller-fix-body">
+              <div className="seller-fix-warning">
+                <strong>
+                  Size-related returns are elevated for {activeFixListing.product.title.split("-")[0].trim()}.
+                </strong>
+                <span>
+                  Recommended action: correct chest measurement specifications for sizes L and XL.
+                </span>
+              </div>
+
+              {fixSuccess ? (
+                <div className="seller-fix-success">
+                  <div>
+                    <CheckCircle2 size={36} />
+                  </div>
+                  <strong>Measurements corrected!</strong>
+                  <p>
+                    Sarthi saved this as a pending correction. Buyer trust will improve only after future kept outcomes validate the change.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFixListing(null)}
+                    className="seller-primary-action"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={(e) => handleFixSubmit(e, activeFixListing.product.product_id)} className="seller-fix-form">
+                  <div className="seller-fix-grid">
+                    <label>
+                      <span>Size L Chest (inches)</span>
+                      <div className="measurement-input-wrapper">
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={lChest}
+                          onChange={(e) => setLChest(e.target.value)}
+                          required
+                        />
+                        <strong>in</strong>
+                      </div>
+                    </label>
+
+                    <label>
+                      <span>Size XL Chest (inches)</span>
+                      <div className="measurement-input-wrapper">
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={xlChest}
+                          onChange={(e) => setXlChest(e.target.value)}
+                          required
+                        />
+                        <strong>in</strong>
+                      </div>
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={fixLoading || !(Number(lChest) > 0 && Number(xlChest) > Number(lChest))}
+                    className="seller-primary-action"
+                  >
+                    {fixLoading ? "Updating..." : "Update measurement"}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeProofTask && (
+        <div className="bottom-sheet-overlay" onClick={closeProofTask}>
+          <div className="bottom-sheet-content" onClick={(event) => event.stopPropagation()}>
+            <div className="bottom-sheet-header">
+              <div>
+                <span className="eyebrow sheet-eyebrow-primary">Seller Proof</span>
+                <h3 className="sheet-title">Attach Evidence Reference</h3>
+              </div>
+              <button className="bottom-sheet-close" onClick={closeProofTask}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form className="seller-proof-form-body" onSubmit={handleSubmitProof}>
+              <div className="seller-proof-context">
+                <strong>{activeProofTask.title}</strong>
+                <span>
+                  {activeProofTask.product_title.split("-")[0].trim()} needs {activeProofTask.recommended_proof_type.replace(/_/g, " ")} for {activeProofTask.attribute}.
+                </span>
+              </div>
+
+              <label>
+                <span>Proof title</span>
+                <input
+                  value={proofTitle}
+                  onChange={(event) => setProofTitle(event.target.value)}
+                  required
+                />
+              </label>
+
+              <label>
+                <span>Proof URL or storage reference</span>
+                <input
+                  type="url"
+                  value={proofAssetUrl}
+                  onChange={(event) => setProofAssetUrl(event.target.value)}
+                  placeholder="https://.../daylight-photo.jpg"
+                  required
+                />
+              </label>
+
+              <label>
+                <span>What this proof shows</span>
+                <textarea
+                  value={proofDescription}
+                  onChange={(event) => setProofDescription(event.target.value)}
+                  required
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="seller-primary-action"
+                disabled={
+                  proofSubmittingId === proofTaskId(activeProofTask) ||
+                  !proofTitle.trim() ||
+                  !proofDescription.trim() ||
+                  !proofAssetUrl.trim()
+                }
+              >
+                <Plus size={14} />
+                {proofSubmittingId ? "Submitting proof" : "Submit proof reference"}
+              </button>
+            </form>
+          </div>
+        </div>
       )}
     </main>
   );
-}
-
-function MetricTile({
-  icon,
-  label,
-  value,
-  detail
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="seller-metric-tile">
-      <div className="seller-metric-icon">{icon}</div>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
-  );
-}
-
-function SellerOnboardingSection({
-  onboarding,
-  busy,
-  docType,
-  docReference,
-  docFile,
-  draftForm,
-  onDocTypeChange,
-  onDocReferenceChange,
-  onDocFileChange,
-  onDraftFormChange,
-  onDocumentSubmit,
-  onDraftCreate,
-  onDraftSubmit,
-  onRefresh
-}: {
-  onboarding: SellerOnboardingResponse;
-  busy: boolean;
-  docType: "gst_certificate" | "pan_card" | "address_proof" | "bank_proof";
-  docReference: string;
-  docFile: File | null;
-  draftForm: DraftForm;
-  onDocTypeChange: (value: "gst_certificate" | "pan_card" | "address_proof" | "bank_proof") => void;
-  onDocReferenceChange: (value: string) => void;
-  onDocFileChange: (value: File | null) => void;
-  onDraftFormChange: (value: DraftForm) => void;
-  onDocumentSubmit: () => void;
-  onDraftCreate: () => void;
-  onDraftSubmit: (draftId: string) => void;
-  onRefresh: () => void;
-}) {
-  return (
-    <section className="seller-onboarding-grid">
-      <div className="seller-section onboarding-status-card">
-        <div className="section-heading-row">
-          <div>
-            <span className="eyebrow">Seller onboarding</span>
-            <h3>{onboarding.seller.name}</h3>
-          </div>
-          <button className="btn-reset-db" onClick={onRefresh} disabled={busy} title="Refresh onboarding">
-            <RefreshCcw size={14} style={{ animation: busy ? "spin 1s linear infinite" : "none" }} />
-          </button>
-        </div>
-        <div className="onboarding-state-row">
-          <StatusPill label="Verification" value={onboarding.seller_verification.verification_status} />
-          <StatusPill label="Application" value={onboarding.application?.status ?? "missing"} />
-          <StatusPill label="Data access" value={onboarding.seller_verification.data_access_level} />
-        </div>
-        <div className="onboarding-action-list">
-          {onboarding.next_actions.map((action) => (
-            <div key={action.title} className={`onboarding-action ${action.priority}`}>
-              <strong>{action.title}</strong>
-              <span>{action.detail}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="seller-section onboarding-form-card">
-        <div className="privacy-title">
-          <FileUp size={18} />
-          <h3>Verification documents</h3>
-        </div>
-        <div className="onboarding-form-row">
-          <select value={docType} onChange={(event) => onDocTypeChange(event.target.value as typeof docType)}>
-            <option value="gst_certificate">GST certificate</option>
-            <option value="pan_card">PAN card</option>
-            <option value="address_proof">Address proof</option>
-            <option value="bank_proof">Bank proof</option>
-          </select>
-          <input
-            value={docReference}
-            onChange={(event) => onDocReferenceChange(event.target.value)}
-            placeholder="Document ID / last 4 digits"
-          />
-          <label className="document-file-picker">
-            <FileUp size={14} />
-            <span>{docFile ? docFile.name : "Upload PDF/image"}</span>
-            <input
-              type="file"
-              accept="application/pdf,image/jpeg,image/png,image/webp"
-              onChange={(event) => onDocFileChange(event.target.files?.[0] ?? null)}
-            />
-          </label>
-          <button onClick={onDocumentSubmit} disabled={busy || docReference.trim().length < 6 || !docFile}>
-            <FileCheck2 size={14} />
-            Submit
-          </button>
-        </div>
-        <div className="onboarding-upload-hint">
-          Files are stored as local evidence with SHA-256 hashes for reviewer verification.
-        </div>
-        <div className="document-list">
-          {onboarding.documents.map((document) => (
-            <div key={document.document_id} className="document-row">
-              <strong>{labelize(document.document_type)}</strong>
-              <span>{document.status}</span>
-              <small>{document.reference}</small>
-              {document.sha256 ? (
-                <small>{document.file_name} · {formatBytes(document.file_size_bytes)} · hash {document.sha256.slice(0, 10)}</small>
-              ) : (
-                <small>File evidence missing</small>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="seller-section listing-draft-card">
-        <div className="privacy-title">
-          <ClipboardList size={18} />
-          <h3>Listing draft</h3>
-        </div>
-        <div className="listing-draft-form">
-          <input value={draftForm.title} onChange={(event) => onDraftFormChange({ ...draftForm, title: event.target.value })} placeholder="Listing title" />
-          <div className="draft-form-split">
-            <input value={draftForm.category} onChange={(event) => onDraftFormChange({ ...draftForm, category: event.target.value })} placeholder="Category" />
-            <input value={draftForm.garment_type} onChange={(event) => onDraftFormChange({ ...draftForm, garment_type: event.target.value })} placeholder="Garment type" />
-          </div>
-          <div className="draft-form-split">
-            <input value={draftForm.fabric} onChange={(event) => onDraftFormChange({ ...draftForm, fabric: event.target.value })} placeholder="Fabric" />
-            <input value={draftForm.color_family} onChange={(event) => onDraftFormChange({ ...draftForm, color_family: event.target.value })} placeholder="Color" />
-          </div>
-          <div className="draft-form-split">
-            <input value={draftForm.base_price} onChange={(event) => onDraftFormChange({ ...draftForm, base_price: event.target.value })} placeholder="Price" inputMode="numeric" />
-            <input value={draftForm.image_url} onChange={(event) => onDraftFormChange({ ...draftForm, image_url: event.target.value })} placeholder="HTTPS image URL" />
-          </div>
-          <button className="seller-primary-action" onClick={onDraftCreate} disabled={busy || !draftForm.title.trim()}>
-            <Plus size={14} />
-            Create review draft
-          </button>
-        </div>
-      </div>
-
-      <div className="seller-section listing-drafts-list">
-        <div className="privacy-title">
-          <Store size={18} />
-          <h3>Draft review queue</h3>
-        </div>
-        {onboarding.listing_drafts.length ? (
-          onboarding.listing_drafts.map((draft) => (
-            <ListingDraftRow key={draft.draft_id} draft={draft} busy={busy} onSubmit={onDraftSubmit} />
-          ))
-        ) : (
-          <div className="seller-empty-state">No listing drafts yet.</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function StatusPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="onboarding-pill">
-      <span>{label}</span>
-      <strong>{labelize(value)}</strong>
-    </div>
-  );
-}
-
-function ListingDraftRow({
-  draft,
-  busy,
-  onSubmit
-}: {
-  draft: ListingDraft;
-  busy: boolean;
-  onSubmit: (draftId: string) => void;
-}) {
-  return (
-    <div className="listing-draft-row">
-      <div>
-        <strong>{draft.title}</strong>
-        <span>{draft.target_cluster_id ? `Mapped to ${draft.target_cluster_id}` : "No duplicate cluster mapped"}</span>
-        <small>{labelize(draft.readiness_status)}</small>
-      </div>
-      <div className="draft-row-actions">
-        <span>{draft.status}</span>
-        <button onClick={() => onSubmit(draft.draft_id)} disabled={busy || draft.status !== "draft"}>
-          <Send size={13} />
-          Submit
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SellerListingCard({ listing }: { listing: SellerPanelListing }) {
-  const status = statusCopy(listing.decision_status);
-  return (
-    <article className="seller-listing-card">
-      <div className="seller-listing-image">
-        <img
-          src={listing.product.image_url || productImage(listing.product.color_family)}
-          alt={listing.product.title}
-          onError={(event) => {
-            event.currentTarget.src = productImage(listing.product.color_family);
-          }}
-        />
-      </div>
-
-      <div className="seller-listing-body">
-        <div className="seller-listing-topline">
-          <div>
-            <span className="eyebrow">{listing.product.seller_name}</span>
-            <h4>{listing.product.title}</h4>
-          </div>
-          <div className={`status-badge ${status.className}`}>
-            {status.icon}
-            <span>{status.label}</span>
-          </div>
-        </div>
-
-        <div className="seller-score-row">
-          <div className="seller-score-box">
-            <span>Quality score</span>
-            <strong>{listing.quality_score ?? "Insufficient"}</strong>
-          </div>
-          <DataPoint label="Cluster rank" value={listing.cluster_position ? `#${listing.cluster_position}` : "Pending"} />
-          <DataPoint label="Kept rate" value={formatPercent(listing.metrics.kept_rate)} />
-          <DataPoint label="Evidence" value={listing.metrics.evidence_strength} />
-        </div>
-
-        <div className="seller-action-stack">
-          {listing.action_items.map((action) => (
-            <div key={`${listing.variant.variant_id}-${action.title}`} className={`seller-action-item ${action.priority}`}>
-              <div>
-                <strong>{action.title}</strong>
-                <p>{action.rationale}</p>
-              </div>
-              <span>{action.metric}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function CompetitorTable({ listings }: { listings: SellerPanelListing[] }) {
-  return (
-    <div className="seller-table-wrap">
-      <table className="seller-table">
-        <thead>
-          <tr>
-            <th>Seller</th>
-            <th>Score</th>
-            <th>Kept rate</th>
-            <th>Top issue</th>
-            <th>Decision</th>
-          </tr>
-        </thead>
-        <tbody>
-          {listings.map((listing) => (
-            <tr key={listing.variant.variant_id}>
-              <td>
-                <strong>{listing.seller.name}</strong>
-                <span>{listing.product.product_id}</span>
-              </td>
-              <td>{listing.quality_score ?? "Insufficient"}</td>
-              <td>{formatPercent(listing.metrics.kept_rate)}</td>
-              <td>{listing.top_issue ? labelize(listing.top_issue.return_reason) : "No dominant issue"}</td>
-              <td>{labelize(listing.decision_status)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function DataPoint({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="seller-data-point">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function statusCopy(status: SellerPanelListing["decision_status"]) {
-  if (status === "eligible_for_recommendation") {
-    return {
-      label: "Recommendation eligible",
-      className: "eligible",
-      icon: <CheckCircle2 size={14} />
-    };
-  }
-  if (status === "needs_seller_action") {
-    return {
-      label: "Needs action",
-      className: "attention",
-      icon: <AlertTriangle size={14} />
-    };
-  }
-  return {
-    label: "Insufficient evidence",
-    className: "pending",
-    icon: <AlertTriangle size={14} />
-  };
-}
-
-function formatPercent(value: number | null) {
-  if (value === null || Number.isNaN(value)) return "Unknown";
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatBytes(value: number) {
-  if (!value) return "0 B";
-  if (value < 1024) return `${value} B`;
-  return `${Math.round(value / 1024)} KB`;
-}
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result ?? "");
-      resolve(result.includes(",") ? result.split(",", 2)[1] : result);
-    };
-    reader.onerror = () => reject(new Error("Could not read selected file"));
-    reader.readAsDataURL(file);
-  });
 }
 
 function labelize(value: string) {
   return value.replace(/_/g, " ");
 }
 
-function productImage(color: string) {
-  if (color === "pink") return "/product-pink.svg";
-  if (color === "maroon") return "/product-maroon.svg";
-  return "/product-blue.svg";
+function proofTaskId(task: SellerEvidenceCoachTask) {
+  return `${task.type}:${task.product_id}:${task.attribute}`;
+}
+
+function clusterLabel(clusterId: string) {
+  if (clusterId === "cluster_floral_blue") return "Blue floral daily kurtis";
+  if (clusterId === "cluster_pink_printed") return "Pink printed straight kurtis";
+  return labelize(clusterId);
 }
