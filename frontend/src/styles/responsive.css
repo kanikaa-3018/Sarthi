@@ -1,6 +1,64 @@
 ﻿/* -------------------------------------------------------------
    RESPONSIVENESS (MOBILE-FIRST COMPATIBILITY)
 ------------------------------------------------------------- */
+/* Auth entry is rendered inside the global app shell; keep it viewport-bound. */
+.mobile-auth-container.auth-entry-shell {
+  max-width: 100vw !important;
+  overflow-x: hidden !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  width: 100vw !important;
+}
+
+.mobile-auth-card.auth-entry-card {
+  max-width: 520px !important;
+  overflow: hidden !important;
+  width: calc(100vw - 64px) !important;
+}
+
+.auth-entry-card .auth-portal-summary,
+.auth-entry-card .auth-tab-group,
+.auth-entry-card .auth-form-step,
+.auth-entry-card .auth-security-note,
+.auth-entry-card .demo-credential-box,
+.auth-entry-card .auth-input-group,
+.auth-entry-card .auth-primary-btn {
+  box-sizing: border-box !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.auth-entry-card .demo-credential-box {
+  align-items: stretch !important;
+  flex-direction: column !important;
+}
+
+.auth-entry-card .demo-credential-box button {
+  width: 100% !important;
+}
+
+.auth-entry-card .auth-portal-lock,
+.auth-entry-card .auth-security-note {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+}
+
+.auth-entry-card .auth-portal-lock span,
+.auth-entry-card .auth-security-note span {
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+}
+
+.auth-portal-lock,
+.auth-security-note,
+.demo-credential-box,
+.auth-tab-group,
+.auth-form-step {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
 @media (max-width: 1024px) {
   .auth-shell {
     grid-template-columns: 1fr;
@@ -13,6 +71,9 @@
     grid-template-columns: 1fr;
   }
   .market-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kg-loading-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .sarthi-confidence-rail,
@@ -82,12 +143,129 @@
   .sarthi-confidence-rail {
     padding: 16px;
   }
+  .buyer-shop-hero {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  .shop-trust-row {
+    display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .shop-search-card {
+    padding: 10px;
+  }
+  .quick-search-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .sarthi-nudge-strip {
+    align-items: flex-start;
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .sarthi-nudge-strip > span:last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .shop-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .buyer-shop-shell .web-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .market-offer-strip {
     align-items: flex-start;
     flex-direction: column;
   }
   .market-product-grid {
     gap: 10px;
+  }
+  .lens-action-row,
+  .lens-primary-action,
+  .lens-secondary-action {
+    width: 100%;
+  }
+  .lens-selected-strip {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+  .lens-selected-strip img {
+    height: 46px;
+    width: 46px;
+  }
+  .compare-candidate-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+  .kg-card-header,
+  .kg-answer-top {
+    flex-direction: column;
+  }
+  .kg-chat-input {
+    grid-template-columns: 1fr;
+  }
+  .decision-question-input {
+    grid-template-columns: 1fr;
+  }
+  .expectation-preview-header,
+  .checkout-contract-header {
+    flex-direction: column;
+  }
+  .offer-truth-header {
+    flex-direction: column;
+  }
+  .expectation-preview-grid {
+    grid-template-columns: 1fr;
+  }
+  .offer-fact-grid {
+    grid-template-columns: 1fr;
+  }
+  .offer-check-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+  .product-detail-header {
+    margin-bottom: 14px;
+  }
+  .sku-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+  .detail-image-frame {
+    aspect-ratio: 3 / 4;
+  }
+  .cod-action-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .cod-action-card .btn-sticky-buy {
+    width: 100%;
+  }
+  .kg-chat-input button,
+  .decision-question-input button,
+  .kg-answer-top button,
+  .kg-live-pill {
+    width: 100%;
+  }
+  .kg-graph-shell svg {
+    min-height: 150px;
+  }
+  .decision-graph-sheet .kg-graph-shell svg {
+    min-height: 190px;
+  }
+  .compare-score-cell {
+    grid-column: 2;
+    text-align: left;
+  }
+  .compare-score-cell i {
+    align-self: flex-start;
+  }
+  .seller-proof-task {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+  .seller-proof-task button {
+    width: 100%;
   }
   .market-product-body {
     padding: 9px;
@@ -215,6 +393,25 @@
   }
   .market-product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .buyer-product-image {
+    aspect-ratio: 4 / 5;
+    height: auto;
+  }
+  .buyer-product-body {
+    padding: 9px;
+  }
+  .buyer-product-title {
+    font-size: 12px;
+    min-height: 32px;
+  }
+  .buyer-save-btn {
+    font-size: 10.5px;
+    min-height: 32px;
+    padding: 7px 6px;
+  }
+  .shop-search-input {
+    min-height: 48px;
   }
   .market-rating-row,
   .market-price-row {
