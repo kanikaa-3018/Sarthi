@@ -18,7 +18,10 @@ export const env = {
   mongoDbName: process.env.MONGODB_DB ?? "sarthi",
   authSecret: process.env.AUTH_SECRET ?? "dev-only-change-me",
   seedOnStart: process.env.SEED_ON_START === "true",
-  demoControlsEnabled: process.env.DEMO_CONTROLS_ENABLED !== "false"
+  demoControlsEnabled: process.env.DEMO_CONTROLS_ENABLED !== "false",
+  llmProvider: process.env.LLM_PROVIDER ?? (process.env.GEMINI_API_KEY ? "gemini" : "disabled"),
+  llmModel: process.env.LLM_MODEL ?? "gemini-3.5-flash",
+  geminiApiKey: process.env.GEMINI_API_KEY ?? ""
 };
 
 export function isProduction() {

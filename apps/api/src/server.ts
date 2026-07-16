@@ -5,6 +5,7 @@ import { env, isProduction } from "./config/env.js";
 import { closeMongo, collections, connectMongo } from "./db/mongo.js";
 import { resetMongoSeed } from "./data/seed.js";
 import { accountForRequest, assertBuyer, publicAccount, requireAccount, requireRole } from "./middleware/auth.js";
+import { generateGroundedAgentAnswer } from "./services/agent.js";
 import { hashPassword, id, makeToken, sha256, tokenHash, verifyPassword } from "./services/crypto.js";
 import {
   avoidableIssue,
@@ -428,18 +429,64 @@ app.post("/knowledge-graph/chat", async (request, reply) => {
   }
   const graph = await clusterKnowledgeGraph(body.buyer_id, body.cluster_id);
   const factIds = graph.fact_ids.slice(0, 8);
+  const grounded = await generateGroundedAgentAnswer({
+    task: "graph_chat",
+    query: body.query ?? "",
+    context: {
+      cluster: graph.cluster,
+      selected_product_id: graph.selected_product_id,
+      ranking: graph.ranking ? {
+        winner: graph.ranking.winner,
+        alternative: graph.ranking.alternative,
+        top_factors: graph.ranking.top_factors,
+        candidates: graph.ranking.candidates.slice(0, 4).map((candidate: any) => ({
+          variant_id: candidate.variant_id,
+          product_id: candidate.product_id,
+          seller_id: candidate.seller_id,
+          score: candidate.score,
+          factors: candidate.factors
+        }))
+      } : null,
+      seller_context: graph.seller_context.slice(0, 4).map((context: any) => ({
+        product: {
+          product_id: context.product.product_id,
+          title: context.product.title,
+          seller_name: context.product.seller_name,
+          price: context.product.base_price,
+          rating: context.product.rating,
+          fabric: context.product.fabric
+        },
+        seller_verification: context.seller.verification.verification_status,
+        sku_evidence: {
+          delivered_orders_90d: context.evidence.delivered_orders_90d,
+          return_rate: context.evidence.return_rate,
+          evidence_strength: context.evidence.evidence_strength,
+          median_dispatch_hours: context.evidence.median_dispatch_hours
+        },
+        candidate_score: context.candidate?.score ?? null
+      })),
+      fact_ids: factIds
+    },
+    fallback: {
+      title: "Sarthi graph answer",
+      summary: "Sarthi checked seller trust, SKU outcomes, review credibility, and proof coverage before answering.",
+      reasons: ["The graph separates seller reliability from product quality.", "Return outcomes can downweight generic positive reviews.", "Missing proof becomes a seller action item."],
+      caution: null
+    }
+  });
   const answer = {
     query: body.query,
-    title: "Sarthi graph answer",
-    summary: "Sarthi checked seller trust, SKU outcomes, review credibility, and proof coverage before answering.",
-    reasons: ["The graph separates seller reliability from product quality.", "Return outcomes can downweight generic positive reviews.", "Missing proof becomes a seller action item."],
+    title: grounded.title,
+    summary: grounded.summary,
+    reasons: grounded.reasons,
+    caution: grounded.caution,
     matched_node_ids: graph.nodes.slice(0, 4).map((node: any) => node.id),
     highlighted_edge_ids: graph.edges.slice(0, 4).map((edge: any) => edge.id),
     fact_ids: factIds,
     follow_up_questions: graph.chat_suggestions
   };
   const trace = await createTrace(db, { buyer_id: body.buyer_id, intent: ["knowledge_graph_chat"], tools_used: ["clusterKnowledgeGraph", "answerGraphQuestion"], fact_ids: factIds, graph_paths: [graphPath(graph.ranking?.winner ?? "", factIds)] });
-  const response = { trace_id: trace.trace_id, answer, graph_path: graphPath(graph.ranking?.winner ?? "", factIds), cache: { hit: false, cache_key: cacheKey } };
+  const response = { trace_id: trace.trace_id, answer, graph_path: graphPath(graph.ranking?.winner ?? "", factIds), agent: { provider: grounded.source }, cache: { hit: false, cache_key: cacheKey } };
   await writeLlmCache(cacheKey, "knowledge_graph_chat", response);
   return response;
 });
@@ -485,18 +532,63 @@ app.post("/agent/query", async (request, reply) => {
     return { ...cached, trace_id: trace.trace_id, cache: { hit: true, cache_key: cacheKey } };
   }
   const product = body.selected_variant_id ? await productForVariant(db, body.selected_variant_id) : body.cluster_id ? publicProduct(await collections(db).products.findOne({ cluster_id: body.cluster_id })) : null;
-  const fact_ids: string[] = [];
-  const trace = await createTrace(db, { buyer_id: body.buyer_id, product_id: product?.product_id, variant_id: body.selected_variant_id, intent: ["samvaad"], tools_used: ["intentDetection", "groundedAnswer"], fact_ids });
+  const passport = product && body.selected_variant_id
+    ? await skuPassport(db, body.buyer_id, product.product_id, body.selected_variant_id)
+    : null;
+  const fact_ids: string[] = passport?.fact_ids?.slice(0, 12) ?? [];
+  const grounded = await generateGroundedAgentAnswer({
+    task: "product_advice",
+    query: body.query ?? "",
+    context: {
+      product: product ? {
+        product_id: product.product_id,
+        title: product.title,
+        seller_name: product.seller_name,
+        category: product.category,
+        fabric: product.fabric,
+        price: product.base_price,
+        rating: product.rating
+      } : null,
+      passport: passport ? {
+        truth_summary: passport.truth_summary,
+        selected_size: passport.variant.size,
+        fit: passport.fit,
+        outcome_evidence: passport.outcome_evidence,
+        avoidable_issue: passport.avoidable_issue,
+        offer_truth: {
+          status: passport.offer_truth.status,
+          message: passport.offer_truth.message,
+          truth_basis: passport.offer_truth.truth_basis
+        },
+        evidence_gaps: passport.evidence_gaps.map((gap: any) => ({
+          attribute: gap.attribute,
+          severity: gap.severity,
+          summary: gap.summary,
+          recommended_proof_type: gap.recommended_proof_type
+        })),
+        conflicts: passport.conflicts
+      } : null,
+      fact_ids
+    },
+    fallback: {
+      title: "Sarthi answer",
+      summary: "Sarthi checked seller, SKU, review, return, proof, and offer evidence. If proof is missing, it asks the seller instead of guessing.",
+      reasons: ["Answers are grounded in MongoDB evidence documents.", "Seller proof gaps become aggregate seller tasks."],
+      caution: passport?.evidence_gaps?.length ? "Some proof is still missing, so the recommendation should stay cautious." : null
+    }
+  });
+  const trace = await createTrace(db, { buyer_id: body.buyer_id, product_id: product?.product_id, variant_id: body.selected_variant_id, intent: ["samvaad"], tools_used: ["intentDetection", "groundedAnswer", grounded.source], fact_ids });
   const response = {
     trace_id: trace.trace_id,
     intent: [inferAttribute(body.query), "trust_question"],
     answer: {
-      title: "Sarthi answer",
-      summary: "Sarthi will answer from seller, SKU, review, return, proof, and offer evidence. If proof is missing, it will ask the seller instead of guessing.",
-      reasons: ["Answers are grounded in MongoDB evidence documents.", "Seller proof gaps become aggregate seller tasks."],
-      caution: null,
+      title: grounded.title,
+      summary: grounded.summary,
+      reasons: grounded.reasons,
+      caution: grounded.caution,
       primary_action: body.selected_variant_id ? { type: "open_variant", variant_id: body.selected_variant_id, label: "Inspect SKU proof" } : null
     },
+    agent: { provider: grounded.source },
     fact_ids
   };
   await writeLlmCache(cacheKey, "agent_query", response);
@@ -747,7 +839,11 @@ async function adminQueue() {
 }
 
 function llmCacheKey(scope: string, payload: Record<string, unknown>) {
-  return `${scope}:${sha256(JSON.stringify(stableCachePayload(payload)))}`;
+  return `${scope}:${sha256(JSON.stringify(stableCachePayload({
+    provider: env.llmProvider,
+    model: env.llmModel,
+    ...payload
+  })))}`;
 }
 
 function stableCachePayload(value: unknown): unknown {

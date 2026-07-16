@@ -322,11 +322,17 @@ async function trustWeightConfig(db: Db, category?: string): Promise<TrustWeight
   });
   return {
     source: doc ? "mongodb_feature_weights" : "default_runtime_weights",
-    version: doc?.version ?? "default_v1",
+    version: publicTrustPolicyVersion(doc?.version, doc?.category ?? category),
     category: doc?.category ?? category ?? "default",
     weights: mapped,
     raw_weights: rawWeights
   };
+}
+
+function publicTrustPolicyVersion(version: unknown, category?: string) {
+  const value = typeof version === "string" ? version : "";
+  if (value.includes("apparel") || category === "women_kurtis") return "Sarthi Apparel Trust Policy v1";
+  return "Sarthi Trust Policy v1";
 }
 
 function numericWeight(value: unknown) {

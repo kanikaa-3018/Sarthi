@@ -365,7 +365,7 @@ export function buildSeedDocuments() {
         dispatch: 8,
         price_value: 6
       },
-      version: "2026-07-mentor-r2"
+      version: "sarthi_trust_policy_v1"
     }, {
       category: "women_kurtis",
       active: 1,
@@ -382,7 +382,7 @@ export function buildSeedDocuments() {
         dispatch: 6,
         price_value: 4
       },
-      version: "2026-07-mentor-r2"
+      version: "sarthi_apparel_fit_policy_v1"
     }]
   };
 }

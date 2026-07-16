@@ -158,7 +158,7 @@ export function CompareSheet({
           {ranking.weighting && (
             <div className="compare-weight-note">
               <span>Weight policy</span>
-              <strong>{ranking.weighting.version}</strong>
+              <strong>{formatPolicyLabel(ranking.weighting.version)}</strong>
             </div>
           )}
           <div className="compare-candidate-list">
@@ -260,4 +260,9 @@ function factorRowsForCandidate(candidate: CandidateScore) {
     ...row,
     value: Math.round((candidate.factors[row.key] ?? 0) * 100)
   }));
+}
+
+function formatPolicyLabel(version: string) {
+  if (version.toLowerCase().includes("apparel")) return "Sarthi Apparel Trust Policy v1";
+  return "Sarthi Trust Policy v1";
 }

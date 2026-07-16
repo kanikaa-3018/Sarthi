@@ -205,6 +205,7 @@ export type KnowledgeGraphAnswer = {
   title: string;
   summary: string;
   reasons: string[];
+  caution?: string | null;
   matched_node_ids: string[];
   highlighted_edge_ids: string[];
   fact_ids: string[];
@@ -215,6 +216,13 @@ export type KnowledgeGraphChatResponse = {
   trace_id: string;
   answer: KnowledgeGraphAnswer;
   graph_path: GraphPath;
+  agent?: {
+    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  };
+  cache?: {
+    hit: boolean;
+    cache_key: string;
+  };
 };
 
 export type CompareResponse = {
@@ -475,6 +483,13 @@ export type AgentResponse = {
   trace_id: string;
   intent: string[];
   answer: AgentAnswer;
+  agent?: {
+    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  };
+  cache?: {
+    hit: boolean;
+    cache_key: string;
+  };
   fact_ids: string[];
 };
 

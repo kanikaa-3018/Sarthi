@@ -2304,7 +2304,7 @@ function SarthiSavedWorkspacePanel({
         <WorkspaceInsight label="Seller options" value={String(similarProducts.length)} detail="same product cluster" />
         <WorkspaceInsight label="Evidence facts" value={String(sourceCount)} detail="returns, price, reviews, proof" />
         <WorkspaceInsight label="Return signal" value={returnRate === null ? "Checking" : `${returnRate}%`} detail="winner SKU history" />
-        <WorkspaceInsight label="Policy" value={result?.ranking.weighting?.version ?? "Live"} detail="Mongo score weights" />
+        <WorkspaceInsight label="Policy" value={formatPolicyLabel(result?.ranking.weighting?.version)} detail="Mongo score weights" />
       </div>
 
       <div className="workspace-grid workspace-grid-upgraded">
@@ -2359,4 +2359,10 @@ function WorkspaceInsight({ label, value, detail }: { label: string; value: stri
       <small>{detail}</small>
     </div>
   );
+}
+
+function formatPolicyLabel(version?: string) {
+  if (!version) return "Live policy";
+  if (version.toLowerCase().includes("apparel")) return "Apparel policy";
+  return "Trust policy";
 }
