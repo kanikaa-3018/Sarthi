@@ -547,6 +547,166 @@ export type CheckoutResponse = {
   graph_path: GraphPath;
 };
 
+export type FitProfile = {
+  profile_id: string;
+  buyer_id: string;
+  label: string;
+  relationship: string;
+  active: boolean;
+  preferred_fit: string;
+  size_map: Record<string, string>;
+  notes: string[];
+  privacy_scope: string;
+  updated_at: string;
+};
+
+export type FitProfileResponse = {
+  buyer_id: string;
+  active_profile: FitProfile | null;
+  profiles: FitProfile[];
+  privacy: {
+    buyer_visible: boolean;
+    seller_visible: boolean;
+    summary: string;
+  };
+};
+
+export type ReasonChip = {
+  key?: string;
+  type?: string;
+  label: string;
+  value?: number;
+  sentiment: "positive" | "watch" | "neutral";
+};
+
+export type WishlistRadarEvent = {
+  event_id: string;
+  trace_id: string;
+  intent_id: string;
+  buyer_id: string;
+  cluster_id: string;
+  selected_product_id: string;
+  recommended_product_id: string;
+  recommended_variant_id: string;
+  status: "better_option_found" | "saved_option_strong" | "needs_one_check";
+  headline: string;
+  summary: string;
+  selected_score: number;
+  recommended_score: number;
+  delta: number;
+  alerts: Array<{
+    type: string;
+    severity: "low" | "medium" | "high";
+    title: string;
+    detail: string;
+  }>;
+  candidates: Array<{
+    product: Product;
+    variant: Variant | null;
+    score: number;
+    rank: number;
+    is_saved_product: boolean;
+    is_recommended: boolean;
+    reason_chips: ReasonChip[];
+    evidence: {
+      return_rate: number;
+      delivered_orders_90d: number;
+      evidence_strength: "unknown" | "weak" | "medium" | "strong";
+      seller_verification: string;
+      review_reliability: string;
+      offer_status: OfferCheck["status"];
+    };
+    fact_ids: string[];
+  }>;
+  next_best_action: {
+    type: string;
+    label: string;
+    variant_id: string | null;
+    reason: string;
+  };
+  fact_ids: string[];
+  created_at: string;
+};
+
+export type WishlistIntentResponse = {
+  intent: {
+    intent_id: string;
+    buyer_id: string;
+    product_id: string;
+    cluster_id: string;
+    selected_variant_id: string;
+    profile_id: string | null;
+    target_price: number | null;
+    status: "watching";
+    created_at: string;
+    updated_at: string;
+    last_radar_event_id: string | null;
+  };
+  radar: WishlistRadarEvent;
+  seller_signal: ProofRequest | null;
+  privacy: {
+    seller_sees: string;
+    buyer_profile_shared_with_seller: boolean;
+  };
+};
+
+export type WishlistRadarResponse = {
+  buyer_id: string;
+  active_profile: FitProfile | null;
+  count: number;
+  radar: WishlistRadarEvent[];
+  privacy: {
+    buyer_profile_shared_with_seller: boolean;
+    seller_receives: string;
+  };
+};
+
+export type CartConfidenceResponse = {
+  trace_id: string;
+  buyer_id: string;
+  active_profile: FitProfile | null;
+  overall_score: number;
+  confidence_band: "low" | "medium" | "high";
+  bracket_alerts: Array<{
+    product_id: string;
+    title: string;
+    selected_sizes: string[];
+    suggested_size: string;
+    severity: "medium" | "high";
+    message: string;
+  }>;
+  checkout_nudge: {
+    code: "prepaid_safe_to_nudge" | "prepaid_after_one_check" | "cod_or_review_first";
+    prepaid_recommended: boolean;
+    title: string;
+    message: string;
+    trust_condition: string;
+    company_benefit: string;
+  };
+  line_items: Array<{
+    product: Product;
+    variant: Variant;
+    quantity: number;
+    selected_size: string;
+    suggested_size: string | null;
+    keep_confidence: KeepConfidenceResponse;
+    offer: OfferCheck;
+    score: number;
+    confidence_band: "low" | "medium" | "high";
+    reason_chips: ReasonChip[];
+    interventions: Array<{
+      type: string;
+      label: string;
+      reason: string;
+      variant_id?: string;
+    }>;
+    fact_ids: string[];
+  }>;
+  fact_ids: string[];
+  graph_path: GraphPath;
+  snapshot_id: string;
+};
+
 export type ExpectationContractItem = {
   dimension: "fit" | "fabric" | "color" | "dispatch" | "offer" | "packaging" | "delivery" | "unknown";
   claim: string;

@@ -7,6 +7,7 @@ let database: Db | null = null;
 export type Collections = {
   buyers: Collection;
   buyerReviewProfiles: Collection;
+  buyerFitProfiles: Collection;
   sellers: Collection;
   sellerProfiles: Collection;
   accounts: Collection;
@@ -33,6 +34,9 @@ export type Collections = {
   llmCache: Collection;
   trustScoreSnapshots: Collection;
   featureWeights: Collection;
+  wishlistIntents: Collection;
+  trustRadarEvents: Collection;
+  cartConfidenceSnapshots: Collection;
 };
 
 export async function connectMongo() {
@@ -57,6 +61,7 @@ export function collections(db = getDb()): Collections {
   return {
     buyers: db.collection("buyers"),
     buyerReviewProfiles: db.collection("buyer_review_profiles"),
+    buyerFitProfiles: db.collection("buyer_fit_profiles"),
     sellers: db.collection("sellers"),
     sellerProfiles: db.collection("seller_profiles"),
     accounts: db.collection("accounts"),
@@ -82,7 +87,10 @@ export function collections(db = getDb()): Collections {
     adminAuditEvents: db.collection("admin_audit_events"),
     llmCache: db.collection("llm_cache"),
     trustScoreSnapshots: db.collection("trust_score_snapshots"),
-    featureWeights: db.collection("feature_weights")
+    featureWeights: db.collection("feature_weights"),
+    wishlistIntents: db.collection("wishlist_intents"),
+    trustRadarEvents: db.collection("trust_radar_events"),
+    cartConfidenceSnapshots: db.collection("cart_confidence_snapshots")
   };
 }
 
@@ -98,6 +106,8 @@ async function ensureIndexes(db: Db) {
     c.buyers.createIndex({ buyer_id: 1 }, { unique: true }),
     c.buyerReviewProfiles.createIndex({ buyer_id: 1 }, { unique: true }),
     c.buyerReviewProfiles.createIndex({ risk_band: 1 }),
+    c.buyerFitProfiles.createIndex({ profile_id: 1 }, { unique: true }),
+    c.buyerFitProfiles.createIndex({ buyer_id: 1, active: -1 }),
     c.sellers.createIndex({ seller_id: 1 }, { unique: true }),
     c.accounts.createIndex({ username: 1 }, { unique: true }),
     c.sessions.createIndex({ token_hash: 1 }, { unique: true }),
@@ -119,6 +129,14 @@ async function ensureIndexes(db: Db) {
     c.llmCache.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
     c.trustScoreSnapshots.createIndex({ buyer_id: 1, created_at: -1 }),
     c.trustScoreSnapshots.createIndex({ cluster_id: 1, variant_id: 1, created_at: -1 }),
-    c.featureWeights.createIndex({ category: 1, active: 1 })
+    c.featureWeights.createIndex({ category: 1, active: 1 }),
+    c.wishlistIntents.createIndex({ intent_id: 1 }, { unique: true }),
+    c.wishlistIntents.createIndex({ buyer_id: 1, status: 1, updated_at: -1 }),
+    c.wishlistIntents.createIndex({ buyer_id: 1, product_id: 1, status: 1 }),
+    c.trustRadarEvents.createIndex({ event_id: 1 }, { unique: true }),
+    c.trustRadarEvents.createIndex({ buyer_id: 1, created_at: -1 }),
+    c.trustRadarEvents.createIndex({ intent_id: 1, created_at: -1 }),
+    c.cartConfidenceSnapshots.createIndex({ snapshot_id: 1 }, { unique: true }),
+    c.cartConfidenceSnapshots.createIndex({ buyer_id: 1, created_at: -1 })
   ]);
 }

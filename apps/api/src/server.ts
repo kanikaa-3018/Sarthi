@@ -8,6 +8,13 @@ import { accountForRequest, assertBuyer, publicAccount, requireAccount, requireR
 import { generateGroundedAgentAnswer } from "./services/agent.js";
 import { hashPassword, id, makeToken, sha256, tokenHash, verifyPassword } from "./services/crypto.js";
 import {
+  buyerFitProfileState,
+  computeCartConfidence,
+  createWishlistIntent,
+  upsertBuyerFitProfile,
+  wishlistRadar
+} from "./services/decisionEngine.js";
+import {
   avoidableIssue,
   computeKeepConfidence,
   conflicts,
@@ -60,8 +67,11 @@ app.get("/system/readiness", async () => ({
   implemented_controls: [
     "role separated auth",
     "MongoDB evidence store",
+    "buyer fit profile guardrails",
     "weighted trust scoring",
     "reviewer credibility weighting",
+    "wishlist trust radar",
+    "cart bracketing prevention",
     "checkout confidence nudge",
     "seller proof loop",
     "audit traces"
@@ -390,6 +400,67 @@ app.get("/products/:product_id/keep-confidence", async (request, reply) => {
     graph_paths: [keepConfidence.graph_path]
   });
   return { trace_id: trace.trace_id, ...keepConfidence };
+});
+
+app.get("/buyers/:buyer_id/fit-profiles", async (request, reply) => {
+  const account = await requireRole(db, request, reply, "buyer");
+  const buyerId = (request.params as any).buyer_id;
+  assertBuyer(account, buyerId);
+  return buyerFitProfileState(db, buyerId);
+});
+
+app.post("/buyers/:buyer_id/fit-profiles", async (request, reply) => {
+  const account = await requireRole(db, request, reply, "buyer");
+  const buyerId = (request.params as any).buyer_id;
+  assertBuyer(account, buyerId);
+  const body = z.object({
+    profile_id: z.string().optional(),
+    label: z.string().optional(),
+    relationship: z.string().optional(),
+    preferred_fit: z.string().optional(),
+    active: z.boolean().optional(),
+    size_map: z.record(z.unknown()).optional(),
+    notes: z.array(z.unknown()).optional()
+  }).parse(request.body);
+  return upsertBuyerFitProfile(db, buyerId, body);
+});
+
+app.post("/wishlist/intents", async (request, reply) => {
+  const account = await requireRole(db, request, reply, "buyer");
+  const body = z.object({
+    buyer_id: z.string(),
+    product_id: z.string(),
+    selected_variant_id: z.string().optional(),
+    profile_id: z.string().optional(),
+    target_price: z.number().optional(),
+    create_seller_signal: z.boolean().optional()
+  }).parse(request.body);
+  assertBuyer(account, body.buyer_id);
+  return createWishlistIntent(db, body.buyer_id, body);
+});
+
+app.get("/buyers/:buyer_id/wishlist-radar", async (request, reply) => {
+  const account = await requireRole(db, request, reply, "buyer");
+  const buyerId = (request.params as any).buyer_id;
+  assertBuyer(account, buyerId);
+  return wishlistRadar(db, buyerId);
+});
+
+app.post("/cart/confidence", async (request, reply) => {
+  const account = await requireRole(db, request, reply, "buyer");
+  const body = z.object({
+    buyer_id: z.string(),
+    profile_id: z.string().optional(),
+    payment_mode: z.enum(["cod", "prepaid"]).optional(),
+    items: z.array(z.object({
+      product_id: z.string().optional(),
+      variant_id: z.string().optional(),
+      size: z.string().optional(),
+      quantity: z.number().optional()
+    })).min(1)
+  }).parse(request.body);
+  assertBuyer(account, body.buyer_id);
+  return computeCartConfidence(db, body.buyer_id, body);
 });
 
 app.get("/products/:product_id/sku-passport", async (request, reply) => {

@@ -19,9 +19,12 @@ import {
 import {
   askKnowledgeGraph,
   askSarthi,
+  createWishlistIntent,
   createExpectationContract,
+  getCartConfidence,
   getClusterKnowledgeGraph,
   getFeed,
+  getFitProfiles,
   getKeepConfidence,
   getProductDetail,
   runRegretFirewall
@@ -29,16 +32,19 @@ import {
 import { simpleTrustMeaning, t, type LanguageCode } from "../i18n";
 import type {
   AgentResponse,
+  CartConfidenceResponse,
   ClusterKnowledgeGraph,
   CompareResponse,
   ExpectationContract,
+  FitProfile,
   KnowledgeGraphChatResponse,
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
   KeepConfidenceResponse,
   Product,
   ProductDetailResponse,
-  RegretDecisionResponse
+  RegretDecisionResponse,
+  WishlistRadarEvent
 } from "../types/api";
 import { CompareSheet } from "./CompareSheet";
 import { CheckoutSheet } from "./CheckoutSheet";
@@ -62,6 +68,11 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
   const [wishlistedProduct, setWishlistedProduct] = useState<Product | null>(null);
+  const [fitProfiles, setFitProfiles] = useState<FitProfile[]>([]);
+  const [activeFitProfile, setActiveFitProfile] = useState<FitProfile | null>(null);
+  const [wishlistRadar, setWishlistRadar] = useState<WishlistRadarEvent | null>(null);
+  const [radarLoading, setRadarLoading] = useState(false);
+  const [radarError, setRadarError] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [activeExpectationContract, setActiveExpectationContract] = useState<ExpectationContract | null>(null);
@@ -99,6 +110,11 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setAuditTraceId(null);
     setAutoScan({ status: "idle" });
     setWishlistedProduct(null);
+    setFitProfiles([]);
+    setActiveFitProfile(null);
+    setWishlistRadar(null);
+    setRadarLoading(false);
+    setRadarError(null);
     setSelectedClusterId("");
     setKnowledgeGraph(null);
     setGraphAnswer(null);
@@ -110,9 +126,17 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setError(null);
     setStep("feed");
     
-    getFeed(buyerId)
-      .then((data) => {
-        setProducts(data.products);
+    Promise.allSettled([getFeed(buyerId), getFitProfiles(buyerId)])
+      .then(([feedOutcome, profileOutcome]) => {
+        if (feedOutcome.status === "fulfilled") {
+          setProducts(feedOutcome.value.products);
+        } else {
+          setError(feedOutcome.reason instanceof Error ? feedOutcome.reason.message : "Unable to load catalog");
+        }
+        if (profileOutcome.status === "fulfilled") {
+          setFitProfiles(profileOutcome.value.profiles);
+          setActiveFitProfile(profileOutcome.value.active_profile);
+        }
       })
       .catch((err: Error) => setError(err.message));
   }, [buyerId, ready]);
@@ -149,6 +173,9 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setGraphAnswer(null);
     setGraphQuery("");
     setGraphError(null);
+    setWishlistRadar(null);
+    setRadarError(null);
+    setRadarLoading(true);
     setRegretDecision(null);
     setDecisionQuestion("");
     setGraphLoading(true);
@@ -161,14 +188,20 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
     setError(null);
 
-    const [decisionOutcome, graphOutcome] = await Promise.allSettled([
+    const [decisionOutcome, graphOutcome, radarOutcome] = await Promise.allSettled([
       runRegretFirewall({
         buyer_id: buyerId,
         product_id: product.product_id,
         query: "Is this safe to buy before ordering?",
         create_missing_proof_request: false
       }),
-      getClusterKnowledgeGraph(buyerId, product.cluster_id)
+      getClusterKnowledgeGraph(buyerId, product.cluster_id),
+      createWishlistIntent({
+        buyer_id: buyerId,
+        product_id: product.product_id,
+        profile_id: activeFitProfile?.profile_id,
+        create_seller_signal: true
+      })
     ]);
 
     if (graphOutcome.status === "fulfilled") {
@@ -179,6 +212,13 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     }
     setGraphLoading(false);
     setDecisionLoading(false);
+    setRadarLoading(false);
+
+    if (radarOutcome.status === "fulfilled") {
+      setWishlistRadar(radarOutcome.value.radar);
+    } else {
+      setRadarError(radarOutcome.reason instanceof Error ? radarOutcome.reason.message : "Unable to prepare wishlist radar");
+    }
 
     if (decisionOutcome.status === "fulfilled") {
       const decision = decisionOutcome.value;
@@ -282,6 +322,8 @@ function openAutoScanResult(result: CompareResponse) {
           onSearchChange={setSearchTerm}
           autoScan={autoScan}
           wishlistedProduct={wishlistedProduct}
+          activeFitProfile={activeFitProfile}
+          fitProfileCount={fitProfiles.length}
           knowledgeGraph={knowledgeGraph}
           graphLoading={graphLoading}
           graphError={graphError}
@@ -315,6 +357,10 @@ function openAutoScanResult(result: CompareResponse) {
           graphAnswer={graphAnswer}
           graphQuery={graphQuery}
           graphAsking={graphAsking}
+          wishlistRadar={wishlistRadar}
+          radarLoading={radarLoading}
+          radarError={radarError}
+          activeFitProfile={activeFitProfile}
           onBack={() => setStep("feed")}
           onOpenResult={(res) => {
             setComparison(res);
@@ -494,6 +540,8 @@ function MarketplaceHome({
   onSearchChange,
   autoScan,
   wishlistedProduct,
+  activeFitProfile,
+  fitProfileCount,
   knowledgeGraph,
   graphLoading,
   graphError,
@@ -518,6 +566,8 @@ function MarketplaceHome({
   onSearchChange: (value: string) => void;
   autoScan: AutoScanState;
   wishlistedProduct: Product | null;
+  activeFitProfile: FitProfile | null;
+  fitProfileCount: number;
   knowledgeGraph: ClusterKnowledgeGraph | null;
   graphLoading: boolean;
   graphError: string | null;
@@ -562,7 +612,7 @@ function MarketplaceHome({
         </div>
         <div className="shop-trust-row" aria-label="Sarthi trust checks">
           <span><ShieldCheck size={14} /> Seller proof</span>
-          <span><Ruler size={14} /> Size fit</span>
+          <span><Ruler size={14} /> {activeFitProfile ? `${activeFitProfile.label} fit` : "Size fit"}</span>
           <span><AlertTriangle size={14} /> Return risk</span>
         </div>
       </section>
@@ -617,9 +667,10 @@ function MarketplaceHome({
               {wishlistedProduct
                 ? `Evidence check completed for "${wishlistedProduct.title.split("-")[0].trim()}". Open the saved check to review score, risks, proof, and seller options.`
                 : sarthiNudgeCopy}
+              {activeFitProfile ? ` Fit context: ${activeFitProfile.label}.` : ""}
             </p>
           </div>
-          <span>{possibleComparableCount} groups</span>
+          <span>{fitProfileCount ? `${fitProfileCount} profiles` : `${possibleComparableCount} groups`}</span>
         </div>
       )}
 
@@ -1539,10 +1590,14 @@ function ProductDetailPanel({
   const [keepConfidence, setKeepConfidence] = useState<KeepConfidenceResponse | null>(null);
   const [keepConfidenceLoading, setKeepConfidenceLoading] = useState(false);
   const [keepConfidenceError, setKeepConfidenceError] = useState<string | null>(null);
+  const [cartConfidence, setCartConfidence] = useState<CartConfidenceResponse | null>(null);
+  const [cartConfidenceLoading, setCartConfidenceLoading] = useState(false);
+  const [cartConfidenceError, setCartConfidenceError] = useState<string | null>(null);
 
   useEffect(() => {
     setContractError(null);
     setKeepConfidence(null);
+    setCartConfidence(null);
     getProductDetail(buyerId, productId)
       .then((payload) => {
         setDetail(payload);
@@ -1572,6 +1627,30 @@ function ProductDetailPanel({
       cancelled = true;
     };
   }, [buyerId, detail, keepConfidence?.variant_id, productId, selectedVariantId]);
+
+  useEffect(() => {
+    if (!detail || !selectedVariantId) return;
+    let cancelled = false;
+    setCartConfidenceLoading(true);
+    setCartConfidenceError(null);
+    getCartConfidence({
+      buyer_id: buyerId,
+      payment_mode: "cod",
+      items: [{ variant_id: selectedVariantId, quantity: 1 }]
+    })
+      .then((payload) => {
+        if (!cancelled) setCartConfidence(payload);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setCartConfidenceError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setCartConfidenceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [buyerId, detail, selectedVariantId]);
 
   if (!detail) {
     return (
@@ -1697,6 +1776,13 @@ function ProductDetailPanel({
             loading={keepConfidenceLoading}
             error={keepConfidenceError}
             onApplySize={(variantId) => setSelectedVariantId(variantId)}
+            onOpenAudit={onOpenAudit}
+          />
+
+          <CartConfidenceCard
+            confidence={cartConfidence}
+            loading={cartConfidenceLoading}
+            error={cartConfidenceError}
             onOpenAudit={onOpenAudit}
           />
 
@@ -1973,6 +2059,98 @@ function KeepConfidenceCard({
   );
 }
 
+function CartConfidenceCard({
+  confidence,
+  loading,
+  error,
+  onOpenAudit
+}: {
+  confidence: CartConfidenceResponse | null;
+  loading: boolean;
+  error: string | null;
+  onOpenAudit: (traceId: string) => void;
+}) {
+  if (error) {
+    return (
+      <section className="cart-confidence-card attention">
+        <span className="eyebrow">Cart guard</span>
+        <strong>Checkout guard could not refresh</strong>
+        <p>Keep confidence still works, but cart-level payment and bracketing checks are unavailable.</p>
+      </section>
+    );
+  }
+
+  if (!confidence) {
+    return (
+      <section className="cart-confidence-card loading">
+        <span className="eyebrow">Cart guard</span>
+        <strong>{loading ? "Checking cart risk" : "Waiting for selected size"}</strong>
+        <p>Sarthi is checking fit profile, product confidence, offer truth, and checkout risk together.</p>
+      </section>
+    );
+  }
+
+  const score = Math.round(confidence.overall_score * 100);
+  const primaryLine = confidence.line_items[0];
+  const firstAlert = confidence.bracket_alerts[0];
+
+  return (
+    <section className={`cart-confidence-card ${confidence.confidence_band}`}>
+      <div className="cart-confidence-header">
+        <div>
+          <span className="eyebrow">Cart guard</span>
+          <strong>{confidence.checkout_nudge.title}</strong>
+          <p>{confidence.checkout_nudge.message}</p>
+        </div>
+        <div className="cart-score-pill">
+          <strong>{score}</strong>
+          <span>/100</span>
+        </div>
+      </div>
+
+      <div className="cart-confidence-chips">
+        <span>{confidence.active_profile ? `${confidence.active_profile.label} fit` : "Fit profile"}</span>
+        <span>{confidence.checkout_nudge.prepaid_recommended ? "Prepaid nudge allowed" : "Prepaid nudge paused"}</span>
+        <span>{firstAlert ? "Bracketing risk" : "No size bracketing"}</span>
+      </div>
+
+      {primaryLine && (
+        <div className="cart-line-summary">
+          <div>
+            <span>Selected size</span>
+            <strong>{primaryLine.selected_size}</strong>
+          </div>
+          <div>
+            <span>Profile size</span>
+            <strong>{primaryLine.suggested_size ?? "Learning"}</strong>
+          </div>
+          <div>
+            <span>Line score</span>
+            <strong>{Math.round(primaryLine.score * 100)}</strong>
+          </div>
+        </div>
+      )}
+
+      {firstAlert && (
+        <div className="cart-bracket-alert">
+          <AlertTriangle size={14} />
+          <span>{firstAlert.message}</span>
+        </div>
+      )}
+
+      <div className="cart-payment-note">
+        <ShieldCheck size={14} />
+        <span>{confidence.checkout_nudge.trust_condition}</span>
+      </div>
+
+      <button type="button" className="keep-proof-link" onClick={() => onOpenAudit(confidence.trace_id)}>
+        <HelpCircle size={12} />
+        <span>See cart decision proof</span>
+      </button>
+    </section>
+  );
+}
+
 function ExpectationContractPreview({
   detail,
   selectedVariant
@@ -2214,6 +2392,10 @@ function SarthiSavedWorkspacePanel({
   graphAnswer,
   graphQuery,
   graphAsking,
+  wishlistRadar,
+  radarLoading,
+  radarError,
+  activeFitProfile,
   onBack,
   onOpenResult,
   onOpenProof,
@@ -2235,6 +2417,10 @@ function SarthiSavedWorkspacePanel({
   graphAnswer: KnowledgeGraphChatResponse | null;
   graphQuery: string;
   graphAsking: boolean;
+  wishlistRadar: WishlistRadarEvent | null;
+  radarLoading: boolean;
+  radarError: string | null;
+  activeFitProfile: FitProfile | null;
   onBack: () => void;
   onOpenResult: (res: CompareResponse) => void;
   onOpenProof: (traceId: string) => void;
@@ -2309,6 +2495,13 @@ function SarthiSavedWorkspacePanel({
 
       <div className="workspace-grid workspace-grid-upgraded">
         <div className="workspace-column workspace-primary-column">
+          <TrustRadarCard
+            radar={wishlistRadar}
+            loading={radarLoading}
+            error={radarError}
+            activeFitProfile={activeFitProfile}
+            onOpenProof={onOpenProof}
+          />
           <SarthiLensPanel
             autoScan={autoScan}
             savedProduct={savedProduct}
@@ -2348,6 +2541,129 @@ function SarthiSavedWorkspacePanel({
         </div>
       </div>
     </div>
+  );
+}
+
+function TrustRadarCard({
+  radar,
+  loading,
+  error,
+  activeFitProfile,
+  onOpenProof
+}: {
+  radar: WishlistRadarEvent | null;
+  loading: boolean;
+  error: string | null;
+  activeFitProfile: FitProfile | null;
+  onOpenProof: (traceId: string) => void;
+}) {
+  if (error) {
+    return (
+      <section className="trust-radar-card attention">
+        <div className="trust-radar-header">
+          <div>
+            <span className="eyebrow">Trust radar</span>
+            <h3>Radar could not refresh</h3>
+          </div>
+          <AlertTriangle size={18} />
+        </div>
+        <p>Product comparison still works, but the saved-product watch loop could not be stored right now.</p>
+      </section>
+    );
+  }
+
+  if (!radar) {
+    return (
+      <section className="trust-radar-card loading">
+        <div className="trust-radar-header">
+          <div>
+            <span className="eyebrow">Trust radar</span>
+            <h3>{loading ? "Watching this product" : "Waiting for saved intent"}</h3>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        <p>Sarthi is creating a closed-loop watch record for seller options, proof gaps, fit profile, and checkout risk.</p>
+      </section>
+    );
+  }
+
+  const recommended = radar.candidates.find((candidate) => candidate.is_recommended) ?? radar.candidates[0] ?? null;
+  const saved = radar.candidates.find((candidate) => candidate.is_saved_product) ?? null;
+  const score = Math.round(radar.recommended_score * 100);
+
+  return (
+    <section className={`trust-radar-card ${radar.status}`}>
+      <div className="trust-radar-header">
+        <div>
+          <span className="eyebrow">Trust radar</span>
+          <h3>{radar.headline}</h3>
+          <p>{radar.summary}</p>
+        </div>
+        <div className="radar-score">
+          <strong>{score}</strong>
+          <span>/100</span>
+        </div>
+      </div>
+
+      <div className="radar-context-row">
+        <span>{activeFitProfile ? `${activeFitProfile.label} profile` : "Buyer profile"}</span>
+        <span>{radar.alerts.length ? `${radar.alerts.length} alert${radar.alerts.length > 1 ? "s" : ""}` : "No blocker alert"}</span>
+        <span>{radar.delta > 0 ? `+${Math.round(radar.delta * 100)} score lift` : "Saved option checked"}</span>
+      </div>
+
+      {recommended && (
+        <div className="radar-recommendation-row">
+          <img
+            src={recommended.product.image_url || fallbackProductImage(recommended.product.color_family)}
+            alt={recommended.product.title}
+            onError={(event) => { event.currentTarget.src = fallbackProductImage(recommended.product.color_family); }}
+          />
+          <div>
+            <span>{recommended.is_saved_product ? "Saved option" : "Recommended option"}</span>
+            <strong>{recommended.product.seller_name}</strong>
+            <small>
+              {Math.round(recommended.evidence.return_rate * 100)}% returns | {labelize(recommended.evidence.seller_verification)} seller
+            </small>
+          </div>
+        </div>
+      )}
+
+      <div className="radar-chip-row">
+        {(recommended?.reason_chips ?? []).slice(0, 4).map((chip) => (
+          <span key={`${chip.key ?? chip.type}-${chip.label}`} className={chip.sentiment}>
+            {chip.label}
+          </span>
+        ))}
+      </div>
+
+      {radar.alerts.length > 0 && (
+        <div className="radar-alert-list">
+          {radar.alerts.slice(0, 2).map((alert) => (
+            <div key={`${alert.type}-${alert.title}`} className={alert.severity}>
+              <AlertTriangle size={13} />
+              <span>{alert.title}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="radar-action-row">
+        <div>
+          <span>Next best action</span>
+          <strong>{radar.next_best_action.label}</strong>
+          <small>{radar.next_best_action.reason}</small>
+        </div>
+        <button type="button" onClick={() => onOpenProof(radar.trace_id)}>
+          Proof
+        </button>
+      </div>
+
+      {saved && recommended && saved.product.product_id !== recommended.product.product_id && (
+        <p className="radar-compare-note">
+          Saved seller score {Math.round(saved.score * 100)}. Recommended seller score {Math.round(recommended.score * 100)}.
+        </p>
+      )}
+    </section>
   );
 }
 

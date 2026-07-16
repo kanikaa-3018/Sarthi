@@ -4,6 +4,7 @@ import type {
   AuthSession,
   AuditTrace,
   BuyerDashboardResponse,
+  CartConfidenceResponse,
   BuyerMemoryResponse,
   CheckoutResponse,
   ClusterKnowledgeGraph,
@@ -11,6 +12,7 @@ import type {
   DeleteMemoryResponse,
   ExpectationContract,
   FeedResponse,
+  FitProfileResponse,
   KnowledgeGraphChatResponse,
   KeepConfidenceResponse,
   MemorySettingsResponse,
@@ -30,7 +32,9 @@ import type {
   SellerSignupSession,
   SourceHealth,
   SkuTruthPassport,
-  SystemReadiness
+  SystemReadiness,
+  WishlistIntentResponse,
+  WishlistRadarResponse
 } from "../types/api";
 import type { LanguageCode } from "../i18n";
 
@@ -285,6 +289,63 @@ export function getKeepConfidence(buyerId: string, productId: string, variantId:
   return request<KeepConfidenceResponse>(
     `/products/${encodeURIComponent(productId)}/keep-confidence?${params.toString()}`
   );
+}
+
+export function getFitProfiles(buyerId: string) {
+  return request<FitProfileResponse>(`/buyers/${encodeURIComponent(buyerId)}/fit-profiles`);
+}
+
+export function saveFitProfile(
+  buyerId: string,
+  payload: {
+    profile_id?: string;
+    label?: string;
+    relationship?: string;
+    preferred_fit?: string;
+    active?: boolean;
+    size_map?: Record<string, string>;
+    notes?: string[];
+  }
+) {
+  return request<FitProfileResponse>(`/buyers/${encodeURIComponent(buyerId)}/fit-profiles`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createWishlistIntent(payload: {
+  buyer_id: string;
+  product_id: string;
+  selected_variant_id?: string;
+  profile_id?: string;
+  target_price?: number;
+  create_seller_signal?: boolean;
+}) {
+  return request<WishlistIntentResponse>("/wishlist/intents", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getWishlistRadar(buyerId: string) {
+  return request<WishlistRadarResponse>(`/buyers/${encodeURIComponent(buyerId)}/wishlist-radar`);
+}
+
+export function getCartConfidence(payload: {
+  buyer_id: string;
+  profile_id?: string;
+  payment_mode?: "cod" | "prepaid";
+  items: Array<{
+    product_id?: string;
+    variant_id?: string;
+    size?: string;
+    quantity?: number;
+  }>;
+}) {
+  return request<CartConfidenceResponse>("/cart/confidence", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 export function runRegretFirewall(payload: {

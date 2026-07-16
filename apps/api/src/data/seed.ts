@@ -39,6 +39,33 @@ const buyerReviewProfiles = [
   reviewerProfile("buyer_repeat_text_01", 34, 8, 5, 3, 16, 0.39, "watch", ["repeated_text_pattern", "moderate_returns"])
 ];
 
+const buyerFitProfiles = [
+  fitProfile("fit_profile_asha_self", "buyer_asha", "Asha", "self", 1, "comfort", {
+    women_kurtis: "XL",
+    women_kurta_sets: "XL",
+    women_tops: "L",
+    women_bottomwear: "XL"
+  }, ["prefers breathable fabric", "avoids chest-tight L sizes"]),
+  fitProfile("fit_profile_asha_mom", "buyer_asha", "Mummy", "family", 0, "comfort", {
+    women_kurtis: "XXL",
+    women_kurta_sets: "XXL",
+    women_tops: "XL",
+    women_bottomwear: "XXL"
+  }, ["buys looser daily wear fits"]),
+  fitProfile("fit_profile_neha_self", "buyer_neha", "Neha", "self", 1, "regular", {
+    women_kurtis: "M",
+    women_kurta_sets: "M",
+    women_tops: "M",
+    women_bottomwear: "L"
+  }, ["prefers standard fit"]),
+  fitProfile("fit_profile_cold_self", "buyer_cold", "New buyer", "self", 1, "comfort", {
+    women_kurtis: "XL",
+    women_kurta_sets: "XL",
+    women_tops: "L",
+    women_bottomwear: "XL"
+  }, ["profile can be corrected after first kept order"])
+];
+
 const clusterSpecs = [
   ["cluster_floral_blue", "Blue Floral Cotton Kurti", "women_kurtis", "kurti", "cotton blend", "blue", 449, true, [
     "https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80",
@@ -309,6 +336,7 @@ export function buildSeedDocuments() {
   return {
     buyers,
     buyerReviewProfiles,
+    buyerFitProfiles,
     sellers,
     sellerProfiles,
     accounts: seedAccounts(),
@@ -349,6 +377,9 @@ export function buildSeedDocuments() {
     adminAuditEvents: [],
     llmCache: [],
     trustScoreSnapshots: [],
+    wishlistIntents: [],
+    trustRadarEvents: [],
+    cartConfidenceSnapshots: [],
     featureWeights: [{
       category: "default",
       active: 1,
@@ -393,6 +424,7 @@ export async function resetMongoSeed(db: Db) {
   await Promise.all(Object.values(c).map((collection) => collection.deleteMany({})));
   await insert(c.buyers, docs.buyers);
   await insert(c.buyerReviewProfiles, docs.buyerReviewProfiles);
+  await insert(c.buyerFitProfiles, docs.buyerFitProfiles);
   await insert(c.sellers, docs.sellers);
   await insert(c.sellerProfiles, docs.sellerProfiles);
   await insert(c.accounts, docs.accounts);
@@ -414,6 +446,7 @@ export async function resetMongoSeed(db: Db) {
   return {
     buyers: docs.buyers.length,
     buyerReviewProfiles: docs.buyerReviewProfiles.length,
+    buyerFitProfiles: docs.buyerFitProfiles.length,
     sellers: docs.sellers.length,
     products: docs.products.length,
     variants: docs.variants.length,
@@ -452,6 +485,23 @@ function reviewerProfile(
     risk_band,
     risk_signals,
     updated_at: iso(0, 3)
+  };
+}
+
+function fitProfile(profile_id: string, buyer_id: string, label: string, relationship: string, active: number, preferred_fit: string, size_map: Record<string, string>, notes: string[]) {
+  return {
+    profile_id,
+    buyer_id,
+    label,
+    relationship,
+    active,
+    preferred_fit,
+    size_map,
+    notes,
+    source: "buyer_owned_profile",
+    privacy_scope: "buyer_only",
+    created_at: iso(15),
+    updated_at: iso(1)
   };
 }
 
@@ -531,6 +581,7 @@ function dataSources() {
     source("campaigns", "campaigns", "Campaign timer ledger", "growth-platform", 6, iso(0, 1), "operational", "Campaign starts, ends, and timer reset counts."),
     source("inventory", "inventory", "Inventory snapshot stream", "inventory-platform", 4, iso(0, 2), "operational", "Available-to-promise and sales velocity snapshots."),
     source("buyer_review_profiles", "reviews", "Reviewer credibility profile", "ugc-risk-platform", 24, iso(0, 2), "operational", "Reviewer account age, return behavior, and review reliability signals."),
+    source("buyer_fit_profiles", "privacy", "Buyer fit profile store", "personalization-platform", 12, iso(0, 1), "operational", "Buyer-owned size profiles for self, family, and gift decisions."),
     source("seller_verification", "seller", "Seller verification registry", "seller-platform", 168, iso(2), "operational", "Seller KYC/GST state and marketplace access level."),
     source("buyer_memory", "privacy", "Buyer fit memory store", "personalization-platform", 12, iso(0, 1), "operational", "Buyer-owned fit memory, never exposed to sellers."),
     source("graph_projection", "reasoning", "Commerce graph projection", "sarthi-graph", 12, iso(0, 4), "operational", "Projected reasoning graph from MongoDB evidence documents.")
