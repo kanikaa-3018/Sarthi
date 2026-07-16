@@ -41,6 +41,7 @@ export function CompareSheet({
   const isSimple = experienceMode === "simple";
   const visibleFactors = isSimple ? ranking.top_factors.slice(0, 2) : ranking.top_factors;
   const winnerDetails = getProductDetailsForVariant(ranking.winner, productCatalog);
+  const winnerCandidate = ranking.candidates.find((candidate) => candidate.variant_id === ranking.winner) ?? null;
   const alternativeDetails = ranking.alternative
     ? getProductDetailsForVariant(ranking.alternative, productCatalog)
     : null;
@@ -65,7 +66,10 @@ export function CompareSheet({
               <h3>{winnerDetails.sellerName}</h3>
             </div>
           </div>
-          <span className="ui-badge positive">Evidence picked</span>
+          <div className="compare-score-ring">
+            <strong>{winnerCandidate ? Math.round(winnerCandidate.score * 100) : "--"}</strong>
+            <span>/100</span>
+          </div>
         </div>
 
         <div className="compare-kv-panel">
@@ -90,10 +94,26 @@ export function CompareSheet({
           {visibleFactors.map((factor) => (
             <div className="reason-row" key={factor}>
               <FactorIcon factor={factor} />
-              <span>{factor}</span>
+              <span>{humanFactorLabel(factor)}</span>
             </div>
           ))}
         </div>
+
+        {winnerCandidate && (
+          <div className="compare-factor-meter-list">
+            {factorRowsForCandidate(winnerCandidate).map((factor) => (
+              <div className="compare-factor-meter" key={factor.key}>
+                <div>
+                  <span>{factor.label}</span>
+                  <strong>{factor.value}%</strong>
+                </div>
+                <i>
+                  <b style={{ width: `${factor.value}%` }} />
+                </i>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {!isSimple && ranking.alternative && alternativeDetails && (
@@ -132,9 +152,15 @@ export function CompareSheet({
             <span className="ui-badge neutral">{candidateRows.length} checked</span>
           </div>
           <p>
-            Ranked using seller reliability, kept-order history, fit signals, reviews, price facts, and proof.
+            Ranked using seller reliability, kept-order history, fit signals, reviews, price facts, proof, and offer truth.
             Ads or paid position are not used.
           </p>
+          {ranking.weighting && (
+            <div className="compare-weight-note">
+              <span>Weight policy</span>
+              <strong>{ranking.weighting.version}</strong>
+            </div>
+          )}
           <div className="compare-candidate-list">
             {candidateRows.map(({ candidate, details, index, isWinner, isAlternative }) => (
               <div
@@ -152,6 +178,7 @@ export function CompareSheet({
                     <span><RotateCcw size={12} /> Returns {factorPercent(candidate, "outcome_quality")}</span>
                     <span><ShieldCheck size={12} /> Trust {factorPercent(candidate, "seller_trust")}</span>
                     <span><Truck size={12} /> Dispatch {factorPercent(candidate, "fulfilment_reliability")}</span>
+                    <span><Info size={12} /> Proof {factorPercent(candidate, "proof_coverage")}</span>
                   </div>
                 </div>
                 <div className="compare-score-cell">
@@ -195,6 +222,13 @@ function FactorIcon({ factor }: { factor: string }) {
   return <ShieldCheck size={16} />;
 }
 
+function humanFactorLabel(factor: string) {
+  return factor
+    .replace(/sku/gi, "SKU")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function getProductDetailsForVariant(variantId: string, productCatalog: Product[]) {
   const product = [...productCatalog]
     .sort((a, b) => b.product_id.length - a.product_id.length)
@@ -211,4 +245,19 @@ type CandidateFactor = Exclude<keyof CandidateScore["factors"], "uncertainty_pen
 
 function factorPercent(candidate: CandidateScore, factor: CandidateFactor) {
   return `${Math.round((candidate.factors[factor] ?? 0) * 100)}%`;
+}
+
+function factorRowsForCandidate(candidate: CandidateScore) {
+  const rows: Array<{ key: CandidateFactor; label: string }> = [
+    { key: "outcome_quality", label: "Kept-order signal" },
+    { key: "seller_trust", label: "Seller trust" },
+    { key: "fit_match", label: "Fit match" },
+    { key: "review_signal", label: "Credible reviews" },
+    { key: "proof_coverage", label: "Proof coverage" },
+    { key: "offer_truth", label: "Offer truth" }
+  ];
+  return rows.map((row) => ({
+    ...row,
+    value: Math.round((candidate.factors[row.key] ?? 0) * 100)
+  }));
 }

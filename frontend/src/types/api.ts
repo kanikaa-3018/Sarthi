@@ -62,6 +62,8 @@ export type RankingResult = {
   uncertainty: "low" | "medium" | "high";
   candidates: Array<{
     variant_id: string;
+    product_id?: string;
+    seller_id?: string;
     score: number;
     factors: {
       fit_match: number;
@@ -73,11 +75,21 @@ export type RankingResult = {
       review_credibility?: number;
       rating_signal: number;
       price_value: number;
+      proof_coverage?: number;
+      offer_truth?: number;
       uncertainty_penalty: number;
       fair_start_boost?: number;
     };
+    weight_version?: string;
     fact_ids: string[];
   }>;
+  weighting?: {
+    source: string;
+    version: string;
+    category: string;
+    weights: Record<string, number>;
+    raw_weights: Record<string, unknown>;
+  };
   fact_ids: string[];
 };
 

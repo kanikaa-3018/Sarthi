@@ -1173,8 +1173,8 @@ function KnowledgeGraphExplorer({
       <div className="kg-card-header">
         <div>
           <span className="eyebrow">Evidence map</span>
-          <h3>Ask about this decision</h3>
-          <p>Answers use this product's sellers, SKU returns, ratings, reviews, fabric, price, and proof trail.</p>
+          <h3>One map for the whole decision</h3>
+          <p>Seller, SKU outcomes, reviews, price, proof, and private fit context are linked before a recommendation is shown.</p>
         </div>
         <span className="kg-live-pill">{graph.summary.fact_count} facts</span>
       </div>
@@ -1182,7 +1182,7 @@ function KnowledgeGraphExplorer({
       <div className="kg-graph-shell">
         <div className="kg-map-title">
           <strong>{answer ? "Answer path" : "Decision path"}</strong>
-          <span>{answer ? "Highlighted by your question" : "Focused view | click any node to inspect"}</span>
+          <span>{answer ? "Question-relevant nodes are highlighted" : "Click a node for grounded evidence"}</span>
         </div>
         <svg viewBox="0 0 100 68" role="img" aria-label="Product evidence map">
           {layout.edges
@@ -1220,13 +1220,11 @@ function KnowledgeGraphExplorer({
         </svg>
       </div>
 
-      <div className="kg-legend-row">
-        <span className="role-pill cluster">Cluster</span>
-        <span className="role-pill seller">Seller</span>
-        <span className="role-pill product">Product</span>
-        <span className="role-pill evidence">Evidence</span>
-        <span className="role-pill price">Price</span>
-        <span className="role-pill returns">Returns</span>
+      <div className="kg-source-row">
+        <span>Buyer private fit</span>
+        <span>Seller proof</span>
+        <span>SKU outcomes</span>
+        <span>Offer truth</span>
       </div>
 
       {/* Selected Node details info card */}
@@ -1253,11 +1251,11 @@ function KnowledgeGraphExplorer({
             {selectedNode.subtitle || "Verified node record in the commerce evidence map."}
           </p>
           <div className="kg-grounding-box">
-            <strong>Grounding Evidence Context:</strong>
+            <strong>Grounding context</strong>
             <div>
-              • Fact synced from MongoDB Atlas transaction and return evidence loops.<br />
-              • Audit-mapped reference: <code>Fact-{selectedNode.id.slice(0,8)}</code><br />
-              • Privacy guard: no buyer personal data is exposed to the seller workspace.
+              <span>Fact-backed node from product, seller, return, review, price, or proof collections.</span>
+              <span>Audit reference: <code>{selectedNode.fact_ids[0] ?? selectedNode.id.slice(0, 12)}</code></span>
+              <span>Privacy guard: buyer fit memory is never shown to sellers.</span>
             </div>
           </div>
         </div>
@@ -1369,14 +1367,16 @@ function layoutGraph(graph: ClusterKnowledgeGraph, matchedNodeIds: Set<string>) 
   const winnerContext = graph.selected_product_id
     ? graph.seller_context.find((context) => context.product.product_id === graph.selected_product_id)
     : graph.seller_context[0];
+  const derivedNodes = winnerContext ? derivedEvidenceNodes(graph, winnerContext) : [];
+  for (const node of derivedNodes) nodeById.set(node.id, node);
   const baseIds = [
-    `cluster:${graph.cluster.cluster_id}`,
+    graph.cluster.cluster_id,
     winnerContext?.node_ids.seller,
     winnerContext?.node_ids.product,
-    winnerContext?.node_ids.variant,
-    winnerContext?.node_ids.evidence,
-    winnerContext?.node_ids.reviews,
-    winnerContext?.node_ids.price,
+    winnerContext?.node_ids.sku,
+    winnerContext ? `returns:${winnerContext.variant.variant_id}` : null,
+    winnerContext ? `reviews:${winnerContext.product.product_id}` : null,
+    winnerContext ? `price:${winnerContext.variant.variant_id}` : null,
     `buyer:${graph.buyer_id}`
   ].filter(Boolean) as string[];
   const visible = uniqueNodes([
@@ -1418,11 +1418,72 @@ function layoutGraph(graph: ClusterKnowledgeGraph, matchedNodeIds: Set<string>) 
     };
   });
   const visibleIds = new Set(nodes.map((node) => node.id));
+  const derivedEdges = winnerContext ? [
+    kgEdge(winnerContext.node_ids.sku, `returns:${winnerContext.variant.variant_id}`, "outcomes", winnerContext.evidence.fact_ids, 0.9),
+    kgEdge(winnerContext.node_ids.product, `reviews:${winnerContext.product.product_id}`, "reviews", winnerContext.reviews.flatMap((review) => review.fact_id ? [review.fact_id] : []), 0.72),
+    kgEdge(winnerContext.node_ids.sku, `price:${winnerContext.variant.variant_id}`, "offer", priceFactIds(winnerContext), 0.64),
+    kgEdge(`buyer:${graph.buyer_id}`, winnerContext.node_ids.sku, "fit context", [], 0.68)
+  ] : [];
   return {
     nodes,
-    edges: graph.edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),
+    edges: [...graph.edges, ...derivedEdges].filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),
     nodeMap: new Map(nodes.map((node) => [node.id, node]))
   };
+}
+
+function derivedEvidenceNodes(graph: ClusterKnowledgeGraph, context: ClusterKnowledgeGraph["seller_context"][number]): KnowledgeGraphNode[] {
+  const returnRate = Math.round(context.evidence.return_rate * 100);
+  const priceFacts = priceFactIds(context);
+  return [
+    {
+      id: `buyer:${graph.buyer_id}`,
+      type: "buyer_context",
+      label: "Your fit memory",
+      subtitle: "Private signal used only for your recommendation",
+      status: "private",
+      score: null,
+      fact_ids: context.fit.fact_ids ?? [],
+      data: {}
+    },
+    {
+      id: `returns:${context.variant.variant_id}`,
+      type: "return_reason",
+      label: `${returnRate}% returns`,
+      subtitle: `${context.evidence.delivered_orders_90d} recent delivered SKU outcomes`,
+      status: context.evidence.evidence_strength,
+      score: context.evidence.return_rate,
+      fact_ids: context.evidence.fact_ids,
+      data: context.evidence
+    },
+    {
+      id: `reviews:${context.product.product_id}`,
+      type: "reviews",
+      label: `${context.reviews.length} review samples`,
+      subtitle: "Reviews are weighted by buyer credibility",
+      status: "weighted",
+      score: context.candidate?.factors.review_signal ?? null,
+      fact_ids: context.reviews.flatMap((review) => review.fact_id ? [review.fact_id] : []),
+      data: {}
+    },
+    {
+      id: `price:${context.variant.variant_id}`,
+      type: "price",
+      label: "Offer truth",
+      subtitle: "Price, timer, and inventory signals checked",
+      status: "checked",
+      score: context.candidate?.factors.offer_truth ?? null,
+      fact_ids: priceFacts,
+      data: context.price_context
+    }
+  ];
+}
+
+function kgEdge(source: string, target: string, label: string, fact_ids: string[], weight: number): KnowledgeGraphEdge {
+  return { id: `derived:${source}:${target}:${label}`, source, target, label, fact_ids, weight };
+}
+
+function priceFactIds(context: ClusterKnowledgeGraph["seller_context"][number]) {
+  return [context.price_context.campaign?.fact_id, context.price_context.inventory?.fact_id].filter(Boolean) as string[];
 }
 
 function uniqueNodes(nodes: KnowledgeGraphNode[]) {
@@ -2182,27 +2243,76 @@ function SarthiSavedWorkspacePanel({
   onQueryChange: (value: string) => void;
   onAskGraph: (query: string) => void;
 }) {
+  const similarProducts = products.filter((product) => product.cluster_id === savedProduct.cluster_id && product.is_sarthi_eligible);
+  const result = autoScan.status === "ready" ? autoScan.result : null;
+  const winnerProduct = result ? productForVariant(result.ranking.winner, similarProducts) : null;
+  const winnerCandidate = result && winnerProduct ? candidateForProduct(result, winnerProduct) : null;
+  const score = winnerCandidate ? Math.round(winnerCandidate.score * 100) : null;
+  const graphContext = winnerProduct
+    ? knowledgeGraph?.seller_context.find((item) => item.product.product_id === winnerProduct.product_id)
+    : null;
+  const returnRate = graphContext ? Math.round(graphContext.evidence.return_rate * 100) : null;
+  const sourceCount = knowledgeGraph?.summary.fact_count ?? result?.ranking.fact_ids.length ?? 0;
+  const statusLabel = result
+    ? "Decision ready"
+    : autoScan.status === "scanning"
+      ? "Checking evidence"
+      : autoScan.status === "error"
+        ? "Needs retry"
+        : "Saved";
+
   return (
     <div className="sarthi-saved-workspace buyer-shop-shell">
-      <header className="workspace-header">
-        <button
-          type="button"
-          onClick={onBack}
-          className="workspace-back-button"
-        >
-          <ArrowLeft size={16} />
-          <span>Back to catalog</span>
-        </button>
-        <span>Saved product check</span>
+      <header className="workspace-hero">
+        <div className="workspace-hero-left">
+          <button
+            type="button"
+            onClick={onBack}
+            className="workspace-back-button"
+          >
+            <ArrowLeft size={16} />
+            <span>Catalog</span>
+          </button>
+          <img
+            src={savedProduct.image_url || fallbackProductImage(savedProduct.color_family)}
+            alt={savedProduct.title}
+            onError={(event) => { event.currentTarget.src = fallbackProductImage(savedProduct.color_family); }}
+          />
+          <div className="workspace-product-copy">
+            <span className="eyebrow">Saved product check</span>
+            <h2>{savedProduct.title.split("-")[0].trim()}</h2>
+            <p>
+              {savedProduct.seller_name} | Rs {savedProduct.base_price} | {similarProducts.length} mapped seller options
+            </p>
+          </div>
+        </div>
+        <div className="workspace-score-summary">
+          <span>{statusLabel}</span>
+          <strong>{score ?? "--"}</strong>
+          <small>{score === null ? `${sourceCount} facts queued` : `trust score / 100`}</small>
+        </div>
       </header>
 
-      <div className="workspace-grid">
-        {/* Left column: saved product evidence */}
-        <div className="workspace-column">
+      <div className="workspace-flow-strip" aria-label="Decision flow">
+        <span className="complete">Product saved</span>
+        <span className={result ? "complete" : autoScan.status === "scanning" ? "active" : ""}>Seller options ranked</span>
+        <span className={knowledgeGraph ? "complete" : graphLoading ? "active" : ""}>Evidence graph built</span>
+        <span className={regretDecision ? "complete" : ""}>Buyer doubt answered</span>
+      </div>
+
+      <div className="workspace-insight-row">
+        <WorkspaceInsight label="Seller options" value={String(similarProducts.length)} detail="same product cluster" />
+        <WorkspaceInsight label="Evidence facts" value={String(sourceCount)} detail="returns, price, reviews, proof" />
+        <WorkspaceInsight label="Return signal" value={returnRate === null ? "Checking" : `${returnRate}%`} detail="winner SKU history" />
+        <WorkspaceInsight label="Policy" value={result?.ranking.weighting?.version ?? "Live"} detail="Mongo score weights" />
+      </div>
+
+      <div className="workspace-grid workspace-grid-upgraded">
+        <div className="workspace-column workspace-primary-column">
           <SarthiLensPanel
             autoScan={autoScan}
             savedProduct={savedProduct}
-            similarProducts={products.filter((product) => product.cluster_id === savedProduct.cluster_id && product.is_sarthi_eligible)}
+            similarProducts={similarProducts}
             knowledgeGraph={knowledgeGraph}
             graphLoading={graphLoading}
             graphError={graphError}
@@ -2219,11 +2329,10 @@ function SarthiSavedWorkspacePanel({
           />
         </div>
 
-        {/* Right Column: Knowledge Graph */}
-        <div className="workspace-column">
+        <div className="workspace-column workspace-evidence-column">
           <div className="kg-header-row">
-            <h3>Decision map</h3>
-            <span>Live evidence</span>
+            <h3>Evidence map</h3>
+            <span>{knowledgeGraph ? `${knowledgeGraph.summary.fact_count} facts` : "Preparing"}</span>
           </div>
           <KnowledgeGraphExplorer
             graph={knowledgeGraph}
@@ -2238,6 +2347,16 @@ function SarthiSavedWorkspacePanel({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorkspaceInsight({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="workspace-insight-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
     </div>
   );
 }
