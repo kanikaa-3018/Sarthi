@@ -16,6 +16,10 @@ export type Product = {
   delivery_text: string;
   is_sarthi_eligible: number;
   median_dispatch_hours?: number;
+  source_refs?: Record<string, number | string>;
+  taxonomy_attributes?: Array<{ field_name: string; display_name: string; value: string }>;
+  seller_snapshot?: Record<string, number | string | boolean>;
+  fulfillment?: Record<string, number | string | boolean>;
 };
 
 export type FeedResponse = {
@@ -66,9 +70,11 @@ export type RankingResult = {
       fulfilment_reliability: number;
       seller_trust: number;
       review_signal: number;
+      review_credibility?: number;
       rating_signal: number;
       price_value: number;
       uncertainty_penalty: number;
+      fair_start_boost?: number;
     };
     fact_ids: string[];
   }>;
@@ -215,6 +221,41 @@ export type AvoidableIssue = {
   fact_ids: string[];
 };
 
+export type KeepConfidenceDriver = {
+  type: string;
+  label: string;
+  severity: "low" | "medium" | "high";
+  positive: boolean;
+  fact_ids: string[];
+};
+
+export type KeepConfidenceIntervention = {
+  type: "change_size" | "check_proof" | "save_fit_memory" | "continue_checkout" | "limited_evidence";
+  label: string;
+  action: string;
+  suggested_size?: string | null;
+  target_variant_id?: string | null;
+  reason: string;
+  fact_ids: string[];
+};
+
+export type KeepConfidenceResponse = {
+  trace_id: string;
+  buyer_id: string;
+  product_id: string;
+  variant_id: string;
+  selected_size: string | null;
+  recommended_size: string;
+  score: number;
+  confidence_band: "low" | "medium" | "high";
+  headline: string;
+  summary: string;
+  drivers: KeepConfidenceDriver[];
+  interventions: KeepConfidenceIntervention[];
+  fact_ids: string[];
+  graph_path: GraphPath;
+};
+
 export type ProductDetailResponse = {
   buyer_id: string;
   product: Product;
@@ -224,8 +265,9 @@ export type ProductDetailResponse = {
   evidence: VariantEvidence;
   avoidable_issue: AvoidableIssue | null;
   review_evidence: {
-    fabric: { fact_ids: string[]; passages: Array<{ text: string; rating: number; fact_id: string }> };
-    color: { fact_ids: string[]; passages: Array<{ text: string; rating: number; fact_id: string }> };
+    fabric: { fact_ids: string[]; passages: ReviewEvidencePassage[] };
+    color: { fact_ids: string[]; passages: ReviewEvidencePassage[] };
+    credibility_summary?: ReviewCredibilitySummary;
   };
   conflicts: Array<{
     type: string;
@@ -235,6 +277,7 @@ export type ProductDetailResponse = {
     fact_ids: string[];
   }>;
   trust_state: ProductTrustState;
+  keep_confidence: KeepConfidenceResponse;
   graph_paths: GraphPath[];
   privacy: PrivacySummary;
 };
@@ -473,6 +516,7 @@ export type OfferCheck = {
 export type CheckoutResponse = {
   trace_id: string;
   offer: OfferCheck;
+  keep_confidence: KeepConfidenceResponse;
   graph_path: GraphPath;
 };
 
@@ -547,6 +591,59 @@ export type PrivacySummary = {
   memory_record_count: number;
   used: string[];
   not_used: string[];
+};
+
+export type ReviewEvidencePassage = {
+  text: string;
+  rating: number;
+  fact_id: string;
+  credibility_weight?: number;
+  credibility_flags?: string[];
+};
+
+export type ReviewCredibilitySummary = {
+  review_count: number;
+  credible_review_count: number;
+  raw_average: number | null;
+  weighted_average: number | null;
+  average_weight: number;
+  low_weight_review_count: number;
+  reliability: "unknown" | "weak" | "mixed" | "strong";
+  flags: Array<{ flag: string; count: number }>;
+  fact_ids: string[];
+};
+
+export type BuyerDashboardResponse = {
+  buyer_id: string;
+  profile: {
+    display_name: string;
+    language: string;
+    preferred_fit: string;
+    joined_at: string | null;
+  };
+  activity: {
+    kept_orders: number;
+    returned_orders: number;
+    rto_orders: number;
+    total_outcomes: number;
+    proof_requests_created: number;
+    expectation_contracts: number;
+  };
+  review_credibility: {
+    weight: number;
+    risk_band: "trusted" | "watch" | "new_user" | "high_return";
+    signals: string[];
+    explanation: string;
+  };
+  checkout_guidance: {
+    mode: "normal_prepaid_eligibility" | "balanced_checkout_guidance" | "extra_trust_steps";
+    prepaid_nudge_allowed: boolean;
+    message: string;
+  };
+  privacy: PrivacySummary;
+  recent_memory: FitMemory[];
+  recent_expectation_contracts: ExpectationContract[];
+  guardrails: string[];
 };
 
 export type FactDetail = {

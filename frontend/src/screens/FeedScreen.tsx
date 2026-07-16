@@ -7,7 +7,6 @@ import {
   Truck, 
   AlertTriangle,
   Send,
-  Sparkles,
   ChevronRight,
   Info,
   CheckCircle2,
@@ -23,6 +22,7 @@ import {
   createExpectationContract,
   getClusterKnowledgeGraph,
   getFeed,
+  getKeepConfidence,
   getProductDetail,
   runRegretFirewall
 } from "../api/client";
@@ -35,6 +35,7 @@ import type {
   KnowledgeGraphChatResponse,
   KnowledgeGraphEdge,
   KnowledgeGraphNode,
+  KeepConfidenceResponse,
   Product,
   ProductDetailResponse,
   RegretDecisionResponse
@@ -71,14 +72,13 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphAsking, setGraphAsking] = useState(false);
   const [graphError, setGraphError] = useState<string | null>(null);
-  const [graphSheetOpen, setGraphSheetOpen] = useState(false);
   const [regretDecision, setRegretDecision] = useState<RegretDecisionResponse | null>(null);
   const [decisionQuestion, setDecisionQuestion] = useState("");
   const [decisionLoading, setDecisionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Buyer flow step: "feed" | "detail"
-  const [step, setStep] = useState<"feed" | "detail">("feed");
+  // Buyer flow step: "feed" | "detail" | "saved"
+  const [step, setStep] = useState<"feed" | "detail" | "saved">("feed");
   
   // Overlay/Sheet visibility
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
@@ -104,7 +104,6 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setGraphAnswer(null);
     setGraphQuery("");
     setGraphError(null);
-    setGraphSheetOpen(false);
     setRegretDecision(null);
     setDecisionQuestion("");
     setDecisionLoading(false);
@@ -150,7 +149,6 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setGraphAnswer(null);
     setGraphQuery("");
     setGraphError(null);
-    setGraphSheetOpen(false);
     setRegretDecision(null);
     setDecisionQuestion("");
     setGraphLoading(true);
@@ -294,13 +292,42 @@ function openAutoScanResult(result: CompareResponse) {
           onQuickSearch={setSearchTerm}
           onWishlistProduct={handleWishlistProduct}
           onOpenAutoScan={openAutoScanResult}
-          onOpenGraph={() => setGraphSheetOpen(true)}
+          onOpenGraph={() => setStep("saved")}
           onDecisionQuestionChange={setDecisionQuestion}
           onAskDecision={handleAskDecision}
           onOpenAutoScanProof={(traceId) => {
             setAuditTraceId(traceId);
             setAuditDrawerOpen(true);
           }}
+        />
+      ) : step === "saved" && wishlistedProduct ? (
+        <SarthiSavedWorkspacePanel
+          buyerId={buyerId}
+          savedProduct={wishlistedProduct}
+          products={products}
+          autoScan={autoScan}
+          knowledgeGraph={knowledgeGraph}
+          graphLoading={graphLoading}
+          graphError={graphError}
+          regretDecision={regretDecision}
+          decisionQuestion={decisionQuestion}
+          decisionLoading={decisionLoading}
+          graphAnswer={graphAnswer}
+          graphQuery={graphQuery}
+          graphAsking={graphAsking}
+          onBack={() => setStep("feed")}
+          onOpenResult={(res) => {
+            setComparison(res);
+            setCompareSheetOpen(true);
+          }}
+          onOpenProof={(traceId) => {
+            setAuditTraceId(traceId);
+            setAuditDrawerOpen(true);
+          }}
+          onDecisionQuestionChange={setDecisionQuestion}
+          onAskDecision={handleAskDecision}
+          onQueryChange={setGraphQuery}
+          onAskGraph={handleAskKnowledgeGraph}
         />
       ) : (
         selectedProductId && selectedVariantId && comparison && (
@@ -328,7 +355,7 @@ function openAutoScanResult(result: CompareResponse) {
           <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-success">Sarthi Curated Match</span>
+                <span className="eyebrow sheet-eyebrow-success">Evidence-picked match</span>
                 <h3 className="sheet-title">Listings Resolved</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setCompareSheetOpen(false)}>
@@ -346,40 +373,6 @@ function openAutoScanResult(result: CompareResponse) {
                 setAuditDrawerOpen(true);
               }}
               onContinue={() => handleViewProductDetail(comparison.selected_product_id, comparison.ranking.winner)}
-            />
-          </div>
-        </div>
-      )}
-
-      {graphSheetOpen && (
-        <div className="bottom-sheet-overlay" onClick={() => setGraphSheetOpen(false)}>
-          <div className="bottom-sheet-content decision-graph-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="bottom-sheet-header decision-sheet-header">
-              <div>
-                <span className="eyebrow sheet-eyebrow-primary">Decision Evidence</span>
-                <h3 className="sheet-title">Sarthi Graph</h3>
-                <p>
-                  Ask why a seller was recommended. Answers stay grounded in mapped SKU, seller, review, return, price, and fit facts.
-                </p>
-              </div>
-              <button className="bottom-sheet-close" onClick={() => setGraphSheetOpen(false)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <KnowledgeGraphExplorer
-              graph={knowledgeGraph}
-              answer={graphAnswer}
-              query={graphQuery}
-              loading={graphLoading}
-              asking={graphAsking}
-              error={graphError}
-              onQueryChange={setGraphQuery}
-              onAsk={handleAskKnowledgeGraph}
-              onOpenProof={(traceId) => {
-                setAuditTraceId(traceId);
-                setAuditDrawerOpen(true);
-              }}
             />
           </div>
         </div>
@@ -422,7 +415,7 @@ function openAutoScanResult(result: CompareResponse) {
             <div className="bottom-sheet-header">
               <div>
                 <span className="eyebrow sheet-eyebrow-primary">Pre-purchase Diagnostic Logs</span>
-                <h3 className="sheet-title">How Sarthi Decided</h3>
+                <h3 className="sheet-title">How the score was decided</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setAuditDrawerOpen(false)}>
                 <X size={16} />
@@ -435,6 +428,40 @@ function openAutoScanResult(result: CompareResponse) {
             />
           </div>
         </div>
+      )}
+
+      {/* Trust check ready toast */}
+      {wishlistedProduct && autoScan.status === "ready" && step !== "saved" && (
+        <div
+          className="sarthi-scan-toast"
+        >
+          <ShieldCheck size={16} />
+          <div className="sarthi-toast-content">
+            <span>Evidence check is ready for the saved product.</span>
+            <button
+              type="button"
+              onClick={() => setStep("saved")}
+              className="sarthi-toast-action"
+            >
+              Open
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating trust check trigger */}
+      {wishlistedProduct && step !== "saved" && (
+        <button
+          type="button"
+          className="sarthi-floating-trigger"
+          onClick={() => setStep("saved")}
+        >
+          <ShieldCheck size={18} className={autoScan.status === "scanning" ? "spin-icon" : ""} />
+          <span>Trust check</span>
+          {autoScan.status === "ready" && (
+            <span className="floating-ready-count">1</span>
+          )}
+        </button>
       )}
     </div>
   );
@@ -520,17 +547,17 @@ function MarketplaceHome({
       ? `${selectedCategory} products`
       : "Popular products";
   const sarthiNudgeCopy = hasBuyerIntent
-    ? `${possibleComparableCount} mapped groups are ready. Save one product to compare sellers, returns, fit, and proof.`
-    : "Browse normally. When you save a mapped product, Sarthi checks similar sellers and explains the safer choice.";
+    ? `${possibleComparableCount} product groups can be checked across sellers, returns, fit, reviews, and proof.`
+    : "";
 
   return (
     <div className="marketplace-home buyer-shop-shell">
       <section className="buyer-shop-hero" aria-labelledby="buyer-shop-title">
         <div className="buyer-shop-copy">
           <span className="eyebrow">Buyer home</span>
-          <h2 id="buyer-shop-title">Find a product first. Sarthi checks it only when you save it.</h2>
+          <h2 id="buyer-shop-title">Shop normally. Check trust only when a product matters.</h2>
           <p>
-            Search, compare, and keep shopping naturally. The proof layer appears after you choose a product you actually care about.
+            Search the catalog first. When you save a product, Sarthi quietly compares seller options and explains the safer choice.
           </p>
         </div>
         <div className="shop-trust-row" aria-label="Sarthi trust checks">
@@ -579,32 +606,18 @@ function MarketplaceHome({
         </div>
       </section>
 
-      {wishlistedProduct ? (
-        <SarthiLensPanel
-          autoScan={autoScan}
-          savedProduct={wishlistedProduct}
-          similarProducts={savedSimilarProducts}
-          knowledgeGraph={knowledgeGraph}
-          graphLoading={graphLoading}
-          graphError={graphError}
-          regretDecision={regretDecision}
-          decisionQuestion={decisionQuestion}
-          decisionLoading={decisionLoading}
-          possibleComparableCount={possibleComparableCount}
-          onOpenResult={onOpenAutoScan}
-          onOpenProof={onOpenAutoScanProof}
-          onOpenGraph={onOpenGraph}
-          onDecisionQuestionChange={onDecisionQuestionChange}
-          onAskDecision={onAskDecision}
-        />
-      ) : (
+      {(hasBuyerIntent || wishlistedProduct) && (
         <div className="sarthi-nudge-strip" aria-live="polite">
           <span className="sarthi-nudge-icon">
-            <Sparkles size={17} />
+            <ShieldCheck size={17} />
           </span>
           <div>
-            <strong>Sarthi is waiting for your saved product</strong>
-            <p>{sarthiNudgeCopy}</p>
+            <strong>{wishlistedProduct ? "Trust check ready" : "Trust check available after saving"}</strong>
+            <p>
+              {wishlistedProduct
+                ? `Evidence check completed for "${wishlistedProduct.title.split("-")[0].trim()}". Open the saved check to review score, risks, proof, and seller options.`
+                : sarthiNudgeCopy}
+            </p>
           </div>
           <span>{possibleComparableCount} groups</span>
         </div>
@@ -638,7 +651,7 @@ function MarketplaceHome({
                     <span className="product-badge commerce">{p.commerce_badge}</span>
                   )}
                   {p.is_sarthi_eligible ? (
-                    <span className="product-badge mapped">Sarthi mapped</span>
+                    <span className="product-badge mapped">Checkable</span>
                   ) : (
                     <span className="product-badge catalog">Catalog only</span>
                   )}
@@ -685,7 +698,7 @@ function MarketplaceHome({
                     className={`buyer-save-btn ${isSaved ? "saved" : ""}`}
                   >
                     {isSaved ? <BookmarkCheck size={13} /> : <Heart size={13} />}
-                    <span>{isSaved ? "Saved for Sarthi" : p.is_sarthi_eligible ? "Save for Sarthi check" : "No comparison yet"}</span>
+                    <span>{isSaved ? "Saved" : p.is_sarthi_eligible ? "Check trust" : "Catalog only"}</span>
                   </button>
                 </div>
               </div>
@@ -719,7 +732,8 @@ function SarthiLensPanel({
   onOpenProof,
   onOpenGraph,
   onDecisionQuestionChange,
-  onAskDecision
+  onAskDecision,
+  hideGraphButton = false
 }: {
   autoScan: AutoScanState;
   savedProduct: Product | null;
@@ -736,6 +750,7 @@ function SarthiLensPanel({
   onOpenGraph: () => void;
   onDecisionQuestionChange: (value: string) => void;
   onAskDecision: (question: string) => void;
+  hideGraphButton?: boolean;
 }) {
   const result = autoScan.status === "ready" ? autoScan.result : null;
   const isScanning = autoScan.status === "scanning";
@@ -759,12 +774,12 @@ function SarthiLensPanel({
             <ShieldCheck size={16} />
           </div>
           <div>
-            <span className="eyebrow">Sarthi check</span>
+            <span className="eyebrow">Trust check</span>
             <h2>Save a product when you want help deciding</h2>
             <p>
               {possibleComparableCount > 0
                 ? `${possibleComparableCount} comparable product groups are available in these results.`
-                : "These results are browsable, but Sarthi will only compare products with enough mapped evidence."}
+                : "These results are browsable, but comparison starts only for products with enough mapped evidence."}
               {" "}The recommendation starts only after you save one product.
             </p>
           </div>
@@ -785,20 +800,20 @@ function SarthiLensPanel({
           <ShieldCheck size={16} />
         </div>
         <div>
-          <span className="eyebrow">Sarthi check</span>
+          <span className="eyebrow">Trust check</span>
           <h2>
             {result
-              ? "Recommendation ready"
+              ? "Evidence decision ready"
               : autoScan.status === "error"
-                ? "Sarthi could not complete this scan"
+                ? "Trust check could not complete"
                 : `Checking ${similarProducts.length || scanCount} similar seller options`}
           </h2>
           <p>
             {result
-              ? `${scanSubject} was ranked using fit, return risk, seller reliability, price facts, reviews, and private buyer context.`
+              ? `${scanSubject} was ranked using fit, return risk, seller reliability, price facts, reviews, and buyer-owned fit context.`
               : autoScan.status === "error"
                 ? autoScan.message
-                : `You saved ${savedProduct.title.split("-")[0].trim()}. Sarthi is comparing only mapped seller alternatives for this product.`}
+                : `You saved ${savedProduct.title.split("-")[0].trim()}. Only mapped seller alternatives for this product are being compared.`}
           </p>
         </div>
       </div>
@@ -810,7 +825,7 @@ function SarthiLensPanel({
           onError={(event) => { event.currentTarget.src = fallbackProductImage((winnerProduct ?? savedProduct).color_family); }}
         />
         <div>
-          <span>{result ? "Sarthi pick" : "Saved by you"}</span>
+          <span>{result ? "Recommended option" : "Saved by you"}</span>
           <strong>{(winnerProduct ?? savedProduct).title.split("-")[0].trim()}</strong>
           <small>
             {(winnerProduct ?? savedProduct).seller_name} | Rs {(winnerProduct ?? savedProduct).base_price}
@@ -828,6 +843,14 @@ function SarthiLensPanel({
         isScanning={isScanning}
         regretDecision={regretDecision}
       />
+
+      {result && (
+        <LensSellerOptionList
+          result={result}
+          similarProducts={similarProducts}
+          graph={knowledgeGraph}
+        />
+      )}
 
       <DecisionQuestionBox
         value={decisionQuestion}
@@ -847,14 +870,16 @@ function SarthiLensPanel({
             <HelpCircle size={14} />
             <span>Proof</span>
           </button>
-          <button
-            className="lens-secondary-action"
-            onClick={onOpenGraph}
-            disabled={graphLoading || (!knowledgeGraph && !graphError)}
-          >
-            <Info size={14} />
-            <span>{graphLoading ? "Preparing evidence" : graphError ? "Graph status" : "Ask graph"}</span>
-          </button>
+          {!hideGraphButton && (
+            <button
+              className="lens-secondary-action"
+              onClick={onOpenGraph}
+              disabled={graphLoading || (!knowledgeGraph && !graphError)}
+            >
+              <Info size={14} />
+              <span>{graphLoading ? "Preparing evidence" : graphError ? "Graph status" : "Ask graph"}</span>
+            </button>
+          )}
         </div>
       )}
     </section>
@@ -884,10 +909,10 @@ function LensDecisionSummary({
     return (
       <div className="lens-clean-summary scanning-state">
         <div>
-          <span className="eyebrow">Quiet check running</span>
-          <h3>{isScanning ? "Finding the safest seller option" : "Ready to check this product"}</h3>
+          <span className="eyebrow">Evidence check running</span>
+          <h3>{isScanning ? "Ranking mapped seller options" : "Ready to check this product"}</h3>
           <p>
-            Sarthi is comparing seller trust, SKU returns, fit, reviews, price facts, and your private fit context in the background.
+            Checking seller trust, SKU returns, fit, reviews, price facts, and buyer-owned fit context.
           </p>
         </div>
         <div className="lens-progress-row">
@@ -913,7 +938,7 @@ function LensDecisionSummary({
     <div className="lens-clean-summary ready-state">
       <div className="lens-decision-top">
         <div>
-          <span className="eyebrow">Sarthi decision</span>
+          <span className="eyebrow">Evidence decision</span>
           <h3>{decision?.label ?? winner.seller_name}</h3>
           <p>
             {decision?.summary ?? `Best among ${scanCount} mapped seller options for ${winner.title.split("-")[0].trim()}.`}
@@ -921,7 +946,7 @@ function LensDecisionSummary({
         </div>
         <div className="lens-score-badge">
           <strong>{score ?? "--"}</strong>
-          <span>kept score</span>
+          <span>trust score</span>
         </div>
       </div>
 
@@ -945,6 +970,88 @@ function LensDecisionSummary({
       )}
     </div>
   );
+}
+
+function LensSellerOptionList({
+  result,
+  similarProducts,
+  graph
+}: {
+  result: CompareResponse;
+  similarProducts: Product[];
+  graph: ClusterKnowledgeGraph | null;
+}) {
+  const ranked = [...result.ranking.candidates]
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3)
+    .map((candidate) => {
+      const product = productForVariant(candidate.variant_id, similarProducts);
+      const context = product
+        ? graph?.seller_context.find((item) => item.product.product_id === product.product_id)
+        : null;
+      return { candidate, product, context };
+    })
+    .filter((item) => item.product);
+
+  if (ranked.length === 0) return null;
+
+  return (
+    <div className="lens-seller-list">
+      <div className="lens-seller-list-header">
+        <div>
+          <span className="eyebrow">Seller options checked</span>
+          <strong>{ranked.length} ranked from live SKU evidence</strong>
+        </div>
+        <span>No ads used</span>
+      </div>
+
+      <div className="lens-seller-rows">
+        {ranked.map(({ candidate, product, context }, index) => {
+          if (!product) return null;
+          const isWinner = candidate.variant_id === result.ranking.winner;
+          const returnRate = context ? Math.round(context.evidence.return_rate * 100) : null;
+          const score = Math.round(candidate.score * 100);
+          return (
+            <div key={candidate.variant_id} className={`lens-seller-row ${isWinner ? "winner" : ""}`}>
+              <div className="seller-row-rank">{index + 1}</div>
+              <img
+                src={product.image_url || fallbackProductImage(product.color_family)}
+                alt={product.title}
+                onError={(event) => { event.currentTarget.src = fallbackProductImage(product.color_family); }}
+              />
+              <div className="seller-row-main">
+                <strong>{product.seller_name}</strong>
+                <span>{topCandidateFactor(candidate)} | {returnRate === null ? "returns checked" : `${returnRate}% returns`}</span>
+              </div>
+              <div className="seller-row-score">
+                <strong>{score}</strong>
+                <span>{isWinner ? "Recommended" : "Backup"}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function topCandidateFactor(candidate: CompareResponse["ranking"]["candidates"][number]) {
+  const labels: Record<string, string> = {
+    fit_match: "fit match",
+    outcome_quality: "kept-order history",
+    expectation_match: "claim match",
+    fulfilment_reliability: "dispatch reliability",
+    seller_trust: "seller trust",
+    review_signal: "review signal",
+    review_credibility: "credible reviews",
+    rating_signal: "rating signal",
+    price_value: "price value",
+    fair_start_boost: "fair-start boost"
+  };
+  const [key] = Object.entries(candidate.factors)
+    .filter(([factor]) => factor !== "uncertainty_penalty")
+    .sort((left, right) => Number(right[1]) - Number(left[1]))[0] ?? ["seller_trust"];
+  return labels[key] ?? key.replace(/_/g, " ");
 }
 
 function DecisionQuestionBox({
@@ -971,7 +1078,7 @@ function DecisionQuestionBox({
       <div>
         <span className="eyebrow">Ask one doubt</span>
         <p>
-          If proof is missing, Sarthi asks the seller for evidence instead of guessing.
+          If proof is missing, the system creates an aggregate seller proof request instead of guessing.
         </p>
       </div>
       <div className="decision-question-input">
@@ -1018,6 +1125,8 @@ function KnowledgeGraphExplorer({
   onAsk: (query: string) => void;
   onOpenProof: (traceId: string) => void;
 }) {
+  const [selectedNode, setSelectedNode] = useState<KnowledgeGraphNode | null>(null);
+
   if (loading) {
     return (
       <div className="kg-card loading">
@@ -1063,8 +1172,8 @@ function KnowledgeGraphExplorer({
     <div className="kg-card">
       <div className="kg-card-header">
         <div>
-          <span className="eyebrow">Ask Sarthi Graph</span>
-          <h3>Ask why, before you buy</h3>
+          <span className="eyebrow">Evidence map</span>
+          <h3>Ask about this decision</h3>
           <p>Answers use this product's sellers, SKU returns, ratings, reviews, fabric, price, and proof trail.</p>
         </div>
         <span className="kg-live-pill">{graph.summary.fact_count} facts</span>
@@ -1073,9 +1182,9 @@ function KnowledgeGraphExplorer({
       <div className="kg-graph-shell">
         <div className="kg-map-title">
           <strong>{answer ? "Answer path" : "Decision path"}</strong>
-          <span>{answer ? "Highlighted by your question" : "Focused view, not the full data dump"}</span>
+          <span>{answer ? "Highlighted by your question" : "Focused view | click any node to inspect"}</span>
         </div>
-        <svg viewBox="0 0 100 68" role="img" aria-label="Sarthi product knowledge graph">
+        <svg viewBox="0 0 100 68" role="img" aria-label="Product evidence map">
           {layout.edges
             .filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
             .map((edge) => {
@@ -1091,7 +1200,8 @@ function KnowledgeGraphExplorer({
                   y1={source.y}
                   x2={target.x}
                   y2={target.y}
-                  strokeWidth={0.45 + edge.weight * 0.9}
+                  strokeWidth={highlighted ? 0.8 : 0.4}
+                  stroke={highlighted ? "var(--accent-primary)" : "var(--border-subtle)"}
                 />
               );
             })}
@@ -1099,23 +1209,59 @@ function KnowledgeGraphExplorer({
           {layout.nodes.map((node) => (
             <g
               key={node.id}
-              className={`kg-node ${node.type} ${matchedNodeIds.has(node.id) ? "highlighted" : ""}`}
+              className={`kg-node ${node.type} ${matchedNodeIds.has(node.id) ? "highlighted" : ""} ${selectedNode?.id === node.id ? "selected" : ""}`}
               transform={`translate(${node.x} ${node.y})`}
+              onClick={() => setSelectedNode(node)}
             >
-              <circle r={node.type === "cluster" ? 3.2 : node.type === "product" ? 2.8 : 2.35} />
-              <text y={node.type === "cluster" ? -4.2 : 4.8}>{shortNodeLabel(node)}</text>
-              <title>{node.label} - {node.subtitle}</title>
+              <circle r={node.type === "cluster" ? 3.5 : node.type === "product" ? 3.0 : 2.5} />
+              <text y={node.type === "cluster" ? -4.5 : 5.2}>{shortNodeLabel(node)}</text>
             </g>
           ))}
         </svg>
       </div>
 
       <div className="kg-legend-row">
-        <span>Seller</span>
-        <span>SKU facts</span>
-        <span>Reviews</span>
-        <span>Private fit</span>
+        <span className="role-pill cluster">Cluster</span>
+        <span className="role-pill seller">Seller</span>
+        <span className="role-pill product">Product</span>
+        <span className="role-pill evidence">Evidence</span>
+        <span className="role-pill price">Price</span>
+        <span className="role-pill returns">Returns</span>
       </div>
+
+      {/* Selected Node details info card */}
+      {selectedNode && (
+        <div className="kg-node-details-card">
+          <div className="kg-node-details-top">
+            <div>
+              <span className="eyebrow">
+                Inspect node: {selectedNode.type}
+              </span>
+              <h4>
+                {selectedNode.label}
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedNode(null)}
+              className="kg-node-close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <p className="kg-node-subtitle">
+            {selectedNode.subtitle || "Verified node record in the commerce evidence map."}
+          </p>
+          <div className="kg-grounding-box">
+            <strong>Grounding Evidence Context:</strong>
+            <div>
+              • Fact synced from MongoDB Atlas transaction and return evidence loops.<br />
+              • Audit-mapped reference: <code>Fact-{selectedNode.id.slice(0,8)}</code><br />
+              • Privacy guard: no buyer personal data is exposed to the seller workspace.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="kg-chat-box">
         <div className="kg-suggestion-row">
@@ -1329,16 +1475,42 @@ function ProductDetailPanel({
   const [questionError, setQuestionError] = useState<string | null>(null);
   const [contractLocking, setContractLocking] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [keepConfidence, setKeepConfidence] = useState<KeepConfidenceResponse | null>(null);
+  const [keepConfidenceLoading, setKeepConfidenceLoading] = useState(false);
+  const [keepConfidenceError, setKeepConfidenceError] = useState<string | null>(null);
 
   useEffect(() => {
     setContractError(null);
+    setKeepConfidence(null);
     getProductDetail(buyerId, productId)
       .then((payload) => {
         setDetail(payload);
+        setKeepConfidence(payload.keep_confidence);
         const initialVariant = payload.variants.find((variant) => variant.variant_id === initialVariantId);
         setSelectedVariantId(initialVariant?.variant_id ?? payload.selected_variant.variant_id);
       });
   }, [buyerId, productId, initialVariantId]);
+
+  useEffect(() => {
+    if (!detail || !selectedVariantId) return;
+    if (keepConfidence?.variant_id === selectedVariantId) return;
+    let cancelled = false;
+    setKeepConfidenceLoading(true);
+    setKeepConfidenceError(null);
+    getKeepConfidence(buyerId, productId, selectedVariantId)
+      .then((payload) => {
+        if (!cancelled) setKeepConfidence(payload);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setKeepConfidenceError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setKeepConfidenceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [buyerId, detail, keepConfidence?.variant_id, productId, selectedVariantId]);
 
   if (!detail) {
     return (
@@ -1455,9 +1627,17 @@ function ProductDetailPanel({
               ))}
             </div>
             <p>
-              Sarthi recommends <strong>{detail.fit.recommended_size}</strong> from category fit memory and SKU outcomes.
+              Recommended size is <strong>{detail.fit.recommended_size}</strong> from category fit memory and SKU outcomes.
             </p>
           </section>
+
+          <KeepConfidenceCard
+            confidence={keepConfidence}
+            loading={keepConfidenceLoading}
+            error={keepConfidenceError}
+            onApplySize={(variantId) => setSelectedVariantId(variantId)}
+            onOpenAudit={onOpenAudit}
+          />
 
           <section className="sku-evidence-card">
             <span className="eyebrow">SKU factual evidence</span>
@@ -1484,6 +1664,13 @@ function ProductDetailPanel({
 
         <div className="detail-info-container">
           <div className="sarthi-confidence-strip">
+            {keepConfidence && (
+              <button className="strip-row evidence" type="button" onClick={() => onOpenAudit(keepConfidence.trace_id)}>
+                <ShieldCheck size={16} />
+                <span><strong>Keep confidence</strong> {Math.round(keepConfidence.score * 100)}/100 | {labelize(keepConfidence.confidence_band)}</span>
+                <ChevronRight size={14} />
+              </button>
+            )}
             <div className="strip-row">
               <Ruler size={17} />
               <span><strong>Size</strong> {detail.fit.recommended_size} recommended</span>
@@ -1518,10 +1705,10 @@ function ProductDetailPanel({
 
           <section className="samvaad-card">
             <div className="samvaad-card-header">
-              <Sparkles size={18} />
+              <ShieldCheck size={18} />
               <div>
-                <span className="eyebrow">Samvaad</span>
-                <h3>Ask before ordering</h3>
+                <span className="eyebrow">Listing questions</span>
+                <h3>Ask from verified facts</h3>
               </div>
             </div>
             <p>
@@ -1547,13 +1734,13 @@ function ProductDetailPanel({
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ask Sarthi..."
+                placeholder="Ask about size, fabric, seller, or offer..."
               />
               <button
                 type="button"
                 onClick={submitQuestion}
                 disabled={submitting || !query.trim()}
-                aria-label="Ask Sarthi"
+                aria-label="Ask about this listing"
               >
                 <Send size={15} />
               </button>
@@ -1561,14 +1748,14 @@ function ProductDetailPanel({
 
             {questionError && (
               <div className="notice error samvaad-error">
-                Sarthi could not answer this from verified facts right now. Please retry or inspect the product proof.
+                This question could not be answered from verified facts right now. Please retry or inspect the product proof.
               </div>
             )}
 
             {answer && (
               <div className="samvaad-response-card">
                 <div className="response-conclusion">
-                  <strong>Sarthi Answer</strong>
+                  <strong>Evidence answer</strong>
                   <p>{answer.answer.summary}</p>
                 </div>
                 <div className="response-reasons">
@@ -1618,13 +1805,110 @@ function ProductDetailPanel({
               onClick={handleBuyWithContract}
               disabled={contractLocking}
             >
-              <span>{contractLocking ? "Locking contract" : "Buy COD with Sarthi"}</span>
+              <span>{contractLocking ? "Locking contract" : "Continue to checkout"}</span>
               <ChevronRight size={18} />
             </button>
           </section>
         </div>
       </div>
     </div>
+  );
+}
+
+function KeepConfidenceCard({
+  confidence,
+  loading,
+  error,
+  onApplySize,
+  onOpenAudit
+}: {
+  confidence: KeepConfidenceResponse | null;
+  loading: boolean;
+  error: string | null;
+  onApplySize: (variantId: string) => void;
+  onOpenAudit: (traceId: string) => void;
+}) {
+  if (error) {
+    return (
+      <section className="keep-confidence-card">
+        <span className="eyebrow">Keep confidence</span>
+        <strong>Could not refresh confidence</strong>
+        <p>Continue only from visible product evidence, or retry after the API is reachable.</p>
+      </section>
+    );
+  }
+
+  if (!confidence) {
+    return (
+      <section className="keep-confidence-card loading">
+        <span className="eyebrow">Keep confidence</span>
+        <strong>{loading ? "Checking this size" : "Waiting for evidence"}</strong>
+        <p>Sarthi is checking fit memory, SKU outcomes, seller status, and proof gaps.</p>
+      </section>
+    );
+  }
+
+  const score = Math.round(confidence.score * 100);
+  const primaryAction = confidence.interventions[0];
+  const canApplySize = primaryAction?.type === "change_size" && Boolean(primaryAction.target_variant_id);
+
+  return (
+    <section className={`keep-confidence-card ${confidence.confidence_band}`}>
+      <div className="keep-confidence-top">
+        <div>
+          <span className="eyebrow">Keep confidence</span>
+          <strong>{confidence.headline}</strong>
+        </div>
+        <div className="keep-score-meter" aria-label={`Keep confidence ${score} out of 100`}>
+          <span>{score}</span>
+          <small>/100</small>
+        </div>
+      </div>
+
+      <p>{confidence.summary}</p>
+
+      <div className="keep-driver-list">
+        {confidence.drivers.slice(0, 4).map((driver) => (
+          <span key={`${driver.type}-${driver.label}`} className={driver.positive ? "positive" : driver.severity}>
+            {driver.label}
+          </span>
+        ))}
+      </div>
+
+      {primaryAction && (
+        <div className="keep-action-row">
+          <div>
+            <span>Best next step</span>
+            <strong>{primaryAction.label}</strong>
+            <small>{primaryAction.reason}</small>
+          </div>
+          {canApplySize ? (
+            <button
+              type="button"
+              onClick={() => onApplySize(primaryAction.target_variant_id!)}
+            >
+              Apply
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpenAudit(confidence.trace_id)}
+            >
+              Proof
+            </button>
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        className="keep-proof-link"
+        onClick={() => onOpenAudit(confidence.trace_id)}
+      >
+        <HelpCircle size={12} />
+        <span>Why this score?</span>
+      </button>
+    </section>
   );
 }
 
@@ -1641,7 +1925,7 @@ function ExpectationContractPreview({
   const checks = [
     {
       label: "Fit",
-      value: `Size ${selectedVariant.size}, Sarthi recommends ${detail.fit.recommended_size}`,
+      value: `Size ${selectedVariant.size}, recommended ${detail.fit.recommended_size}`,
       status: detail.fit.confidence
     },
     {
@@ -1666,9 +1950,9 @@ function ExpectationContractPreview({
       <div className="expectation-preview-header">
         <div>
           <span className="eyebrow">Expectation contract</span>
-          <h3>What Sarthi will hold accountable</h3>
+          <h3>What will be held accountable</h3>
           <p>
-            Before checkout, Sarthi locks a fact-backed snapshot of size, fabric, color, dispatch, and offer claims for this exact SKU.
+            Before checkout, the app locks a fact-backed snapshot of size, fabric, color, dispatch, and offer claims for this exact SKU.
           </p>
         </div>
         <span>{detail.evidence.delivered_orders_90d} orders</span>
@@ -1815,7 +2099,7 @@ function AgentCheckTimeline({ detail }: { detail: ProductDetailResponse }) {
       passed: true,
       body: detail.privacy.fit_memory_enabled
         ? "Personal fit memory was used only for this buyer."
-        : "Personal fit memory is off; Sarthi used aggregate evidence only."
+        : "Personal fit memory is off; aggregate evidence was used only."
     }
   ];
 
@@ -1824,7 +2108,7 @@ function AgentCheckTimeline({ detail }: { detail: ProductDetailResponse }) {
       <div className="agent-check-header">
         <div>
           <span className="eyebrow sheet-eyebrow-primary">Agent checks</span>
-          <h3>What Sarthi verified</h3>
+          <h3>Checks completed</h3>
         </div>
         <ShieldCheck size={18} />
       </div>
@@ -1853,4 +2137,107 @@ function fallbackProductImage(color: string) {
   if (color === "pink") return "/product-pink.svg";
   if (color === "maroon") return "/product-maroon.svg";
   return "/product-blue.svg";
+}
+
+function SarthiSavedWorkspacePanel({
+  buyerId,
+  savedProduct,
+  products,
+  autoScan,
+  knowledgeGraph,
+  graphLoading,
+  graphError,
+  regretDecision,
+  decisionQuestion,
+  decisionLoading,
+  graphAnswer,
+  graphQuery,
+  graphAsking,
+  onBack,
+  onOpenResult,
+  onOpenProof,
+  onDecisionQuestionChange,
+  onAskDecision,
+  onQueryChange,
+  onAskGraph
+}: {
+  buyerId: string;
+  savedProduct: Product;
+  products: Product[];
+  autoScan: AutoScanState;
+  knowledgeGraph: ClusterKnowledgeGraph | null;
+  graphLoading: boolean;
+  graphError: string | null;
+  regretDecision: RegretDecisionResponse | null;
+  decisionQuestion: string;
+  decisionLoading: boolean;
+  graphAnswer: KnowledgeGraphChatResponse | null;
+  graphQuery: string;
+  graphAsking: boolean;
+  onBack: () => void;
+  onOpenResult: (res: CompareResponse) => void;
+  onOpenProof: (traceId: string) => void;
+  onDecisionQuestionChange: (value: string) => void;
+  onAskDecision: (question: string) => void;
+  onQueryChange: (value: string) => void;
+  onAskGraph: (query: string) => void;
+}) {
+  return (
+    <div className="sarthi-saved-workspace buyer-shop-shell">
+      <header className="workspace-header">
+        <button
+          type="button"
+          onClick={onBack}
+          className="workspace-back-button"
+        >
+          <ArrowLeft size={16} />
+          <span>Back to catalog</span>
+        </button>
+        <span>Saved product check</span>
+      </header>
+
+      <div className="workspace-grid">
+        {/* Left column: saved product evidence */}
+        <div className="workspace-column">
+          <SarthiLensPanel
+            autoScan={autoScan}
+            savedProduct={savedProduct}
+            similarProducts={products.filter((product) => product.cluster_id === savedProduct.cluster_id && product.is_sarthi_eligible)}
+            knowledgeGraph={knowledgeGraph}
+            graphLoading={graphLoading}
+            graphError={graphError}
+            regretDecision={regretDecision}
+            decisionQuestion={decisionQuestion}
+            decisionLoading={decisionLoading}
+            possibleComparableCount={new Set(products.filter((product) => product.is_sarthi_eligible).map((product) => product.cluster_id)).size}
+            onOpenResult={onOpenResult}
+            onOpenProof={onOpenProof}
+            onOpenGraph={() => {}} // Unused since graph is inline next to it
+            onDecisionQuestionChange={onDecisionQuestionChange}
+            onAskDecision={onAskDecision}
+            hideGraphButton={true}
+          />
+        </div>
+
+        {/* Right Column: Knowledge Graph */}
+        <div className="workspace-column">
+          <div className="kg-header-row">
+            <h3>Decision map</h3>
+            <span>Live evidence</span>
+          </div>
+          <KnowledgeGraphExplorer
+            graph={knowledgeGraph}
+            answer={graphAnswer}
+            query={graphQuery}
+            loading={graphLoading}
+            asking={graphAsking}
+            error={graphError}
+            onQueryChange={onQueryChange}
+            onAsk={onAskGraph}
+            onOpenProof={onOpenProof}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }

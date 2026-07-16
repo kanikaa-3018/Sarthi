@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, HelpCircle, CheckCircle2, Clock, PackageCheck, Tag } from "lucide-react";
+import {
+  ShieldCheck,
+  HelpCircle,
+  CheckCircle2,
+  Clock,
+  PackageCheck,
+  Tag,
+  CreditCard,
+  Banknote,
+  Truck,
+  IndianRupee
+} from "lucide-react";
 import { verifyOffer } from "../api/client";
-import type { CheckoutResponse, ExpectationContract, OfferCheck } from "../types/api";
+import type { CheckoutResponse, ExpectationContract, KeepConfidenceResponse, OfferCheck } from "../types/api";
 import { OutcomeScreen } from "./OutcomeScreen";
 
 type Props = {
@@ -24,6 +35,7 @@ export function CheckoutSheet({
   experienceMode
 }: Props) {
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null);
+  const [paymentMode, setPaymentMode] = useState<"prepaid" | "cod">("cod");
   const [ordered, setOrdered] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isSimple = experienceMode === "simple";
@@ -31,8 +43,12 @@ export function CheckoutSheet({
   useEffect(() => {
     setCheckout(null);
     setOrdered(false);
+    setPaymentMode("cod");
     verifyOffer(buyerId, variantId)
-      .then(setCheckout)
+      .then((payload) => {
+        setCheckout(payload);
+        setPaymentMode(payload.offer.status === "verified_price_drop" ? "prepaid" : "cod");
+      })
       .catch((err: Error) => setError(err.message));
   }, [buyerId, variantId]);
 
@@ -70,6 +86,15 @@ export function CheckoutSheet({
 
   const dealStatus = getDealStatusContent();
   const size = variantId.split("_").pop() || "XL";
+  const keepConfidence = checkout?.keep_confidence ?? null;
+  const keepScore = keepConfidence ? Math.round(keepConfidence.score * 100) : null;
+  const keepStrong = (keepConfidence?.score ?? 0) >= 0.75;
+  const prepaidRecommended = checkout?.offer.status === "verified_price_drop" && keepStrong;
+  const paymentCopy = prepaidRecommended
+    ? "Online payment is recommended because the offer is verified and keep confidence is strong. COD is still available."
+    : checkout?.offer.status === "verified_price_drop"
+      ? "The offer is verified, but Sarthi is not pushing prepaid until product confidence is stronger."
+      : "COD stays selected because a strong prepaid claim is not available for this item yet.";
 
   return (
     <div className="checkout-sheet-root">
@@ -87,7 +112,10 @@ export function CheckoutSheet({
             {!isSimple && (
               <div className="kv-row">
                 <span>Product confidence</span>
-                <strong>Strong</strong>
+                <strong>
+                  {keepScore === null ? "Checking" : `${keepScore}/100`}
+                  {keepConfidence && <span className={`ui-badge ${keepStrong ? "positive" : "neutral"}`}>{labelize(keepConfidence.confidence_band)}</span>}
+                </strong>
               </div>
             )}
 
@@ -105,6 +133,57 @@ export function CheckoutSheet({
 
           {checkout && <OfferTruthEvidence offer={checkout.offer} isSimple={isSimple} />}
 
+          {keepConfidence && (
+            <CheckoutKeepConfidence
+              confidence={keepConfidence}
+              isSimple={isSimple}
+              onOpenAudit={onOpenAudit}
+            />
+          )}
+
+          <div className="checkout-payment-card">
+            <div className="checkout-payment-header">
+              <div>
+                <span className="eyebrow">Payment choice</span>
+                <strong>{prepaidRecommended ? "Online payment recommended" : "COD selected for now"}</strong>
+              </div>
+              <span>{prepaidRecommended ? "Verified" : "Cautious"}</span>
+            </div>
+            <p>{paymentCopy}</p>
+            <div className="checkout-payment-options">
+              <button
+                type="button"
+                className={paymentMode === "prepaid" ? "active" : ""}
+                onClick={() => setPaymentMode("prepaid")}
+                disabled={!checkout}
+              >
+                <CreditCard size={16} />
+                <span>
+                  <strong>Pay online</strong>
+                  <small>{prepaidRecommended ? "Recommended with verified offer" : "Available, but not pushed"}</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className={paymentMode === "cod" ? "active" : ""}
+                onClick={() => setPaymentMode("cod")}
+                disabled={!checkout}
+              >
+                <Banknote size={16} />
+                <span>
+                  <strong>Cash on delivery</strong>
+                  <small>Available without penalty</small>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <CheckoutImpactLedger
+            paymentMode={paymentMode}
+            prepaidRecommended={prepaidRecommended}
+            offerStatus={checkout?.offer.status ?? null}
+          />
+
           {expectationContract && (
             <CheckoutExpectationContract
               contract={expectationContract}
@@ -112,14 +191,14 @@ export function CheckoutSheet({
             />
           )}
 
-          {/* Place COD Order Button */}
+          {/* Place order button */}
           <button
             className="checkout-primary-cta"
             onClick={() => setOrdered(true)}
             disabled={!checkout}
           >
             <CheckCircle2 size={16} />
-            <span>Place COD order</span>
+            <span>{paymentMode === "prepaid" ? "Place prepaid order" : "Place COD order"}</span>
           </button>
 
           {/* Audit trail trigger */}
@@ -142,6 +221,111 @@ export function CheckoutSheet({
           contractId={expectationContract?.contract_id ?? null}
           onClose={onClose} 
         />
+      )}
+    </div>
+  );
+}
+
+function CheckoutImpactLedger({
+  paymentMode,
+  prepaidRecommended,
+  offerStatus
+}: {
+  paymentMode: "prepaid" | "cod";
+  prepaidRecommended: boolean;
+  offerStatus: OfferCheck["status"] | null;
+}) {
+  const onlineSelected = paymentMode === "prepaid";
+  const items = [
+    {
+      label: "Buyer trust",
+      value: onlineSelected
+        ? prepaidRecommended
+          ? "Bank/price benefit is shown only after price evidence passes."
+          : "Online payment is allowed, but the app is not pushing a weak offer."
+        : "COD remains available with no penalty or hidden pressure.",
+      icon: <ShieldCheck size={15} />
+    },
+    {
+      label: "Seller impact",
+      value: onlineSelected
+        ? "Lower doorstep rejection risk, so stock and packing effort are not wasted."
+        : "Seller still carries rejection risk until the order is accepted.",
+      icon: <PackageCheck size={15} />
+    },
+    {
+      label: "Delivery impact",
+      value: onlineSelected
+        ? "Fewer failed cash collections and repeated delivery attempts."
+        : "Delivery slot is reserved even if the buyer rejects at doorstep.",
+      icon: <Truck size={15} />
+    }
+  ];
+
+  return (
+    <div className="checkout-impact-ledger">
+      <div className="checkout-impact-header">
+        <div>
+          <span className="eyebrow">Checkout impact</span>
+          <strong>{onlineSelected ? "Why prepaid is safe here" : "What COD means here"}</strong>
+        </div>
+        <span>{offerStatus ? labelize(offerStatus) : "checking"}</span>
+      </div>
+      <div className="checkout-impact-list">
+        {items.map((item) => (
+          <div key={item.label}>
+            <span>{item.icon}{item.label}</span>
+            <p>{item.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="checkout-impact-note">
+        <IndianRupee size={14} />
+        <span>No payment method is forced. The nudge changes only when verified price and trust evidence change.</span>
+      </div>
+    </div>
+  );
+}
+
+function CheckoutKeepConfidence({
+  confidence,
+  isSimple,
+  onOpenAudit
+}: {
+  confidence: KeepConfidenceResponse;
+  isSimple: boolean;
+  onOpenAudit: (traceId: string) => void;
+}) {
+  const score = Math.round(confidence.score * 100);
+  const drivers = confidence.drivers.slice(0, isSimple ? 2 : 4);
+  const primaryAction = confidence.interventions[0];
+
+  return (
+    <div className={`checkout-keep-card ${confidence.confidence_band}`}>
+      <div className="checkout-keep-header">
+        <div>
+          <span className="eyebrow">Product confidence</span>
+          <strong>{confidence.headline}</strong>
+        </div>
+        <span>{score}/100</span>
+      </div>
+      <p>{confidence.summary}</p>
+      {!isSimple && drivers.length > 0 && (
+        <div className="checkout-keep-driver-row">
+          {drivers.map((driver) => (
+            <span key={`${driver.type}-${driver.label}`} className={driver.positive ? "positive" : driver.severity}>
+              {driver.label}
+            </span>
+          ))}
+        </div>
+      )}
+      {primaryAction && (
+        <div className="checkout-keep-action">
+          <span>{primaryAction.label}</span>
+          <button type="button" onClick={() => onOpenAudit(confidence.trace_id)}>
+            Proof
+          </button>
+        </div>
       )}
     </div>
   );

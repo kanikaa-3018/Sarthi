@@ -3,6 +3,7 @@ import type {
   AdminReviewQueue,
   AuthSession,
   AuditTrace,
+  BuyerDashboardResponse,
   BuyerMemoryResponse,
   CheckoutResponse,
   ClusterKnowledgeGraph,
@@ -11,6 +12,7 @@ import type {
   ExpectationContract,
   FeedResponse,
   KnowledgeGraphChatResponse,
+  KeepConfidenceResponse,
   MemorySettingsResponse,
   OutcomeResponse,
   Product,
@@ -274,6 +276,17 @@ export function getSkuTruthPassport(buyerId: string, productId: string, variantI
   return request<SkuTruthPassport>(`/products/${encodeURIComponent(productId)}/sku-passport?${params.toString()}`);
 }
 
+export function getKeepConfidence(buyerId: string, productId: string, variantId: string) {
+  const params = new URLSearchParams({
+    buyer_id: buyerId,
+    variant_id: variantId,
+    preferred_fit: "comfort"
+  });
+  return request<KeepConfidenceResponse>(
+    `/products/${encodeURIComponent(productId)}/keep-confidence?${params.toString()}`
+  );
+}
+
 export function runRegretFirewall(payload: {
   buyer_id: string;
   product_id?: string;
@@ -388,6 +401,10 @@ export function getAudit(traceId: string) {
 
 export function getPrivacy(buyerId: string) {
   return request<PrivacySummary>(`/buyers/${encodeURIComponent(buyerId)}/privacy`);
+}
+
+export function getBuyerDashboard(buyerId: string) {
+  return request<BuyerDashboardResponse>(`/buyers/${encodeURIComponent(buyerId)}/dashboard`);
 }
 
 export function getMemory(buyerId: string) {
