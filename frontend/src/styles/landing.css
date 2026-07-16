@@ -243,7 +243,7 @@
 
 .auth-context h1 {
   color: #fff;
-  font-size: clamp(30px, 4vw, 50px);
+  font-size: 44px;
   max-width: 720px;
 }
 
@@ -302,7 +302,7 @@
   font-size: 12px;
   font-weight: 700;
   align-self: flex-start;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   text-transform: uppercase;
   display: flex;
   align-items: center;
@@ -310,7 +310,7 @@
 }
 
 .hero-content h1 {
-  font-size: clamp(32px, 4vw, 48px);
+  font-size: 42px;
   line-height: 1.1;
   letter-spacing: 0;
 }
@@ -977,7 +977,7 @@
   padding: 12px;
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   background: transparent;
   outline: none;
   color: var(--text-primary);
@@ -997,8 +997,8 @@
   font-weight: 800;
   text-align: center;
   width: 140px;
-  letter-spacing: 0.5em;
-  text-indent: 0.25em;
+  letter-spacing: 0;
+  text-indent: 0;
   color: var(--text-primary);
   background: var(--bg-surface);
   outline: none;

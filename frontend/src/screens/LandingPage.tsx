@@ -11,8 +11,7 @@ import {
   Database, 
   TrendingDown, 
   Users, 
-  ShoppingBag,
-  Sparkles
+  ShoppingBag
 } from "lucide-react";
 
 type Props = {
@@ -35,7 +34,7 @@ export function LandingPage({ onStartDemo }: Props) {
             <a href="#architecture" className="nav-link">Architecture</a>
           </nav>
           <button className="hero-btn" onClick={onStartDemo}>
-            Launch Simulator
+            Open Workspace
             <ArrowRight size={14} />
           </button>
         </div>
@@ -45,8 +44,8 @@ export function LandingPage({ onStartDemo }: Props) {
       <section className="hero-section">
         <div className="hero-content">
           <div className="hero-tagline">
-            <Sparkles size={12} style={{ marginRight: 6 }} />
-            Agentic AI for Bharat Commerce
+            <ShieldCheck size={12} style={{ marginRight: 6 }} />
+            Agentic Trust Layer for Bharat Commerce
           </div>
           <h1>Talk to any product. Buy with confidence.</h1>
           <p>
@@ -54,7 +53,7 @@ export function LandingPage({ onStartDemo }: Props) {
           </p>
           <div className="cta-group">
             <button className="btn-primary" onClick={onStartDemo}>
-              Try Sarthi Interactive Demo
+              Try Product Flow
               <ChevronRight size={16} />
             </button>
             <a href="#features" className="btn-secondary">
@@ -237,8 +236,8 @@ export function LandingPage({ onStartDemo }: Props) {
               <div className="arch-step-row">
                 <div className="arch-step-num">1</div>
                 <div className="arch-step-text">
-                  <h4>SQLite Fact Source</h4>
-                  <p>Keeps track of raw order histories, price revisions, and transaction records.</p>
+                  <h4>MongoDB Atlas Evidence Store</h4>
+                  <p>Keeps product facts, order outcomes, price revisions, reviewer profiles, and audit records.</p>
                 </div>
               </div>
               <div className="arch-step-row">
@@ -277,10 +276,10 @@ export function LandingPage({ onStartDemo }: Props) {
         <div className="cta-banner">
           <h2>Ready to experience Sarthi?</h2>
           <p>
-            Step into the interactive simulator. Switch buyer personas, compare items, query Sarthi via chat, and sync delivery results back to the graph.
+            Step into the product workspace. Switch buyer personas, compare items, ask evidence-backed questions, and sync delivery results back to the graph.
           </p>
           <button className="btn-primary" onClick={onStartDemo} style={{ padding: "16px 36px", fontSize: 16 }}>
-            Launch Simulator App
+            Open Product Workspace
             <ArrowRight size={18} />
           </button>
         </div>

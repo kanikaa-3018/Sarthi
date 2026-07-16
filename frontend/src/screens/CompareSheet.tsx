@@ -126,14 +126,14 @@ export function CompareSheet({
         <div className="compare-engine-card">
           <div className="compare-engine-header">
             <div>
-              <span className="eyebrow">Automated ranking engine</span>
-              <h4>All mapped seller options</h4>
+              <span className="eyebrow">Trust ranking</span>
+              <h4>Seller options checked</h4>
             </div>
             <span className="ui-badge neutral">{candidateRows.length} checked</span>
           </div>
           <p>
-            Sarthi ranks the saved product cluster by kept-order score. It uses fit, avoidable returns,
-            expectation match, dispatch reliability, seller trust, and graph proof. It does not use ad position.
+            Ranked using seller reliability, kept-order history, fit signals, reviews, price facts, and proof.
+            Ads or paid position are not used.
           </p>
           <div className="compare-candidate-list">
             {candidateRows.map(({ candidate, details, index, isWinner, isAlternative }) => (
@@ -172,7 +172,7 @@ export function CompareSheet({
         </span>
         <button type="button" onClick={onOpenAudit}>
           <HelpCircle size={12} />
-          {isSimple ? "Proof" : "How Sarthi decided"}
+          {isSimple ? "Proof" : "Why this option won"}
         </button>
       </div>
 
@@ -210,5 +210,5 @@ function getProductDetailsForVariant(variantId: string, productCatalog: Product[
 type CandidateFactor = Exclude<keyof CandidateScore["factors"], "uncertainty_penalty">;
 
 function factorPercent(candidate: CandidateScore, factor: CandidateFactor) {
-  return `${Math.round(candidate.factors[factor] * 100)}%`;
+  return `${Math.round((candidate.factors[factor] ?? 0) * 100)}%`;
 }

@@ -42,7 +42,7 @@
   color: var(--text-primary);
   background-color: var(--bg-beige);
   font-family: 'Noto Sans', 'Noto Sans Devanagari', 'Inter', system-ui, -apple-system, sans-serif;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -100,6 +100,9 @@
 
 body {
   background-color: var(--bg-beige);
+  background-image: radial-gradient(color-mix(in srgb, var(--text-primary) 4%, transparent) 1px, transparent 1px);
+  background-size: 6px 6px;
+  background-attachment: fixed;
   color: var(--text-primary);
   line-height: 1.5;
 }
@@ -190,15 +193,15 @@ select:focus, textarea:focus, input:focus {
   background-color: color-mix(in srgb, var(--bg-surface) 92%, transparent);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 10px 24px;
+  padding: 9px 22px;
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 0 rgba(44, 40, 32, 0.02);
 }
 
 .web-header-container {
-  max-width: 1200px;
+  max-width: 1320px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -382,21 +385,21 @@ select:focus, textarea:focus, input:focus {
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .commerce-header {
-  padding: 12px 24px;
+  padding: 9px 22px;
 }
 
 .commerce-header-container {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   grid-template-columns: auto minmax(260px, 1fr) auto;
 }
 
 .commerce-brand {
-  border-radius: 12px;
+  border-radius: 8px;
   min-width: 0;
   padding: 4px 6px 4px 0;
 }
@@ -413,7 +416,7 @@ select:focus, textarea:focus, input:focus {
 .commerce-nav {
   align-items: center;
   display: flex;
-  gap: 4px;
+  gap: 2px;
   justify-self: center;
   min-width: 0;
 }
@@ -421,14 +424,14 @@ select:focus, textarea:focus, input:focus {
 .commerce-nav button,
 .commerce-role-lock {
   align-items: center;
-  border-radius: 999px;
+  border-radius: 8px;
   color: var(--text-secondary);
   display: inline-flex;
   font-size: 13px;
   font-weight: 850;
   gap: 7px;
-  min-height: 38px;
-  padding: 8px 14px;
+  min-height: 34px;
+  padding: 7px 11px;
   white-space: nowrap;
 }
 
@@ -438,9 +441,9 @@ select:focus, textarea:focus, input:focus {
 }
 
 .commerce-nav button.active {
-  background: var(--text-primary);
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--text-primary) 13%, transparent);
-  color: var(--bg-surface);
+  background: var(--bg-surface-muted);
+  box-shadow: none;
+  color: var(--text-primary);
 }
 
 .commerce-role-lock {
@@ -471,7 +474,7 @@ select:focus, textarea:focus, input:focus {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-left: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: 10px;
   gap: 8px;
   min-height: 38px;
   padding: 4px 5px 4px 10px;
@@ -497,7 +500,7 @@ select:focus, textarea:focus, input:focus {
   color: var(--text-secondary);
   font-size: 9.5px;
   font-weight: 900;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
