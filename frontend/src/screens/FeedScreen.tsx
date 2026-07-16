@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { 
   ArrowLeft,
   Search, 
@@ -64,6 +65,12 @@ type AutoScanState =
   | { status: "error"; clusterId: string; title: string; message: string };
 
 export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ productId?: string }>();
+  const routeMode = shopRouteMode(location.pathname);
+  const routeVariantId = useMemo(() => new URLSearchParams(location.search).get("variant"), [location.search]);
+  const hydratedSavedRouteRef = useRef<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
@@ -89,7 +96,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [error, setError] = useState<string | null>(null);
   
   // Buyer flow step: "feed" | "detail" | "saved"
-  const [step, setStep] = useState<"feed" | "detail" | "saved">("feed");
+  const [step, setStep] = useState<"feed" | "detail" | "saved">(routeMode);
   
   // Overlay/Sheet visibility
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
@@ -115,6 +122,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setWishlistRadar(null);
     setRadarLoading(false);
     setRadarError(null);
+    hydratedSavedRouteRef.current = null;
     setSelectedClusterId("");
     setKnowledgeGraph(null);
     setGraphAnswer(null);
@@ -124,7 +132,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setDecisionQuestion("");
     setDecisionLoading(false);
     setError(null);
-    setStep("feed");
+    setStep(shopRouteMode(window.location.pathname));
     
     Promise.allSettled([getFeed(buyerId), getFitProfiles(buyerId)])
       .then(([feedOutcome, profileOutcome]) => {
@@ -157,15 +165,50 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
   const activeClusterId = selectedClusterId || wishlistedProduct?.cluster_id || "";
 
-  function handleViewProductDetail(prodId: string, varId: string) {
+  useEffect(() => {
+    if (!ready) return;
+    const routeProductId = params.productId;
+    if (routeMode === "feed") {
+      setStep("feed");
+      return;
+    }
+    if (!routeProductId || products.length === 0) return;
+
+    const routeProduct = products.find((product) => product.product_id === routeProductId);
+    if (!routeProduct) {
+      setError(`Product ${routeProductId} is not available in the current catalog.`);
+      navigate("/shop", { replace: true });
+      return;
+    }
+
+    setSelectedClusterId(routeProduct.cluster_id);
+    if (routeMode === "detail") {
+      setSelectedProductId(routeProduct.product_id);
+      setSelectedVariantId(routeVariantId);
+      setStep("detail");
+      return;
+    }
+
+    setStep("saved");
+    if (wishlistedProduct?.product_id === routeProduct.product_id) return;
+    if (hydratedSavedRouteRef.current === routeProduct.product_id) return;
+    hydratedSavedRouteRef.current = routeProduct.product_id;
+    void handleWishlistProduct(routeProduct, { syncRoute: false });
+  }, [navigate, params.productId, products, ready, routeMode, routeVariantId, wishlistedProduct?.product_id]);
+
+  function handleViewProductDetail(prodId: string, varId?: string | null) {
     setSelectedProductId(prodId);
-    setSelectedVariantId(varId);
+    setSelectedVariantId(varId ?? null);
     setActiveExpectationContract(null);
     setStep("detail");
     setCompareSheetOpen(false);
+    navigate(`/shop/product/${encodeURIComponent(prodId)}${varId ? `?variant=${encodeURIComponent(varId)}` : ""}`);
   }
 
-  async function handleWishlistProduct(product: Product) {
+  async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean } = {}) {
+    if (options.syncRoute !== false) {
+      navigate(`/shop/saved/${encodeURIComponent(product.product_id)}`);
+    }
     setWishlistedProduct(product);
     setSelectedClusterId(product.cluster_id);
     setActiveExpectationContract(null);
@@ -332,6 +375,7 @@ function openAutoScanResult(result: CompareResponse) {
           decisionLoading={decisionLoading}
           hasBuyerIntent={Boolean(searchTerm.trim()) || selectedCategory !== "All" || Boolean(wishlistedProduct)}
           onQuickSearch={setSearchTerm}
+          onProductOpen={(product) => handleViewProductDetail(product.product_id, null)}
           onWishlistProduct={handleWishlistProduct}
           onOpenAutoScan={openAutoScanResult}
           onOpenGraph={() => setStep("saved")}
@@ -361,7 +405,7 @@ function openAutoScanResult(result: CompareResponse) {
           radarLoading={radarLoading}
           radarError={radarError}
           activeFitProfile={activeFitProfile}
-          onBack={() => setStep("feed")}
+          onBack={() => navigate("/shop")}
           onOpenResult={(res) => {
             setComparison(res);
             setCompareSheetOpen(true);
@@ -376,13 +420,13 @@ function openAutoScanResult(result: CompareResponse) {
           onAskGraph={handleAskKnowledgeGraph}
         />
       ) : (
-        selectedProductId && selectedVariantId && comparison && (
+        selectedProductId && (
           <ProductDetailPanel
             buyerId={buyerId}
             productId={selectedProductId}
             initialVariantId={selectedVariantId}
             clusterId={activeClusterId}
-            onBack={() => setStep("feed")}
+            onBack={() => navigate("/shop")}
             onOpenAudit={(traceId) => {
               setAuditTraceId(traceId);
               setAuditDrawerOpen(true);
@@ -390,7 +434,7 @@ function openAutoScanResult(result: CompareResponse) {
             onOpenCheckout={handleOpenCheckout}
             language={language}
             experienceMode={experienceMode}
-            comparisonTraceId={comparison.trace_id}
+            comparisonTraceId={comparison?.trace_id}
           />
         )
       )}
@@ -476,17 +520,17 @@ function openAutoScanResult(result: CompareResponse) {
         </div>
       )}
 
-      {/* Trust check ready toast */}
+      {/* Saved radar ready toast */}
       {wishlistedProduct && autoScan.status === "ready" && step !== "saved" && (
         <div
           className="sarthi-scan-toast"
         >
           <ShieldCheck size={16} />
           <div className="sarthi-toast-content">
-            <span>Evidence check is ready for the saved product.</span>
+            <span>Saved-product radar is ready.</span>
             <button
               type="button"
-              onClick={() => setStep("saved")}
+              onClick={() => navigate(`/shop/saved/${encodeURIComponent(wishlistedProduct.product_id)}`)}
               className="sarthi-toast-action"
             >
               Open
@@ -500,10 +544,10 @@ function openAutoScanResult(result: CompareResponse) {
         <button
           type="button"
           className="sarthi-floating-trigger"
-          onClick={() => setStep("saved")}
+          onClick={() => navigate(`/shop/saved/${encodeURIComponent(wishlistedProduct.product_id)}`)}
         >
           <ShieldCheck size={18} className={autoScan.status === "scanning" ? "spin-icon" : ""} />
-          <span>Trust check</span>
+          <span>Radar</span>
           {autoScan.status === "ready" && (
             <span className="floating-ready-count">1</span>
           )}
@@ -529,6 +573,12 @@ function compareFromDecision(decision: RegretDecisionResponse): CompareResponse 
   };
 }
 
+function shopRouteMode(pathname: string): "feed" | "detail" | "saved" {
+  if (pathname.includes("/shop/product/")) return "detail";
+  if (pathname.includes("/shop/saved/")) return "saved";
+  return "feed";
+}
+
 // Marketplace Feed Component (Responsive Grid view)
 function MarketplaceHome({
   products,
@@ -550,6 +600,7 @@ function MarketplaceHome({
   decisionLoading,
   hasBuyerIntent,
   onQuickSearch,
+  onProductOpen,
   onWishlistProduct,
   onOpenAutoScan,
   onOpenGraph,
@@ -576,6 +627,7 @@ function MarketplaceHome({
   decisionLoading: boolean;
   hasBuyerIntent: boolean;
   onQuickSearch: (value: string) => void;
+  onProductOpen: (product: Product) => void;
   onWishlistProduct: (product: Product) => void;
   onOpenAutoScan: (result: CompareResponse) => void;
   onOpenGraph: () => void;
@@ -604,10 +656,10 @@ function MarketplaceHome({
     <div className="marketplace-home buyer-shop-shell">
       <section className="buyer-shop-hero" aria-labelledby="buyer-shop-title">
         <div className="buyer-shop-copy">
-          <span className="eyebrow">Buyer home</span>
-          <h2 id="buyer-shop-title">Shop normally. Check trust only when a product matters.</h2>
+          <span className="eyebrow">Catalog</span>
+          <h2 id="buyer-shop-title">Search first. Verify only the products you care about.</h2>
           <p>
-            Search the catalog first. When you save a product, Sarthi quietly compares seller options and explains the safer choice.
+            Open a listing like a regular shopping app, or save it when you want Sarthi to compare seller options, size risk, reviews, returns, proof, and checkout confidence.
           </p>
         </div>
         <div className="shop-trust-row" aria-label="Sarthi trust checks">
@@ -662,10 +714,10 @@ function MarketplaceHome({
             <ShieldCheck size={17} />
           </span>
           <div>
-            <strong>{wishlistedProduct ? "Trust check ready" : "Trust check available after saving"}</strong>
+            <strong>{wishlistedProduct ? "Saved product evidence is ready" : "Evidence check starts after saving"}</strong>
             <p>
               {wishlistedProduct
-                ? `Evidence check completed for "${wishlistedProduct.title.split("-")[0].trim()}". Open the saved check to review score, risks, proof, and seller options.`
+                ? `Radar completed for "${wishlistedProduct.title.split("-")[0].trim()}". Review seller options, proof gaps, size fit, and checkout guardrails.`
                 : sarthiNudgeCopy}
               {activeFitProfile ? ` Fit context: ${activeFitProfile.label}.` : ""}
             </p>
@@ -688,7 +740,7 @@ function MarketplaceHome({
             const strikePrice = Math.round(p.base_price * 1.35);
             const isSaved = wishlistedProduct?.product_id === p.product_id;
             return (
-              <div
+              <article
                 key={p.product_id}
                 className={`buyer-product-card ${isSaved ? "saved" : ""}`}
               >
@@ -737,22 +789,30 @@ function MarketplaceHome({
                     <span>{p.delivery_text || "Free delivery"}</span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (p.is_sarthi_eligible) {
-                        void onWishlistProduct(p);
-                      }
-                    }}
-                    disabled={!p.is_sarthi_eligible}
-                    className={`buyer-save-btn ${isSaved ? "saved" : ""}`}
-                  >
-                    {isSaved ? <BookmarkCheck size={13} /> : <Heart size={13} />}
-                    <span>{isSaved ? "Saved" : p.is_sarthi_eligible ? "Check trust" : "Catalog only"}</span>
-                  </button>
+                  <div className="buyer-product-actions">
+                    <button
+                      type="button"
+                      onClick={() => onProductOpen(p)}
+                      className="buyer-view-btn"
+                    >
+                      View item
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (p.is_sarthi_eligible) {
+                          void onWishlistProduct(p);
+                        }
+                      }}
+                      disabled={!p.is_sarthi_eligible}
+                      className={`buyer-save-btn ${isSaved ? "saved" : ""}`}
+                    >
+                      {isSaved ? <BookmarkCheck size={13} /> : <Heart size={13} />}
+                      <span>{isSaved ? "Saved" : p.is_sarthi_eligible ? "Check trust" : "Catalog only"}</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
@@ -825,7 +885,7 @@ function SarthiLensPanel({
             <ShieldCheck size={16} />
           </div>
           <div>
-            <span className="eyebrow">Trust check</span>
+            <span className="eyebrow">Saved radar</span>
             <h2>Save a product when you want help deciding</h2>
             <p>
               {possibleComparableCount > 0
@@ -851,17 +911,17 @@ function SarthiLensPanel({
           <ShieldCheck size={16} />
         </div>
         <div>
-          <span className="eyebrow">Trust check</span>
+          <span className="eyebrow">Saved radar</span>
           <h2>
             {result
-              ? "Evidence decision ready"
+              ? "Radar decision ready"
               : autoScan.status === "error"
-                ? "Trust check could not complete"
-                : `Checking ${similarProducts.length || scanCount} similar seller options`}
+                ? "Radar could not complete"
+                : `Checking ${similarProducts.length || scanCount} mapped seller options`}
           </h2>
           <p>
             {result
-              ? `${scanSubject} was ranked using fit, return risk, seller reliability, price facts, reviews, and buyer-owned fit context.`
+              ? `${scanSubject} was ranked using fit, returns, seller reliability, price facts, reviews, and buyer-owned fit context.`
               : autoScan.status === "error"
                 ? autoScan.message
                 : `You saved ${savedProduct.title.split("-")[0].trim()}. Only mapped seller alternatives for this product are being compared.`}
@@ -989,7 +1049,7 @@ function LensDecisionSummary({
     <div className="lens-clean-summary ready-state">
       <div className="lens-decision-top">
         <div>
-          <span className="eyebrow">Evidence decision</span>
+          <span className="eyebrow">Radar decision</span>
           <h3>{decision?.label ?? winner.seller_name}</h3>
           <p>
             {decision?.summary ?? `Best among ${scanCount} mapped seller options for ${winner.title.split("-")[0].trim()}.`}
@@ -1570,17 +1630,17 @@ function ProductDetailPanel({
 }: {
   buyerId: string;
   productId: string;
-  initialVariantId: string;
+  initialVariantId: string | null;
   clusterId: string;
   onBack: () => void;
   onOpenAudit: (traceId: string) => void;
   onOpenCheckout: (variantId: string, contract: ExpectationContract) => void;
   language: LanguageCode;
   experienceMode: "simple" | "standard";
-  comparisonTraceId: string;
+  comparisonTraceId?: string;
 }) {
   const [detail, setDetail] = useState<ProductDetailResponse | null>(null);
-  const [selectedVariantId, setSelectedVariantId] = useState(initialVariantId);
+  const [selectedVariantId, setSelectedVariantId] = useState(initialVariantId ?? "");
   const [query, setQuery] = useState("Mera usual size L hai, chest tight toh nahi hoga?");
   const [answer, setAnswer] = useState<AgentResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1602,7 +1662,9 @@ function ProductDetailPanel({
       .then((payload) => {
         setDetail(payload);
         setKeepConfidence(payload.keep_confidence);
-        const initialVariant = payload.variants.find((variant) => variant.variant_id === initialVariantId);
+        const initialVariant = initialVariantId
+          ? payload.variants.find((variant) => variant.variant_id === initialVariantId)
+          : null;
         setSelectedVariantId(initialVariant?.variant_id ?? payload.selected_variant.variant_id);
       });
   }, [buyerId, productId, initialVariantId]);
@@ -1689,6 +1751,7 @@ function ProductDetailPanel({
   }
 
   const selectedVariant = detail.variants.find((v) => v.variant_id === selectedVariantId) || detail.selected_variant;
+  const proofTraceId = comparisonTraceId ?? keepConfidence?.trace_id ?? detail.keep_confidence.trace_id;
   const displayTitle = detail.product.title.split("-")[0].trim();
   const strikePrice = Math.round(selectedVariant.current_price * 1.35);
   const sizeAccuracy = Math.round(detail.evidence.fit_as_expected_rate * 100);
@@ -1828,7 +1891,7 @@ function ProductDetailPanel({
                 <span><strong>Watch for</strong> {detail.avoidable_issue.title}</span>
               </div>
             )}
-            <button className="strip-row evidence" type="button" onClick={() => onOpenAudit(comparisonTraceId)}>
+            <button className="strip-row evidence" type="button" onClick={() => onOpenAudit(proofTraceId)}>
               <CheckCircle2 size={16} />
               <span><strong>Evidence</strong> {detail.evidence.evidence_strength} | {detail.evidence.delivered_orders_90d} recent delivered orders</span>
               <ChevronRight size={14} />
@@ -1839,7 +1902,7 @@ function ProductDetailPanel({
             detail={detail}
             language={language}
             experienceMode={experienceMode}
-            comparisonTraceId={comparisonTraceId}
+            comparisonTraceId={proofTraceId}
             onOpenAudit={onOpenAudit}
           />
 
@@ -2562,7 +2625,7 @@ function TrustRadarCard({
       <section className="trust-radar-card attention">
         <div className="trust-radar-header">
           <div>
-            <span className="eyebrow">Trust radar</span>
+            <span className="eyebrow">Saved product radar</span>
             <h3>Radar could not refresh</h3>
           </div>
           <AlertTriangle size={18} />
@@ -2577,7 +2640,7 @@ function TrustRadarCard({
       <section className="trust-radar-card loading">
         <div className="trust-radar-header">
           <div>
-            <span className="eyebrow">Trust radar</span>
+            <span className="eyebrow">Saved product radar</span>
             <h3>{loading ? "Watching this product" : "Waiting for saved intent"}</h3>
           </div>
           <ShieldCheck size={18} />
@@ -2595,7 +2658,7 @@ function TrustRadarCard({
     <section className={`trust-radar-card ${radar.status}`}>
       <div className="trust-radar-header">
         <div>
-          <span className="eyebrow">Trust radar</span>
+          <span className="eyebrow">Saved product radar</span>
           <h3>{radar.headline}</h3>
           <p>{radar.summary}</p>
         </div>

@@ -254,21 +254,25 @@ export function App() {
               )
             }
           />
-          <Route
-            path="/shop/*"
-            element={
-              role === "buyer" && buyerId ? (
-                <FeedScreen
-                  buyerId={buyerId}
-                  ready={true}
-                  language={language}
-                  experienceMode={experienceMode}
-                />
-              ) : (
-                <RoleRedirect session={session} />
-              )
-            }
-          />
+          {["/shop", "/shop/product/:productId", "/shop/saved/:productId"].map((path) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                role === "buyer" && buyerId ? (
+                  <FeedScreen
+                    buyerId={buyerId}
+                    ready={true}
+                    language={language}
+                    experienceMode={experienceMode}
+                  />
+                ) : (
+                  <RoleRedirect session={session} />
+                )
+              }
+            />
+          ))}
+          <Route path="/shop/*" element={<Navigate to="/shop" replace />} />
           <Route
             path="/trust/*"
             element={role === "buyer" && buyerId ? <TrustCenter buyerId={buyerId} /> : <RoleRedirect session={session} />}

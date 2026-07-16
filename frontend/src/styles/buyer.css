@@ -2281,21 +2281,36 @@
   padding: 2px 5px;
 }
 
+.buyer-product-actions {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  margin-top: 6px;
+}
+
+.buyer-view-btn,
 .buyer-save-btn {
   align-items: center;
-  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  color: var(--text-primary);
   display: flex;
   font-size: 11px;
   font-weight: 900;
   gap: 6px;
   justify-content: center;
-  margin-top: 6px;
   min-height: 32px;
   padding: 7px 8px;
   width: 100%;
+}
+
+.buyer-view-btn {
+  background: var(--bg-surface-muted);
+  color: var(--text-primary);
+}
+
+.buyer-save-btn {
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .buyer-save-btn.saved {
@@ -2303,6 +2318,7 @@
   color: var(--text-on-accent);
 }
 
+.buyer-view-btn:hover,
 .buyer-save-btn:not(:disabled):hover {
   background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-surface-muted));
   border-color: var(--accent-primary);
