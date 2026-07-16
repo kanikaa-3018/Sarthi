@@ -116,6 +116,9 @@ async function ensureIndexes(db: Db) {
     c.sellerEvidenceAssets.createIndex({ product_id: 1, attribute: 1 }),
     c.auditTraces.createIndex({ trace_id: 1 }, { unique: true }),
     c.llmCache.createIndex({ cache_key: 1 }, { unique: true }),
-    c.llmCache.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 })
+    c.llmCache.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
+    c.trustScoreSnapshots.createIndex({ buyer_id: 1, created_at: -1 }),
+    c.trustScoreSnapshots.createIndex({ cluster_id: 1, variant_id: 1, created_at: -1 }),
+    c.featureWeights.createIndex({ category: 1, active: 1 })
   ]);
 }

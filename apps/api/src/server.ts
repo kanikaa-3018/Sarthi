@@ -402,7 +402,7 @@ app.post("/compare", async (request, reply) => {
   const account = await requireRole(db, request, reply, "buyer");
   const body: any = request.body;
   assertBuyer(account, body.buyer_id);
-  const ranking = await rankCluster(db, body.buyer_id, body.cluster_id, body.preferred_fit);
+  const ranking = await rankCluster(db, body.buyer_id, body.cluster_id, body.preferred_fit, { recordSnapshot: true, intent: "compare" });
   const fit = await fitPrediction(db, body.buyer_id, ranking.winner, body.preferred_fit);
   const trace = await createTrace(db, { buyer_id: body.buyer_id, variant_id: ranking.winner, intent: ["compare"], tools_used: ["rankCluster", "fitPrediction"], fact_ids: ranking.fact_ids, graph_paths: [graphPath(ranking.winner, ranking.fact_ids)] });
   const product = await productForVariant(db, ranking.winner);
@@ -420,6 +420,12 @@ app.post("/knowledge-graph/chat", async (request, reply) => {
   const account = await requireRole(db, request, reply, "buyer");
   const body: any = request.body;
   assertBuyer(account, body.buyer_id);
+  const cacheKey = llmCacheKey("knowledge_graph_chat", { buyer_id: body.buyer_id, cluster_id: body.cluster_id, query: body.query });
+  const cached = await readLlmCache(cacheKey);
+  if (cached) {
+    const trace = await createTrace(db, { buyer_id: body.buyer_id, intent: ["knowledge_graph_chat"], tools_used: ["llmCache"], fact_ids: cached.answer?.fact_ids ?? [], graph_paths: cached.graph_path ? [cached.graph_path] : [] });
+    return { ...cached, trace_id: trace.trace_id, cache: { hit: true, cache_key: cacheKey } };
+  }
   const graph = await clusterKnowledgeGraph(body.buyer_id, body.cluster_id);
   const factIds = graph.fact_ids.slice(0, 8);
   const answer = {
@@ -433,7 +439,9 @@ app.post("/knowledge-graph/chat", async (request, reply) => {
     follow_up_questions: graph.chat_suggestions
   };
   const trace = await createTrace(db, { buyer_id: body.buyer_id, intent: ["knowledge_graph_chat"], tools_used: ["clusterKnowledgeGraph", "answerGraphQuestion"], fact_ids: factIds, graph_paths: [graphPath(graph.ranking?.winner ?? "", factIds)] });
-  return { trace_id: trace.trace_id, answer, graph_path: graphPath(graph.ranking?.winner ?? "", factIds) };
+  const response = { trace_id: trace.trace_id, answer, graph_path: graphPath(graph.ranking?.winner ?? "", factIds), cache: { hit: false, cache_key: cacheKey } };
+  await writeLlmCache(cacheKey, "knowledge_graph_chat", response);
+  return response;
 });
 
 app.post("/decision/regret-firewall", async (request, reply) => {
@@ -449,7 +457,7 @@ app.post("/decision/regret-firewall", async (request, reply) => {
   const attribute = inferAttribute(body.query);
   const missing = passport.evidence_gaps.find((gap: any) => gap.attribute === attribute) ?? passport.evidence_gaps[0] ?? null;
   const proofRequest = missing && body.create_missing_proof_request !== false ? await createOrIncrementProofRequest(db, body.buyer_id, product, variant.variant_id, missing.attribute, body.query ?? "") : null;
-  const ranking = await rankCluster(db, body.buyer_id, product.cluster_id, body.preferred_fit);
+  const ranking = await rankCluster(db, body.buyer_id, product.cluster_id, body.preferred_fit, { recordSnapshot: true, intent: "regret_firewall" });
   const trace = await createTrace(db, { buyer_id: body.buyer_id, product_id: product.product_id, variant_id: variant.variant_id, intent: ["regret_firewall"], tools_used: ["skuPassport", "proofCoverage", "createProofRequest"], fact_ids: passport.fact_ids, graph_paths: [graphPath(variant.variant_id, passport.fact_ids)] });
   return {
     trace_id: trace.trace_id,
@@ -470,10 +478,16 @@ app.post("/agent/query", async (request, reply) => {
   const account = await requireRole(db, request, reply, "buyer");
   const body: any = request.body;
   assertBuyer(account, body.buyer_id);
+  const cacheKey = llmCacheKey("agent_query", { buyer_id: body.buyer_id, cluster_id: body.cluster_id, selected_variant_id: body.selected_variant_id, query: body.query });
+  const cached = await readLlmCache(cacheKey);
+  if (cached) {
+    const trace = await createTrace(db, { buyer_id: body.buyer_id, variant_id: body.selected_variant_id, intent: ["samvaad"], tools_used: ["llmCache"], fact_ids: cached.fact_ids ?? [] });
+    return { ...cached, trace_id: trace.trace_id, cache: { hit: true, cache_key: cacheKey } };
+  }
   const product = body.selected_variant_id ? await productForVariant(db, body.selected_variant_id) : body.cluster_id ? publicProduct(await collections(db).products.findOne({ cluster_id: body.cluster_id })) : null;
   const fact_ids: string[] = [];
   const trace = await createTrace(db, { buyer_id: body.buyer_id, product_id: product?.product_id, variant_id: body.selected_variant_id, intent: ["samvaad"], tools_used: ["intentDetection", "groundedAnswer"], fact_ids });
-  return {
+  const response = {
     trace_id: trace.trace_id,
     intent: [inferAttribute(body.query), "trust_question"],
     answer: {
@@ -485,6 +499,8 @@ app.post("/agent/query", async (request, reply) => {
     },
     fact_ids
   };
+  await writeLlmCache(cacheKey, "agent_query", response);
+  return response;
 });
 
 app.post("/checkout/verify-offer", async (request, reply) => {
@@ -728,6 +744,44 @@ async function adminQueue() {
     listing_drafts: drafts.map((draft: any) => ({ ...withoutId(draft), seller_name: sellers.get(draft.seller_id)?.name ?? "", verification_status: profiles.get(draft.seller_id)?.verification_status ?? null })),
     audit_events: auditEvents.map(withoutId)
   };
+}
+
+function llmCacheKey(scope: string, payload: Record<string, unknown>) {
+  return `${scope}:${sha256(JSON.stringify(stableCachePayload(payload)))}`;
+}
+
+function stableCachePayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableCachePayload);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableCachePayload(item)])
+    );
+  }
+  return value;
+}
+
+async function readLlmCache(cacheKey: string) {
+  const row = await collections(db).llmCache.findOne({ cache_key: cacheKey, expires_at: { $gt: new Date() } });
+  return row?.payload ?? null;
+}
+
+async function writeLlmCache(cacheKey: string, scope: string, payload: Record<string, unknown>) {
+  await collections(db).llmCache.updateOne(
+    { cache_key: cacheKey },
+    {
+      $set: {
+        cache_key: cacheKey,
+        scope,
+        payload,
+        created_at: nowIso(),
+        expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000)
+      }
+    },
+    { upsert: true }
+  );
 }
 
 async function clusterKnowledgeGraph(buyerId: string, clusterId: string) {

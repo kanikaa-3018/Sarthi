@@ -3,6 +3,41 @@ import { collections } from "../db/mongo.js";
 import { id } from "./crypto.js";
 import { nowIso } from "./time.js";
 
+const TRUST_WEIGHT_KEYS = [
+  "fit_match",
+  "outcome_quality",
+  "seller_trust",
+  "review_signal",
+  "rating_signal",
+  "price_value",
+  "fulfilment_reliability",
+  "proof_coverage",
+  "offer_truth"
+] as const;
+
+type TrustWeightKey = typeof TRUST_WEIGHT_KEYS[number];
+type TrustWeights = Record<TrustWeightKey, number>;
+
+const DEFAULT_TRUST_WEIGHTS: TrustWeights = {
+  fit_match: 0.18,
+  outcome_quality: 0.22,
+  seller_trust: 0.18,
+  review_signal: 0.14,
+  rating_signal: 0.1,
+  price_value: 0.06,
+  fulfilment_reliability: 0.08,
+  proof_coverage: 0.03,
+  offer_truth: 0.01
+};
+
+type TrustWeightConfig = {
+  source: string;
+  version: string;
+  category: string;
+  weights: TrustWeights;
+  raw_weights: Record<string, unknown>;
+};
+
 export async function sourceHealth(db: Db) {
   const rows = await collections(db).dataSources.find({}).sort({ source_id: 1 }).toArray();
   const sources = rows.map((source: any) => {
@@ -263,8 +298,68 @@ export async function conflicts(db: Db, product: any, variantId: string) {
   return rows;
 }
 
-export async function rankCluster(db: Db, buyerId: string, clusterId: string, preferredFit = "comfort") {
+async function trustWeightConfig(db: Db, category?: string): Promise<TrustWeightConfig> {
   const c = collections(db);
+  const exact = category ? await c.featureWeights.findOne({ category, active: { $ne: 0 } }) : null;
+  const doc = exact
+    ?? await c.featureWeights.findOne({ category: "default", active: { $ne: 0 } })
+    ?? await c.featureWeights.findOne({ active: { $ne: 0 } });
+  const rawWeights = (doc?.weights ?? {}) as Record<string, unknown>;
+  const sellerReliability = numericWeight(rawWeights.seller_reliability ?? rawWeights.seller_trust);
+  const sellerVerification = numericWeight(rawWeights.seller_verification);
+  const sellerTrustParts = [sellerReliability, sellerVerification].filter((value): value is number => typeof value === "number");
+  const sellerTrust = sellerTrustParts.length ? sellerTrustParts.reduce((sum, value) => sum + value, 0) : undefined;
+  const mapped = normalizeTrustWeights({
+    fit_match: numericWeight(rawWeights.fit_match ?? rawWeights.fit_consistency),
+    outcome_quality: numericWeight(rawWeights.outcome_quality ?? rawWeights.sku_outcome),
+    seller_trust: sellerTrust,
+    review_signal: numericWeight(rawWeights.review_signal ?? rawWeights.review_credibility),
+    rating_signal: numericWeight(rawWeights.rating_signal ?? rawWeights.product_rating),
+    price_value: numericWeight(rawWeights.price_value),
+    fulfilment_reliability: numericWeight(rawWeights.fulfilment_reliability ?? rawWeights.dispatch),
+    proof_coverage: numericWeight(rawWeights.proof_coverage),
+    offer_truth: numericWeight(rawWeights.offer_truth)
+  });
+  return {
+    source: doc ? "mongodb_feature_weights" : "default_runtime_weights",
+    version: doc?.version ?? "default_v1",
+    category: doc?.category ?? category ?? "default",
+    weights: mapped,
+    raw_weights: rawWeights
+  };
+}
+
+function numericWeight(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function normalizeTrustWeights(input: Partial<TrustWeights>): TrustWeights {
+  const values = TRUST_WEIGHT_KEYS.map((key) => [key, input[key] ?? DEFAULT_TRUST_WEIGHTS[key]] as const);
+  const total = values.reduce((sum, [, value]) => sum + value, 0) || 1;
+  return Object.fromEntries(values.map(([key, value]) => [key, Number((value / total).toFixed(4))])) as TrustWeights;
+}
+
+function proofCoverageScore(coverage: Record<string, any>) {
+  const items = Object.values(coverage);
+  if (!items.length) return 0.45;
+  const weighted = items.reduce((sum, item: any) => {
+    const importance = ["transparency", "fabric", "size"].includes(item.attribute) ? 1.25 : 0.8;
+    return sum + (item.sufficient ? importance : 0);
+  }, 0);
+  const possible = items.reduce((sum, item: any) => sum + (["transparency", "fabric", "size"].includes(item.attribute) ? 1.25 : 0.8), 0);
+  return Math.max(0.15, Math.min(1, weighted / Math.max(possible, 0.01)));
+}
+
+function offerTruthScore(offer: any) {
+  if (offer.status === "verified_price_drop") return 0.9;
+  if (offer.status === "no_need_to_rush") return 0.72;
+  return 0.48;
+}
+
+export async function rankCluster(db: Db, buyerId: string, clusterId: string, preferredFit = "comfort", options: { recordSnapshot?: boolean; intent?: string } = {}) {
+  const c = collections(db);
+  const cluster = await c.clusters.findOne({ cluster_id: clusterId });
+  const weightConfig = await trustWeightConfig(db, cluster?.category);
   const products = await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
   const candidates = [];
   const factIds = new Set<string>();
@@ -276,6 +371,8 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
     const verification = await sellerVerification(db, product.seller_id);
     const fit = await fitPrediction(db, buyerId, target.variant_id, preferredFit);
     const reviewCredibility = await reviewCredibilitySummary(db, product.product_id);
+    const coverage = await proofCoverage(db, product.product_id, target.variant_id);
+    const offer = await verifyOffer(db, target.variant_id);
     const sellerScore = verification.verification_status === "verified" ? 0.9 : 0.45;
     const outcomeQuality = 1 - Math.min(0.6, evidence.return_rate) / 0.6;
     const fitScore = fit.confidence === "medium" ? 0.75 : 0.55;
@@ -283,41 +380,71 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
     const priceValue = 1 - Math.min(1, Math.max(0, product.base_price - 320) / 900);
     const weightedReviewRating = reviewCredibility.weighted_average ?? product.rating;
     const reviewSignal = Math.max(0.25, Math.min(1, weightedReviewRating / 5 * (0.72 + reviewCredibility.average_weight * 0.28) - (evidence.return_rate > 0.18 ? 0.15 : 0)));
+    const proofScore = proofCoverageScore(coverage);
+    const offerScore = offerTruthScore(offer);
     const fairStartBoost = verification.verification_status === "verified" && evidence.delivered_orders_90d < 30 ? (30 - evidence.delivered_orders_90d) / 30 * 0.07 : 0;
     const uncertaintyPenalty = evidence.evidence_strength === "strong" ? 0 : evidence.evidence_strength === "medium" ? 0.06 : 0.18;
-    const score = Number((
-      fitScore * 0.18 +
-      outcomeQuality * 0.22 +
-      sellerScore * 0.18 +
-      reviewSignal * 0.14 +
-      ratingSignal * 0.1 +
-      priceValue * 0.06 +
-      (1 - Math.min(1, evidence.median_dispatch_hours / 72)) * 0.08 -
+    const fulfilmentReliability = 1 - Math.min(1, evidence.median_dispatch_hours / 72);
+    const weightedScore =
+      fitScore * weightConfig.weights.fit_match +
+      outcomeQuality * weightConfig.weights.outcome_quality +
+      sellerScore * weightConfig.weights.seller_trust +
+      reviewSignal * weightConfig.weights.review_signal +
+      ratingSignal * weightConfig.weights.rating_signal +
+      priceValue * weightConfig.weights.price_value +
+      fulfilmentReliability * weightConfig.weights.fulfilment_reliability +
+      proofScore * weightConfig.weights.proof_coverage +
+      offerScore * weightConfig.weights.offer_truth;
+    const score = Number(Math.max(0.05, Math.min(0.98,
+      weightedScore -
       uncertaintyPenalty +
       fairStartBoost
-    ).toFixed(3));
+    )).toFixed(3));
     for (const id of evidence.fact_ids) factIds.add(id);
     for (const id of reviewCredibility.fact_ids) factIds.add(id);
+    for (const id of offer.fact_ids) factIds.add(id);
     candidates.push({
       variant_id: target.variant_id,
+      product_id: product.product_id,
+      seller_id: product.seller_id,
       score,
       factors: {
         fit_match: Number(fitScore.toFixed(2)),
         outcome_quality: Number(outcomeQuality.toFixed(2)),
         expectation_match: evidence.return_rate < 0.18 ? 0.78 : 0.58,
-        fulfilment_reliability: Number((1 - Math.min(1, evidence.median_dispatch_hours / 72)).toFixed(2)),
+        fulfilment_reliability: Number(fulfilmentReliability.toFixed(2)),
         seller_trust: Number(sellerScore.toFixed(2)),
         review_signal: Number(reviewSignal.toFixed(2)),
         review_credibility: reviewCredibility.average_weight,
         rating_signal: Number(ratingSignal.toFixed(2)),
         price_value: Number(priceValue.toFixed(2)),
+        proof_coverage: Number(proofScore.toFixed(2)),
+        offer_truth: Number(offerScore.toFixed(2)),
         uncertainty_penalty: uncertaintyPenalty,
         fair_start_boost: Number(fairStartBoost.toFixed(2))
       },
+      weight_version: weightConfig.version,
       fact_ids: evidence.fact_ids.slice(0, 5)
     });
   }
   candidates.sort((a, b) => b.score - a.score);
+  if (options.recordSnapshot && candidates.length) {
+    await c.trustScoreSnapshots.insertMany(candidates.map((candidate: any) => ({
+      snapshot_id: id("trust_score"),
+      buyer_id: buyerId,
+      cluster_id: clusterId,
+      product_id: candidate.product_id,
+      variant_id: candidate.variant_id,
+      seller_id: candidate.seller_id,
+      decision_intent: options.intent ?? "rank_cluster",
+      score: candidate.score,
+      factors: candidate.factors,
+      weights: weightConfig.weights,
+      weight_version: weightConfig.version,
+      fact_ids: candidate.fact_ids,
+      created_at: nowIso()
+    })));
+  }
   const winner = candidates[0];
   const alt = candidates[1] ?? null;
   const winnerProduct = winner ? await productForVariant(db, winner.variant_id) : null;
@@ -328,6 +455,7 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
     top_factors: ["seller trust", "SKU kept-order evidence", "fit consistency", "reviewer credibility"],
     uncertainty: winner?.score > 0.75 ? "low" : "medium",
     candidates,
+    weighting: weightConfig,
     fact_ids: [...factIds].slice(0, 16)
   };
 }

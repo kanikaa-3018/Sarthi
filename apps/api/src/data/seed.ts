@@ -350,20 +350,39 @@ export function buildSeedDocuments() {
     llmCache: [],
     trustScoreSnapshots: [],
     featureWeights: [{
-      category: "women_kurtis",
+      category: "default",
+      active: 1,
+      description: "Marketplace-level trust weights. Stored in Mongo so scoring can be tuned without changing application code.",
       weights: {
-        sku_outcome: 18,
+        sku_outcome: 22,
         seller_reliability: 15,
         seller_verification: 12,
-        fit_consistency: 12,
-        review_credibility: 12,
+        fit_consistency: 18,
+        review_credibility: 14,
         product_rating: 10,
-        proof_coverage: 8,
-        offer_truth: 6,
-        dispatch: 5,
-        price_value: 2
+        proof_coverage: 3,
+        offer_truth: 1,
+        dispatch: 8,
+        price_value: 6
       },
-      version: "2026-07-mentor-r1"
+      version: "2026-07-mentor-r2"
+    }, {
+      category: "women_kurtis",
+      active: 1,
+      description: "Fit-heavy apparel variant: gives more weight to kept-order fit evidence while still protecting newer verified sellers.",
+      weights: {
+        sku_outcome: 24,
+        seller_reliability: 14,
+        seller_verification: 12,
+        fit_consistency: 20,
+        review_credibility: 13,
+        product_rating: 8,
+        proof_coverage: 4,
+        offer_truth: 1,
+        dispatch: 6,
+        price_value: 4
+      },
+      version: "2026-07-mentor-r2"
     }]
   };
 }
