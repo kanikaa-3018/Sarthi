@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { LogOut, ShieldCheck, Sun, Moon, RefreshCcw, User, Globe, Store, ClipboardCheck } from "lucide-react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { clearStoredSession, getMe, getStoredSession, logout, storeSession, resetSeed } from "../api/client";
 import { AuthScreen } from "../screens/AuthScreen";
 import { FeedScreen } from "../screens/FeedScreen";
@@ -11,15 +12,15 @@ import type { AuthSession } from "../types/api";
 
 const LANGUAGE_STORAGE_KEY = "sarthi.language";
 const EXPERIENCE_MODE_STORAGE_KEY = "sarthi.experienceMode";
-type AppView = "buyer" | "trust" | "seller" | "admin";
 
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [view, setView] = useState<AppView>("buyer");
   const [checkingSession, setCheckingSession] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(readStoredLanguage);
   const [experienceMode, setExperienceMode] = useState<ExperienceMode>(readStoredExperienceMode);
+  const location = useLocation();
+  const navigate = useNavigate();
   
   // Theme state: light or dark
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
@@ -36,14 +37,16 @@ export function App() {
         const refreshed = { ...stored, account: payload.account };
         storeSession(refreshed);
         setSession(refreshed);
-        setView(defaultView(payload.account.role));
+        if (location.pathname === "/" || location.pathname === "/login") {
+          navigate(defaultPath(payload.account.role), { replace: true });
+        }
       })
       .catch(() => {
         clearStoredSession();
         setSession(null);
       })
       .finally(() => setCheckingSession(false));
-  }, []);
+  }, [location.pathname, navigate]);
 
   // Update theme on documentElement
   useEffect(() => {
@@ -59,7 +62,7 @@ export function App() {
   function handleAuthenticated(nextSession: AuthSession) {
     storeSession(nextSession);
     setSession(nextSession);
-    setView(defaultView(nextSession.account.role));
+    navigate(defaultPath(nextSession.account.role), { replace: true });
   }
 
   useEffect(() => {
@@ -74,7 +77,7 @@ export function App() {
     setLoggingOut(true);
     await logout();
     setSession(null);
-    setView("buyer");
+    navigate("/login", { replace: true });
     setLoggingOut(false);
   }
 
@@ -110,7 +113,7 @@ export function App() {
           <button
             className="web-brand-lockup commerce-brand"
             type="button"
-            onClick={() => session && setView(defaultView(session.account.role))}
+            onClick={() => session ? navigate(defaultPath(session.account.role)) : navigate("/login")}
           >
             <div className="web-brand-badge">S</div>
             <div className="commerce-brand-copy">
@@ -126,16 +129,16 @@ export function App() {
                   <>
                     <button
                       type="button"
-                      className={view === "buyer" ? "active" : ""}
-                      onClick={() => setView("buyer")}
+                      className={location.pathname.startsWith("/shop") ? "active" : ""}
+                      onClick={() => navigate("/shop")}
                     >
                       <Store size={14} />
                       <span>{t(language, "shop")}</span>
                     </button>
                     <button
                       type="button"
-                      className={view === "trust" ? "active" : ""}
-                      onClick={() => setView("trust")}
+                      className={location.pathname.startsWith("/trust") ? "active" : ""}
+                      onClick={() => navigate("/trust")}
                     >
                       <ShieldCheck size={14} />
                       <span>{t(language, "trust")}</span>
@@ -236,37 +239,64 @@ export function App() {
 
       {/* Main Responsive Page View Container */}
       <main className="web-content-container">
-        {!session ? (
-          <AuthScreen
-            language={language}
-            onLanguageChange={setLanguage}
-            onAuthenticated={handleAuthenticated}
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              session ? (
+                <Navigate to={defaultPath(session.account.role)} replace />
+              ) : (
+                <AuthScreen
+                  language={language}
+                  onLanguageChange={setLanguage}
+                  onAuthenticated={handleAuthenticated}
+                />
+              )
+            }
           />
-        ) : role === "buyer" && view === "buyer" && buyerId ? (
-          <FeedScreen
-            buyerId={buyerId}
-            ready={true}
-            language={language}
-            experienceMode={experienceMode}
+          <Route
+            path="/shop/*"
+            element={
+              role === "buyer" && buyerId ? (
+                <FeedScreen
+                  buyerId={buyerId}
+                  ready={true}
+                  language={language}
+                  experienceMode={experienceMode}
+                />
+              ) : (
+                <RoleRedirect session={session} />
+              )
+            }
           />
-        ) : role === "buyer" && view === "trust" && buyerId ? (
-          <TrustCenter buyerId={buyerId} />
-        ) : role === "seller" ? (
-          <SellerPanel />
-        ) : role === "admin" ? (
-          <AdminReviewPanel />
-        ) : (
-          <div className="app-loading">This account is missing a valid workspace.</div>
-        )}
+          <Route
+            path="/trust/*"
+            element={role === "buyer" && buyerId ? <TrustCenter buyerId={buyerId} /> : <RoleRedirect session={session} />}
+          />
+          <Route
+            path="/seller/*"
+            element={role === "seller" ? <SellerPanel /> : <RoleRedirect session={session} />}
+          />
+          <Route
+            path="/admin/*"
+            element={role === "admin" ? <AdminReviewPanel /> : <RoleRedirect session={session} />}
+          />
+          <Route path="/" element={<RoleRedirect session={session} />} />
+          <Route path="*" element={<RoleRedirect session={session} />} />
+        </Routes>
       </main>
     </div>
   );
 }
 
-function defaultView(role: AuthSession["account"]["role"]): AppView {
-  if (role === "seller") return "seller";
-  if (role === "admin") return "admin";
-  return "buyer";
+function RoleRedirect({ session }: { session: AuthSession | null }) {
+  return <Navigate to={session ? defaultPath(session.account.role) : "/login"} replace />;
+}
+
+function defaultPath(role: AuthSession["account"]["role"]) {
+  if (role === "seller") return "/seller";
+  if (role === "admin") return "/admin";
+  return "/shop";
 }
 
 function readStoredLanguage(): LanguageCode {
