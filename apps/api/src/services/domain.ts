@@ -364,11 +364,15 @@ function offerTruthScore(offer: any) {
   return 0.48;
 }
 
-export async function rankCluster(db: Db, buyerId: string, clusterId: string, preferredFit = "comfort", options: { recordSnapshot?: boolean; intent?: string } = {}) {
+export async function rankCluster(db: Db, buyerId: string, clusterId: string, preferredFit = "comfort", options: { recordSnapshot?: boolean; intent?: string; productIds?: string[] } = {}) {
   const c = collections(db);
   const cluster = await c.clusters.findOne({ cluster_id: clusterId });
   const weightConfig = await trustWeightConfig(db, cluster?.category);
-  const products = await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
+  const productIds = [...new Set(options.productIds ?? [])];
+  const products = productIds.length
+    ? (await c.products.find({ product_id: { $in: productIds }, is_sarthi_eligible: 1 }).toArray())
+      .sort((left: any, right: any) => productIds.indexOf(left.product_id) - productIds.indexOf(right.product_id))
+    : await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
   const candidates = [];
   const factIds = new Set<string>();
   for (const product of products) {

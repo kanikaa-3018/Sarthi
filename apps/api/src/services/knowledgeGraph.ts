@@ -15,12 +15,20 @@ import {
 import { withoutId } from "./format.js";
 import { projectGraphToNeo4j } from "./neo4jGraph.js";
 import { topIssueForCard } from "./sellerOperations.js";
+import { resolveSimilarListingSet } from "./similarListings.js";
 
-export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: string) {
+export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: string, selectedProductId?: string) {
   const c = collections(db);
   const cluster = await c.clusters.findOne({ cluster_id: clusterId });
-  const products = await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
-  const ranking = await rankCluster(db, buyerId, clusterId);
+  const similarity = selectedProductId ? await resolveSimilarListingSet(db, selectedProductId) : null;
+  const comparableProductIds = similarity?.comparable_product_ids ?? [];
+  const products = comparableProductIds.length
+    ? (await c.products.find({ product_id: { $in: comparableProductIds }, is_sarthi_eligible: 1 }).toArray())
+      .sort((left: any, right: any) => comparableProductIds.indexOf(left.product_id) - comparableProductIds.indexOf(right.product_id))
+    : await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
+  const ranking = await rankCluster(db, buyerId, clusterId, "comfort", {
+    productIds: comparableProductIds
+  });
   const nodes: any[] = [{
     id: clusterId,
     type: "cluster",
@@ -237,6 +245,12 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
       body: "Server-built evidence map from indexed MongoDB facts.",
       dynamic: true,
       graph_engine: "mongodb_projection",
+      similarity: similarity ? {
+        method: similarity.method,
+        summary: similarity.summary,
+        distinct_seller_count: similarity.distinct_seller_count,
+        candidates: similarity.candidates.slice(0, 4)
+      } : null,
       source_health: await sourceHealth(db),
       fact_count: factIds.size
     },
@@ -246,7 +260,7 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
     edges,
     seller_context,
     fact_ids: [...factIds],
-    chat_suggestions: ["Which seller is safest?", "Why not choose the cheapest?", "Is prepaid safe for this item?"]
+    chat_suggestions: ["Which seller is safest?", "Why are these similar?", "Do returns affect reviews?"]
   };
   const neo4j = await projectGraphToNeo4j(graph);
   return {

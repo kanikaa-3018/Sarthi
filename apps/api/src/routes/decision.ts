@@ -22,6 +22,7 @@ import {
 import { inferAttribute, withoutId } from "../services/format.js";
 import { clusterKnowledgeGraph } from "../services/knowledgeGraph.js";
 import { llmCacheKey, readLlmCache, writeLlmCache } from "../services/llmCache.js";
+import { resolveSimilarListingSet } from "../services/similarListings.js";
 import { semanticEvidenceSearch } from "../services/vectorSearch.js";
 
 export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
@@ -29,16 +30,18 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const account = await requireRole(db, request, reply, "buyer");
     const body: any = request.body;
     assertBuyer(account, body.buyer_id);
+    const similarity = body.product_id ? await resolveSimilarListingSet(db, body.product_id) : null;
     const ranking = await rankCluster(db, body.buyer_id, body.cluster_id, body.preferred_fit, {
       recordSnapshot: true,
-      intent: "compare"
+      intent: "compare",
+      productIds: similarity?.comparable_product_ids
     });
     const fit = await fitPrediction(db, body.buyer_id, ranking.winner, body.preferred_fit);
     const trace = await createTrace(db, {
       buyer_id: body.buyer_id,
       variant_id: ranking.winner,
       intent: ["compare"],
-      tools_used: ["rankCluster", "fitPrediction"],
+      tools_used: [similarity ? "resolveSimilarListings" : "clusterFilter", "rankCluster", "fitPrediction"],
       fact_ids: ranking.fact_ids,
       graph_paths: [graphPath(ranking.winner, ranking.fact_ids)]
     });
@@ -47,6 +50,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       trace_id: trace.trace_id,
       selected_product_id: product?.product_id ?? "",
       ranking,
+      similarity,
       fit,
       graph_path: graphPath(ranking.winner, ranking.fact_ids)
     };
@@ -56,7 +60,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const account = await requireRole(db, request, reply, "buyer");
     const buyerId = (request.query as any).buyer_id;
     assertBuyer(account, buyerId);
-    return clusterKnowledgeGraph(db, buyerId, (request.params as any).cluster_id);
+    return clusterKnowledgeGraph(db, buyerId, (request.params as any).cluster_id, (request.query as any).product_id);
   });
 
   app.post("/knowledge-graph/chat", async (request, reply) => {
@@ -66,6 +70,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const cacheKey = llmCacheKey("knowledge_graph_chat", {
       buyer_id: body.buyer_id,
       cluster_id: body.cluster_id,
+      product_id: body.product_id,
       query: body.query
     });
     const cached = await readLlmCache(db, cacheKey);
@@ -80,7 +85,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       return { ...cached, trace_id: trace.trace_id, cache: { hit: true, cache_key: cacheKey } };
     }
 
-    const graph = await clusterKnowledgeGraph(db, body.buyer_id, body.cluster_id);
+    const graph = await clusterKnowledgeGraph(db, body.buyer_id, body.cluster_id, body.product_id);
     const retrieval = await semanticEvidenceSearch(db, graph, body.query ?? "");
     const nodesById = new Map(graph.nodes.map((node: any) => [node.id, node]));
     const edgesById = new Map(graph.edges.map((edge: any) => [edge.id, edge]));
@@ -204,7 +209,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const trace = await createTrace(db, {
       buyer_id: body.buyer_id,
       intent: ["knowledge_graph_chat"],
-      tools_used: ["clusterKnowledgeGraph", retrieval.source, "answerGraphQuestion"],
+      tools_used: ["clusterKnowledgeGraph", body.product_id ? "resolveSimilarListings" : "clusterFilter", retrieval.source, "answerGraphQuestion"],
       fact_ids: factIds,
       graph_paths: [graphPath(graph.ranking?.winner ?? "", factIds)]
     });
@@ -237,6 +242,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     if (!product) return reply.code(404).send({ detail: "Product context not found" });
     const variants = await variantsForProduct(db, product.product_id);
     const variant = variants.find((item: any) => item.size === "XL") ?? variants[0];
+    const similarity = await resolveSimilarListingSet(db, product.product_id);
     const passport = await skuPassport(db, body.buyer_id, product.product_id, variant.variant_id);
     const attribute = inferAttribute(body.query);
     const missing = passport.evidence_gaps.find((gap: any) => gap.attribute === attribute)
@@ -247,14 +253,15 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       : null;
     const ranking = await rankCluster(db, body.buyer_id, product.cluster_id, body.preferred_fit, {
       recordSnapshot: true,
-      intent: "regret_firewall"
+      intent: "regret_firewall",
+      productIds: similarity.comparable_product_ids
     });
     const trace = await createTrace(db, {
       buyer_id: body.buyer_id,
       product_id: product.product_id,
       variant_id: variant.variant_id,
       intent: ["regret_firewall"],
-      tools_used: ["skuPassport", "proofCoverage", "createProofRequest"],
+      tools_used: ["resolveSimilarListings", "skuPassport", "proofCoverage", "createProofRequest"],
       fact_ids: passport.fact_ids,
       graph_paths: [graphPath(variant.variant_id, passport.fact_ids)]
     });
@@ -265,7 +272,14 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
         product_id: product.product_id,
         cluster_id: product.cluster_id,
         category: product.category,
-        garment_type: product.garment_type
+        garment_type: product.garment_type,
+        similarity: {
+          method: similarity.method,
+          summary: similarity.summary,
+          distinct_seller_count: similarity.distinct_seller_count,
+          comparable_product_ids: similarity.comparable_product_ids,
+          candidates: similarity.candidates.slice(0, 4)
+        }
       },
       decision: missing
         ? { code: "ask_seller_proof", label: "Ask seller proof", summary: missing.summary, primary_action: missing.title, confidence: "medium" }

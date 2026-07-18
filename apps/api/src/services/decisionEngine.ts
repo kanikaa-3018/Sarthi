@@ -19,6 +19,7 @@ import {
 } from "./domain.js";
 import { id } from "./crypto.js";
 import { label, withoutId } from "./format.js";
+import { resolveSimilarListingSet } from "./similarListings.js";
 import { nowIso } from "./time.js";
 
 const SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "ONE_SIZE"];
@@ -113,6 +114,7 @@ export async function createWishlistIntent(db: Db, buyerId: string, input: {
   const c = collections(db);
   const product = await productWithSeller(db, input.product_id);
   if (!product) throw new Error("Product not found");
+  const similarListings = await resolveSimilarListingSet(db, product.product_id);
   const profile = await activeFitProfile(db, buyerId, input.profile_id);
   const variants = await variantsForProduct(db, product.product_id);
   const selectedVariant = variants.find((variant: any) => variant.variant_id === input.selected_variant_id)
@@ -132,6 +134,8 @@ export async function createWishlistIntent(db: Db, buyerId: string, input: {
     buyer_id: buyerId,
     product_id: product.product_id,
     cluster_id: product.cluster_id,
+    comparable_product_ids: similarListings.comparable_product_ids,
+    similarity: similarListings,
     selected_variant_id: selectedVariant.variant_id,
     profile_id: profile?.profile_id ?? null,
     target_price: input.target_price ?? null,
@@ -145,6 +149,8 @@ export async function createWishlistIntent(db: Db, buyerId: string, input: {
     selected_variant_id: selectedVariant.variant_id,
     profile_id: profile?.profile_id ?? null,
     target_price: input.target_price ?? intent.target_price ?? null,
+    comparable_product_ids: similarListings.comparable_product_ids,
+    similarity: similarListings,
     updated_at: now
   };
   await c.wishlistIntents.updateOne(
@@ -401,7 +407,15 @@ async function buildTrustRadar(db: Db, intent: any, profile: any, proofRequest: 
   const c = collections(db);
   const selectedProduct = await productWithSeller(db, intent.product_id);
   if (!selectedProduct) throw new Error("Wishlist product not found");
-  const ranking = await rankCluster(db, intent.buyer_id, intent.cluster_id, profile?.preferred_fit ?? "comfort", { recordSnapshot: true, intent: "wishlist_radar" });
+  const similarity = intent.similarity ?? await resolveSimilarListingSet(db, selectedProduct.product_id);
+  const comparableProductIds = Array.isArray(intent.comparable_product_ids) && intent.comparable_product_ids.length
+    ? intent.comparable_product_ids
+    : similarity.comparable_product_ids;
+  const ranking = await rankCluster(db, intent.buyer_id, intent.cluster_id, profile?.preferred_fit ?? "comfort", {
+    recordSnapshot: true,
+    intent: "wishlist_radar",
+    productIds: comparableProductIds
+  });
   const savedCandidate = ranking.candidates.find((candidate: any) => candidate.product_id === selectedProduct.product_id) ?? null;
   const winnerCandidate = ranking.candidates[0] ?? savedCandidate;
   const winnerProduct = winnerCandidate ? await productForVariant(db, winnerCandidate.variant_id) : selectedProduct;
@@ -446,7 +460,7 @@ async function buildTrustRadar(db: Db, intent: any, profile: any, proofRequest: 
     product_id: selectedProduct.product_id,
     variant_id: winnerCandidate?.variant_id ?? intent.selected_variant_id,
     intent: ["wishlist_radar", "next_best_owner_match"],
-    tools_used: ["rankCluster", "scoreReasonChips", "proofCoverage", "sellerVerification"],
+    tools_used: ["resolveSimilarListings", "rankCluster", "scoreReasonChips", "proofCoverage", "sellerVerification"],
     fact_ids: [...factIds].slice(0, 18),
     graph_paths: [graphPath(winnerCandidate?.variant_id ?? intent.selected_variant_id, [...factIds])]
   });
@@ -475,6 +489,12 @@ async function buildTrustRadar(db: Db, intent: any, profile: any, proofRequest: 
     delta: Number(((winnerScore ?? 0) - selectedScore).toFixed(3)),
     alerts,
     candidates: candidateCards,
+    similarity: {
+      method: similarity.method,
+      summary: similarity.summary,
+      distinct_seller_count: similarity.distinct_seller_count,
+      candidates: similarity.candidates.slice(0, 4)
+    },
     next_best_action: nextRadarAction(betterOptionFound, gaps, proofRequest, winnerCandidate),
     fact_ids: [...factIds].slice(0, 24),
     created_at: nowIso()

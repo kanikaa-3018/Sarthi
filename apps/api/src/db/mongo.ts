@@ -116,6 +116,8 @@ async function ensureIndexes(db: Db) {
     c.sessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
     c.products.createIndex({ product_id: 1 }, { unique: true }),
     c.products.createIndex({ cluster_id: 1 }),
+    c.products.createIndex({ seller_id: 1, cluster_id: 1 }),
+    c.products.createIndex({ is_sarthi_eligible: 1, category: 1, garment_type: 1, color_family: 1 }),
     c.products.createIndex({ title: "text", category: "text", fabric: "text", color_family: "text" }),
     c.variants.createIndex({ variant_id: 1 }, { unique: true }),
     c.variants.createIndex({ product_id: 1 }),
