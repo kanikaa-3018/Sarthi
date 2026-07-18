@@ -7,13 +7,13 @@
   overflow-x: hidden !important;
   padding-left: 12px !important;
   padding-right: 12px !important;
-  width: 100vw !important;
+  width: 100% !important;
 }
 
 .mobile-auth-card.auth-entry-card {
-  max-width: 520px !important;
+  max-width: 460px !important;
   overflow: hidden !important;
-  width: calc(100vw - 64px) !important;
+  width: min(440px, 100%) !important;
 }
 
 .auth-entry-card .auth-portal-summary,
@@ -30,12 +30,12 @@
 }
 
 .auth-entry-card .demo-credential-box {
-  align-items: stretch !important;
-  flex-direction: column !important;
+  align-items: center !important;
+  flex-direction: row !important;
 }
 
 .auth-entry-card .demo-credential-box button {
-  width: 100% !important;
+  width: auto !important;
 }
 
 .auth-entry-card .auth-portal-lock,
@@ -94,6 +94,10 @@
   }
   .trust-center-grid {
     grid-template-columns: 1fr;
+  }
+  .trust-summary-grid,
+  .trust-step-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .seller-stats-band {
     grid-template-columns: repeat(2, 1fr);
@@ -204,6 +208,13 @@
   }
   .kg-chat-input {
     grid-template-columns: 1fr;
+  }
+  .simple-decision-top {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .simple-decision-top .keep-score-meter {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
   .decision-question-input {
     grid-template-columns: 1fr;
@@ -363,6 +374,10 @@
   .fit-preference-row select,
   .fit-preference-row button {
     width: 100%;
+  }
+  .trust-summary-grid,
+  .trust-step-grid {
+    grid-template-columns: 1fr;
   }
   .memory-record-row {
     grid-template-columns: 1fr 1fr;
