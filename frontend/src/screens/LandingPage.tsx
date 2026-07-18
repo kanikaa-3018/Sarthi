@@ -181,7 +181,7 @@ export function LandingPage({ onStartDemo }: Props) {
             </div>
             <h3>Sarthi Samvaad</h3>
             <p>
-              Ask any clothing query in simple Hinglish. Sarthi checks seller, SKU, return, proof, and offer facts before answering.
+              Ask any clothing query in simple language. Sarthi checks seller, SKU, return, proof, and offer facts before answering.
             </p>
           </div>
 

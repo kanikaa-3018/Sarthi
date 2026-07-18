@@ -89,6 +89,14 @@ export function CompareSheet({
           </div>
         </div>
 
+        {comparison.similarity && (
+          <div className="compare-match-strip">
+            <Layers size={14} />
+            <strong>{comparison.similarity.distinct_seller_count} similar sellers</strong>
+            <span>{matchReasons(comparison.similarity.candidates)}</span>
+          </div>
+        )}
+
         <div className="compare-reason-list">
           <span className="compare-section-label">Why this one</span>
           {visibleFactors.map((factor) => (
@@ -269,4 +277,9 @@ function trustScorePercent(candidate: CandidateScore) {
 function formatPolicyLabel(version: string) {
   if (version.toLowerCase().includes("apparel")) return "Sarthi Apparel Trust Policy v1";
   return "Sarthi Trust Policy v1";
+}
+
+function matchReasons(candidates: NonNullable<CompareResponse["similarity"]>["candidates"] = []) {
+  const reasons = new Set(candidates.flatMap((candidate) => candidate.reasons));
+  return [...reasons].slice(0, 3).join(" + ") || "matched by product facts";
 }

@@ -21,9 +21,9 @@ const clusters = [
 ];
 
 const buyers = [
-  { buyer_id: "buyer_asha", display_name: "Asha", language: "hinglish", cod_preferred: 1, fit_memory_enabled: 1, preferred_fit: "comfort", joined_at: iso(320) },
+  { buyer_id: "buyer_asha", display_name: "Asha", language: "english", cod_preferred: 1, fit_memory_enabled: 1, preferred_fit: "comfort", joined_at: iso(320) },
   { buyer_id: "buyer_neha", display_name: "Neha", language: "english", cod_preferred: 1, fit_memory_enabled: 1, preferred_fit: "regular", joined_at: iso(210) },
-  { buyer_id: "buyer_cold", display_name: "New buyer", language: "hinglish", cod_preferred: 1, fit_memory_enabled: 0, preferred_fit: "comfort", joined_at: iso(4) }
+  { buyer_id: "buyer_cold", display_name: "New buyer", language: "english", cod_preferred: 1, fit_memory_enabled: 0, preferred_fit: "comfort", joined_at: iso(4) }
 ];
 
 const buyerReviewProfiles = [

@@ -305,7 +305,7 @@ function defaultPath(role: AuthSession["account"]["role"]) {
 
 function readStoredLanguage(): LanguageCode {
   const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
-  return LANGUAGE_OPTIONS.some((option) => option.code === stored) ? (stored as LanguageCode) : "hinglish";
+  return LANGUAGE_OPTIONS.some((option) => option.code === stored) ? (stored as LanguageCode) : "english";
 }
 
 function readStoredExperienceMode(): ExperienceMode {

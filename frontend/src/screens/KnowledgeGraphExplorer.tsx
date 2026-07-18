@@ -156,6 +156,7 @@ export function KnowledgeGraphExplorer({
   const engineLabel = graph.summary.neo4j_projection?.status === "projected"
     ? "Neo4j live"
     : "Mongo graph";
+  const similarity = graph.summary.similarity;
   const aiLabel = answer?.agent?.provider === "gemini"
     ? "Gemini answer"
     : answer
@@ -184,6 +185,9 @@ export function KnowledgeGraphExplorer({
       <div className="kg-system-strip" aria-label="Runtime status">
         <span><ShieldCheck size={13} /> {engineLabel}</span>
         <span><Sparkles size={13} /> {aiLabel}</span>
+        {similarity && (
+          <span><PackageCheck size={13} /> {similarity.distinct_seller_count} similar sellers</span>
+        )}
       </div>
 
       <div className="kg-graph-toolbar" aria-label="Graph controls">
@@ -429,7 +433,7 @@ function buildGraphView(
     .filter((edge) => viewNodesById.has(edge.source) && viewNodesById.has(edge.target))
     .sort((left, right) => edgePriority(right, highlightedEdgeIds) - edgePriority(left, highlightedEdgeIds))
     .slice(0, 22)
-    .map((edge) => toViewEdge(edge, viewNodesById.get(edge.source)!, viewNodesById.get(edge.target)!, expanded));
+    .map((edge) => toViewEdge(edge, viewNodesById.get(edge.source)!, viewNodesById.get(edge.target)!, expanded, highlightedEdgeIds.has(edge.id)));
 
   return { nodes, edges };
 }
@@ -449,7 +453,7 @@ function buildFallbackGraphView(graph: ClusterKnowledgeGraph): GraphView {
   const edges = graph.edges
     .filter((edge) => viewNodesById.has(edge.source) && viewNodesById.has(edge.target))
     .slice(0, 8)
-    .map((edge) => toViewEdge(edge, viewNodesById.get(edge.source)!, viewNodesById.get(edge.target)!, false));
+    .map((edge) => toViewEdge(edge, viewNodesById.get(edge.source)!, viewNodesById.get(edge.target)!, false, false));
   return { nodes, edges };
 }
 
@@ -465,7 +469,7 @@ function toViewNode(node: KnowledgeGraphNode, x: number, y: number): ViewNode {
   };
 }
 
-function toViewEdge(edge: KnowledgeGraphEdge, sourceNode: ViewNode, targetNode: ViewNode, expanded: boolean): ViewEdge {
+function toViewEdge(edge: KnowledgeGraphEdge, sourceNode: ViewNode, targetNode: ViewNode, expanded: boolean, highlighted: boolean): ViewEdge {
   const midX = (sourceNode.x + targetNode.x) / 2;
   const midY = (sourceNode.y + targetNode.y) / 2;
   const bend = Math.min(12, Math.abs(targetNode.x - sourceNode.x) * 0.18);
@@ -486,7 +490,7 @@ function toViewEdge(edge: KnowledgeGraphEdge, sourceNode: ViewNode, targetNode: 
     mx: midX,
     my: midY,
     path: `M ${sourceNode.x} ${sourceNode.y} C ${controlX1} ${controlY}, ${controlX2} ${targetNode.y}, ${targetNode.x} ${targetNode.y}`,
-    showLabel: shouldShowEdgeLabel(edge.label, expanded)
+    showLabel: highlighted || shouldShowEdgeLabel(edge.label, expanded)
   };
 }
 
@@ -550,6 +554,7 @@ function edgeTone(edge: KnowledgeGraphEdge, sourceNode: ViewNode, targetNode: Vi
 }
 
 function shouldShowEdgeLabel(label: string, expanded: boolean) {
+  if (!expanded) return false;
   const normalized = label.toLowerCase();
   if (expanded && (
     normalized.includes("has outcome") ||

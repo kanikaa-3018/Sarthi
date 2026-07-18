@@ -34,7 +34,7 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Db) {
       password_hash: clientHashSchema.optional(),
       password: z.string().min(8).optional(),
       display_name: z.string().min(1),
-      language: z.enum(["hinglish", "english"]).default("english")
+      language: z.enum(["english"]).default("english")
     }).refine((input) => input.password_hash || input.password, "Password is required").parse(request.body);
     const username = body.username.trim().toLowerCase();
     if (await collections(db).accounts.findOne({ username })) {

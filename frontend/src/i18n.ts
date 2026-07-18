@@ -1,4 +1,4 @@
-export type LanguageCode = "hinglish" | "english";
+export type LanguageCode = "english";
 
 export type ExperienceMode = "standard" | "simple";
 
@@ -31,7 +31,6 @@ export type CopyKey =
   | "resolveListings";
 
 export const LANGUAGE_OPTIONS: Array<{ code: LanguageCode; label: string; shortLabel: string }> = [
-  { code: "hinglish", label: "Hinglish", shortLabel: "Hin" },
   { code: "english", label: "English", shortLabel: "En" }
 ];
 
@@ -64,36 +63,8 @@ const ENGLISH_COPY: Record<CopyKey, string> = {
   resolveListings: "Compare listings"
 };
 
-const HINGLISH_COPY: Partial<Record<CopyKey, string>> = {
-  shop: "Shop",
-  trust: "Bharosa",
-  sellerConsole: "Seller",
-  reviewQueue: "Review",
-  simpleMode: "Simple",
-  standardMode: "Details",
-  awaitingScanTitle: "Sarthi check ka wait",
-  awaitingScanBody: "Product save karo. Sarthi seller, size, return, price aur proof check karega.",
-  trustReceipt: "Bharosa check",
-  agentChecks: "Sarthi ne check kiya",
-  whatThisMeans: "Seedha matlab",
-  nextStep: "Ab kya karein",
-  proofAvailable: "Proof ready",
-  recommendationAllowed: "Consider kar sakte hain",
-  recommendationPaused: "Ek baar check karo",
-  offerTruth: "Offer check",
-  sellerChecked: "Seller checked",
-  returnsChecked: "Returns checked",
-  sizeChecked: "Size checked",
-  priceChecked: "Price checked",
-  privacyChecked: "Privacy safe",
-  notEnoughProof: "Proof kam hai",
-  safeToCompare: "Compare safe hai",
-  checkOnce: "Order se pehle check karo",
-  resolveListings: "Listings compare karo"
-};
-
-export function t(language: LanguageCode, key: CopyKey): string {
-  return language === "hinglish" ? HINGLISH_COPY[key] ?? ENGLISH_COPY[key] : ENGLISH_COPY[key];
+export function t(_language: LanguageCode, key: CopyKey): string {
+  return ENGLISH_COPY[key];
 }
 
 export function languageLabel(language: LanguageCode): string {

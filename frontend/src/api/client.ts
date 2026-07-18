@@ -368,22 +368,24 @@ export function runRegretFirewall(payload: {
   });
 }
 
-export function compareCluster(buyerId: string, clusterId: string) {
+export function compareCluster(buyerId: string, clusterId: string, productId?: string) {
   return request<CompareResponse>("/compare", {
     method: "POST",
     body: JSON.stringify({
       buyer_id: buyerId,
       cluster_id: clusterId,
+      ...(productId ? { product_id: productId } : {}),
       preferred_fit: "comfort"
     })
   });
 }
 
-export function getClusterKnowledgeGraph(buyerId: string, clusterId: string) {
+export function getClusterKnowledgeGraph(buyerId: string, clusterId: string, productId?: string) {
   const params = new URLSearchParams({
     buyer_id: buyerId,
     preferred_fit: "comfort"
   });
+  if (productId) params.set("product_id", productId);
   return request<ClusterKnowledgeGraph>(
     `/knowledge-graph/clusters/${encodeURIComponent(clusterId)}?${params.toString()}`
   );
@@ -392,6 +394,7 @@ export function getClusterKnowledgeGraph(buyerId: string, clusterId: string) {
 export function askKnowledgeGraph(payload: {
   buyer_id: string;
   cluster_id: string;
+  product_id?: string;
   query: string;
   preferred_fit?: "comfort" | "regular";
 }) {

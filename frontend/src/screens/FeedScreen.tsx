@@ -224,7 +224,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         query: "Is this safe to buy before ordering?",
         create_missing_proof_request: false
       }),
-      getClusterKnowledgeGraph(buyerId, product.cluster_id),
+      getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id),
       createWishlistIntent({
         buyer_id: buyerId,
         product_id: product.product_id,
@@ -311,6 +311,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       const response = await askKnowledgeGraph({
         buyer_id: buyerId,
         cluster_id: knowledgeGraph.cluster.cluster_id,
+        product_id: wishlistedProduct?.product_id,
         query: prompt
       });
       setGraphAnswer(response);
@@ -548,6 +549,7 @@ function compareFromDecision(decision: RegretDecisionResponse): CompareResponse 
     trace_id: decision.trace_id,
     selected_product_id: decision.selected.product.product_id,
     ranking: decision.ranking,
+    similarity: decision.context.similarity ?? null,
     fit: decision.sku_truth_passport.fit,
     graph_path: decision.graph_paths[0] ?? {
       path_type: "regret_firewall",

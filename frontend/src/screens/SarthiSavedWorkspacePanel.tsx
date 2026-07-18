@@ -69,7 +69,20 @@ export function SarthiSavedWorkspacePanel({
   onQueryChange: (value: string) => void;
   onAskGraph: (query: string) => void;
 }) {
-  const similarProducts = products.filter((product) => product.cluster_id === savedProduct.cluster_id && product.is_sarthi_eligible);
+  const resolvedMatchIds = (
+    knowledgeGraph?.summary.similarity?.candidates ??
+    wishlistRadar?.similarity?.candidates ??
+    []
+  ).map((candidate) => candidate.product_id);
+  const resolvedProducts = resolvedMatchIds
+    .map((productId) => products.find((product) => product.product_id === productId))
+    .filter(Boolean) as Product[];
+  const similarProducts = resolvedProducts.length
+    ? resolvedProducts
+    : products.filter((product) => product.cluster_id === savedProduct.cluster_id && product.is_sarthi_eligible);
+  const similarSellerCount = knowledgeGraph?.summary.similarity?.distinct_seller_count ??
+    wishlistRadar?.similarity?.distinct_seller_count ??
+    new Set(similarProducts.map((product) => product.seller_id)).size;
   const result = autoScan.status === "ready" ? autoScan.result : null;
   const winnerProduct = result ? productForVariant(result.ranking.winner, similarProducts) : null;
   const winnerCandidate = result && winnerProduct ? candidateForProduct(result, winnerProduct) : null;
@@ -110,7 +123,7 @@ export function SarthiSavedWorkspacePanel({
             <span className="eyebrow">Saved check</span>
             <h2>Should you buy this?</h2>
             <p>
-              <strong>{savedProduct.title.split("-")[0].trim()}</strong> | Rs {savedProduct.base_price} | {similarProducts.length} sellers
+              <strong>{savedProduct.title.split("-")[0].trim()}</strong> | Rs {savedProduct.base_price} | {similarSellerCount} same-looking sellers
             </p>
           </div>
         </div>
@@ -129,7 +142,7 @@ export function SarthiSavedWorkspacePanel({
       </div>
 
       <div className="workspace-insight-row">
-        <WorkspaceInsight icon={<Store size={16} />} label="Sellers" value={String(similarProducts.length)} detail="same item" />
+        <WorkspaceInsight icon={<Store size={16} />} label="Sellers" value={String(similarSellerCount)} detail="image match" />
         <WorkspaceInsight icon={<Database size={16} />} label="Facts" value={String(sourceCount)} detail="proof used" />
         <WorkspaceInsight icon={<TrendingDown size={16} />} label="Returns" value={returnSignal ?? "Checking"} detail="winner SKU" />
         <WorkspaceInsight icon={<ListChecks size={16} />} label="Rule" value={formatPolicyLabel(result?.ranking.weighting?.version)} detail="score weights" />
@@ -142,6 +155,7 @@ export function SarthiSavedWorkspacePanel({
             loading={radarLoading}
             error={radarError}
             activeFitProfile={activeFitProfile}
+            similarity={knowledgeGraph?.summary.similarity ?? wishlistRadar?.similarity ?? null}
             onOpenProof={onOpenProof}
           />
           <SarthiLensPanel
@@ -191,12 +205,14 @@ function TrustRadarCard({
   loading,
   error,
   activeFitProfile,
+  similarity,
   onOpenProof
 }: {
   radar: WishlistRadarEvent | null;
   loading: boolean;
   error: string | null;
   activeFitProfile: FitProfile | null;
+  similarity: ClusterKnowledgeGraph["summary"]["similarity"] | null;
   onOpenProof: (traceId: string) => void;
 }) {
   if (error) {
@@ -257,6 +273,7 @@ function TrustRadarCard({
 
       <div className="radar-context-row">
         <span>{activeFitProfile ? `${activeFitProfile.label} profile` : "Buyer profile"}</span>
+        <span>{similarity ? `${similarity.distinct_seller_count} similar sellers` : "Similarity checked"}</span>
         <span>{radar.alerts.length ? `${radar.alerts.length} alert${radar.alerts.length > 1 ? "s" : ""}` : "No blocker alert"}</span>
         <span>{radar.delta > 0 ? `+${Math.round(radar.delta * 100)} score lift` : "Saved option checked"}</span>
       </div>

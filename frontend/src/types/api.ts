@@ -230,6 +230,7 @@ export type ClusterKnowledgeGraph = {
       projected_edges?: number;
       error?: string;
     };
+    similarity?: SimilaritySummary | null;
     source_health: SourceHealth;
     fact_count: number;
   };
@@ -276,6 +277,7 @@ export type CompareResponse = {
   trace_id: string;
   selected_product_id: string;
   ranking: RankingResult;
+  similarity?: SimilaritySummary | null;
   fit: FitPrediction;
   graph_path: GraphPath;
 };
@@ -415,6 +417,7 @@ export type RegretDecisionResponse = {
     cluster_id: string;
     category: string;
     garment_type: string;
+    similarity?: SimilaritySummary;
   };
   decision: {
     code:
@@ -653,6 +656,26 @@ export type ReasonChip = {
   sentiment: "positive" | "watch" | "neutral";
 };
 
+export type SimilarityCandidate = {
+  product_id: string;
+  seller_id: string;
+  cluster_id: string;
+  title: string;
+  image_url: string;
+  score: number;
+  reasons: string[];
+};
+
+export type SimilaritySummary = {
+  seed_product_id?: string;
+  comparable_product_ids?: string[];
+  method: string;
+  minimum_score?: number;
+  distinct_seller_count: number;
+  summary: string;
+  candidates: SimilarityCandidate[];
+};
+
 export type WishlistRadarEvent = {
   event_id: string;
   trace_id: string;
@@ -700,6 +723,7 @@ export type WishlistRadarEvent = {
   };
   fact_ids: string[];
   created_at: string;
+  similarity?: SimilaritySummary;
 };
 
 export type WishlistIntentResponse = {
@@ -715,6 +739,8 @@ export type WishlistIntentResponse = {
     created_at: string;
     updated_at: string;
     last_radar_event_id: string | null;
+    comparable_product_ids?: string[];
+    similarity?: SimilaritySummary;
   };
   radar: WishlistRadarEvent;
   seller_signal: ProofRequest | null;
@@ -972,6 +998,8 @@ export type Seller = {
   seller_id: string;
   name: string;
   median_dispatch_hours: number;
+  current_rating: number | null;
+  rating_count: number;
   product_count: number;
   cluster_ids: string[];
 };

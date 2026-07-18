@@ -48,11 +48,11 @@ export function SellerPanel() {
 
   // Listing Draft inputs
   const [draftTitle, setDraftTitle] = useState("");
-  const [draftCategory, setDraftCategory] = useState("Ethnic Wear");
+  const [draftCategory, setDraftCategory] = useState("women_kurtis");
   const [draftGarmentType, setDraftGarmentType] = useState("kurti");
-  const [draftFabric, setDraftFabric] = useState("cotton");
-  const [draftColor, setDraftColor] = useState("Green");
-  const [draftPrice, setDraftPrice] = useState("499");
+  const [draftFabric, setDraftFabric] = useState("cotton blend");
+  const [draftColor, setDraftColor] = useState("blue");
+  const [draftPrice, setDraftPrice] = useState("459");
   const [draftImageUrl, setDraftImageUrl] = useState("");
   const [draftCreating, setDraftCreating] = useState(false);
   const [draftSuccess, setDraftSuccess] = useState<string | null>(null);
@@ -218,11 +218,11 @@ export function SellerPanel() {
         fabric: draftFabric,
         color_family: draftColor,
         base_price: Number(draftPrice),
-        image_url: draftImageUrl.trim() || "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500&auto=format&fit=crop"
+        image_url: draftImageUrl.trim() || "https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80"
       });
       setDraftSuccess("Listing draft created successfully.");
       setDraftTitle("");
-      setDraftPrice("499");
+      setDraftPrice("459");
       setDraftImageUrl("");
       await loadPanel(selectedClusterId);
     } catch (err) {
@@ -233,13 +233,20 @@ export function SellerPanel() {
   }
 
   function handleAutoFillDraft() {
-    setDraftTitle("Premium Cotton Printed Anarkali Kurta");
-    setDraftCategory("Ethnic Wear");
+    setDraftTitle("Blue Floral Cotton Kurti - Seller Draft");
+    setDraftCategory("women_kurtis");
     setDraftGarmentType("kurti");
-    setDraftFabric("cotton");
-    setDraftColor("Green");
-    setDraftPrice("650");
-    setDraftImageUrl("https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500&auto=format&fit=crop");
+    setDraftFabric("cotton blend");
+    setDraftColor("blue");
+    setDraftPrice("459");
+    setDraftImageUrl("https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80");
+  }
+
+  function openAddProduct() {
+    setActiveTab("onboarding");
+    window.setTimeout(() => {
+      document.getElementById("seller-create-product")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 40);
   }
 
   async function handleDraftSubmit(draftId: string) {
@@ -261,18 +268,36 @@ export function SellerPanel() {
     return <div className="seller-loading-state">Loading seller center...</div>;
   }
 
+  const sellerSummary = panel?.seller ?? onboarding?.seller ?? null;
+  const currentRating = sellerSummary?.current_rating;
+  const ratingText = typeof currentRating === "number" ? currentRating.toFixed(1) : "New";
+  const ratingCount = sellerSummary?.rating_count ?? 0;
+
   return (
     <main className="seller-console-shell">
       <section className="seller-console-toolbar">
         <div className="seller-title-block">
           <span className="eyebrow">Seller Console</span>
-          <h2>{panel?.seller.name ?? onboarding?.seller.name ?? "Seller center"}</h2>
-          <p>
-            Improve listing trust with aggregate return, fit, dispatch, and proof signals. Buyer personal memory is never shown here.
-          </p>
+          <div className="seller-title-line">
+            <h2>{sellerSummary?.name ?? "Seller center"}</h2>
+            <span className="seller-current-rating">
+              <Star size={15} fill="currentColor" />
+              <strong>{ratingText}</strong>
+              <small>{ratingCount ? `${ratingCount.toLocaleString("en-IN")} ratings` : "No ratings yet"}</small>
+            </span>
+          </div>
+          <p>Fix proof gaps. Add products. Buyer personal data is never shown.</p>
         </div>
 
         <div className="seller-toolbar-controls">
+          <button
+            type="button"
+            className="seller-primary-action seller-add-product-btn"
+            onClick={openAddProduct}
+          >
+            <Plus size={14} />
+            Add product
+          </button>
           {activeTab === "performance" && panel && (
             <label>
               Product cluster
@@ -313,14 +338,14 @@ export function SellerPanel() {
           onClick={() => setActiveTab("performance")}
           disabled={!panel}
         >
-          Active Performance & Doubt Inbox
+          Performance
         </button>
         <button
           type="button"
           className={activeTab === "onboarding" ? "active" : ""}
           onClick={() => setActiveTab("onboarding")}
         >
-          Verification & Catalog Drafts {onboarding && onboarding.listing_drafts.length > 0 && `(${onboarding.listing_drafts.length})`}
+          Verify & drafts {onboarding && onboarding.listing_drafts.length > 0 && `(${onboarding.listing_drafts.length})`}
         </button>
       </div>
 
@@ -620,18 +645,18 @@ export function SellerPanel() {
               </div>
 
               {/* Listing Drafts section */}
-              <div className="seller-section" style={{ marginTop: "20px" }}>
+              <div id="seller-create-product" className="seller-section" style={{ marginTop: "20px" }}>
                 <div className="section-heading-row">
                   <div>
                     <span className="eyebrow">Catalog creation</span>
-                    <h3>Listing Drafts</h3>
+                    <h3>Add product</h3>
                   </div>
                 </div>
 
                 <div className="seller-draft-workspace" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "20px", margin: "16px 0" }}>
                   {/* Create Draft Form */}
                   <form onSubmit={handleCreateDraft} className="seller-proof-form-body" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <strong>Create Catalog Listing Draft</strong>
+                    <strong>Create listing draft</strong>
                     <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                       <span style={{ fontSize: "11px", fontWeight: "700" }}>Product Title</span>
                       <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="e.g. Cotton Ethnic Kurta" required />
