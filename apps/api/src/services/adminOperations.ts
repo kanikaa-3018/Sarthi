@@ -65,27 +65,99 @@ export async function approveListingDraft(db: Db, account: any, draftId: string,
   const c = collections(db);
   const draft = await c.listingDrafts.findOne({ draft_id: draftId });
   if (draft) {
+    if (draft.status === "approved") {
+      await recordAdminEvent(db, account, "listing_draft_approval_skipped", "listing_draft", draftId, draft.seller_id, "already_approved", notes);
+      return adminQueue(db);
+    }
     const product_id = id("product");
+    const cluster_id = draft.target_cluster_id ?? id("cluster");
+    const variant_id = `${product_id}_xl`;
+    const catalogFactId = id("fact_catalog");
+    const priceFactId = id("fact_price");
+    const inventoryFactId = id("fact_inventory");
     const seller = await c.sellers.findOne({ seller_id: draft.seller_id });
-    await c.products.insertOne({
-      product_id,
-      cluster_id: draft.target_cluster_id ?? id("cluster"),
-      seller_id: draft.seller_id,
-      title: draft.title,
-      category: draft.category,
-      garment_type: draft.garment_type,
-      fabric: draft.fabric,
-      color_family: draft.color_family,
-      base_price: draft.base_price,
-      image_url: draft.image_url,
-      rating: 4.0,
-      rating_count: 0,
-      commerce_badge: "New seller",
-      delivery_text: "Delivery after seller confirmation",
-      is_sarthi_eligible: 1,
-      seller_name: seller?.name
-    });
-    await c.variants.insertOne({ variant_id: `${product_id}_xl`, product_id, size: "XL", current_price: draft.base_price, stock: 10 });
+    const existingCluster = await c.clusters.findOne({ cluster_id });
+    if (!existingCluster) {
+      await c.clusters.insertOne({
+        cluster_id,
+        label: `${draft.color_family} ${draft.garment_type}`.replace(/\s+/g, " ").trim(),
+        category: draft.category
+      });
+    }
+    await Promise.all([
+      c.products.insertOne({
+        product_id,
+        cluster_id,
+        seller_id: draft.seller_id,
+        title: draft.title,
+        category: draft.category,
+        garment_type: draft.garment_type,
+        fabric: draft.fabric,
+        color_family: draft.color_family,
+        base_price: draft.base_price,
+        image_url: draft.image_url,
+        rating: 4.0,
+        rating_count: 0,
+        commerce_badge: "New seller",
+        delivery_text: "Delivery after seller confirmation",
+        is_sarthi_eligible: 1,
+        seller_name: seller?.name,
+        taxonomy_attributes: [
+          { field_name: "category", display_name: "Category", value: draft.category },
+          { field_name: "generic_name", display_name: "Generic Name", value: draft.garment_type },
+          { field_name: "fabric", display_name: "Fabric", value: draft.fabric },
+          { field_name: "color", display_name: "Color", value: draft.color_family }
+        ],
+        source_refs: {
+          listing_draft_id: draftId,
+          approved_by: account.account_id
+        }
+      }),
+      c.variants.insertOne({ variant_id, product_id, size: "XL", current_price: draft.base_price, stock: 10 }),
+      c.facts.insertMany([
+        {
+          fact_id: catalogFactId,
+          source_table: "products",
+          source_id: product_id,
+          source_type: "catalog_listing",
+          summary: `${draft.title} was approved into buyer catalog after admin review.`,
+          created_at: nowIso(),
+          expires_at: null
+        },
+        {
+          fact_id: priceFactId,
+          source_table: "price_events",
+          source_id: variant_id,
+          source_type: "seller_price",
+          summary: `Approved listing price is Rs ${draft.base_price}.`,
+          created_at: nowIso(),
+          expires_at: null
+        },
+        {
+          fact_id: inventoryFactId,
+          source_table: "inventory_snapshots",
+          source_id: variant_id,
+          source_type: "seller_inventory",
+          summary: "New approved listing starts with 10 units available.",
+          created_at: nowIso(),
+          expires_at: null
+        }
+      ]),
+      c.priceEvents.insertOne({
+        variant_id,
+        price: draft.base_price,
+        event_type: "listing_approved",
+        created_at: nowIso(),
+        fact_id: priceFactId
+      }),
+      c.inventorySnapshots.insertOne({
+        variant_id,
+        available_to_promise: 10,
+        sales_velocity_24h: 0,
+        captured_at: nowIso(),
+        fact_id: inventoryFactId
+      })
+    ]);
     await c.listingDrafts.updateOne(
       { draft_id: draftId },
       { $set: { status: "approved", readiness_status: "evidence_building", updated_at: nowIso() } }

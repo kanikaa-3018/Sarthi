@@ -59,12 +59,28 @@ export async function registerSellerRoutes(app: FastifyInstance, db: Db) {
 
   app.post("/seller/me/verification/documents", async (request, reply) => {
     const account = await requireRole(db, request, reply, "seller");
-    return submitSellerDocument(db, account.seller_id, request.body);
+    const body = z.object({
+      document_type: z.enum(["gst_certificate", "pan_card", "address_proof", "bank_proof"]),
+      reference: z.string().min(2),
+      file_name: z.string().min(1),
+      mime_type: z.string().min(1),
+      content_base64: z.string().min(1)
+    }).parse(request.body);
+    return submitSellerDocument(db, account.seller_id, body);
   });
 
   app.post("/seller/me/listing-drafts", async (request, reply) => {
     const account = await requireRole(db, request, reply, "seller");
-    return createListingDraft(db, account.seller_id, request.body);
+    const body = z.object({
+      title: z.string().min(3),
+      category: z.string().min(2),
+      garment_type: z.string().min(2),
+      fabric: z.string().min(2),
+      color_family: z.string().min(2),
+      base_price: z.number().positive(),
+      image_url: z.string().min(1)
+    }).parse(request.body);
+    return createListingDraft(db, account.seller_id, body);
   });
 
   app.post("/seller/me/listing-drafts/:draft_id/submit", async (request, reply) => {

@@ -10,17 +10,21 @@ import {
   variantsForProduct
 } from "./domain.js";
 import { label, withoutId } from "./format.js";
+import { suggestClusterFromSimilarListings } from "./similarListings.js";
 import { nowIso } from "./time.js";
 
 export async function listSellers(db: Db) {
   const c = collections(db);
   const sellers = await c.sellers.find({}).toArray();
   return Promise.all(sellers.map(async (seller: any) => {
-    const products = await c.products.find({ seller_id: seller.seller_id }).project({ cluster_id: 1 }).toArray();
+    const products = await c.products.find({ seller_id: seller.seller_id }).project({ cluster_id: 1, rating: 1, rating_count: 1 }).toArray();
+    const rating = sellerRating(products);
     return {
       seller_id: seller.seller_id,
       name: seller.name,
       median_dispatch_hours: seller.median_dispatch_hours,
+      current_rating: rating.current_rating,
+      rating_count: rating.rating_count,
       product_count: products.length,
       cluster_ids: [...new Set(products.map((product: any) => product.cluster_id))]
     };
@@ -37,12 +41,15 @@ export async function sellerPanel(db: Db, sellerId: string, clusterId?: string) 
   const own = cards.filter((card) => card.seller.seller_id === sellerId);
   const competitors = cards.filter((card) => card.seller.seller_id !== sellerId);
   const cluster = await c.clusters.findOne({ cluster_id: selectedCluster });
-  const sellerProducts = await c.products.find({ seller_id: sellerId }).project({ cluster_id: 1 }).toArray();
+  const sellerProducts = await c.products.find({ seller_id: sellerId }).project({ cluster_id: 1, rating: 1, rating_count: 1 }).toArray();
+  const rating = sellerRating(sellerProducts);
   return {
     seller: {
       seller_id: sellerId,
       name: seller?.name ?? "",
       median_dispatch_hours: seller?.median_dispatch_hours ?? 48,
+      current_rating: rating.current_rating,
+      rating_count: rating.rating_count,
       product_count: sellerProducts.length,
       cluster_ids: [...new Set(sellerProducts.map((product: any) => product.cluster_id))]
     },
@@ -220,6 +227,8 @@ export async function sellerOnboarding(db: Db, sellerId: string) {
     seller_id: sellerId,
     name: "",
     median_dispatch_hours: 48,
+    current_rating: null,
+    rating_count: 0,
     product_count: 0,
     cluster_ids: []
   };
@@ -270,13 +279,14 @@ export async function submitSellerDocument(db: Db, sellerId: string, body: any) 
 }
 
 export async function createListingDraft(db: Db, sellerId: string, body: any) {
+  const verification = await sellerVerification(db, sellerId);
   const draft = {
     draft_id: id("draft"),
     seller_id: sellerId,
     ...body,
-    target_cluster_id: await suggestCluster(db, body.category, body.garment_type, body.color_family),
+    target_cluster_id: await suggestCluster(db, body),
     status: "draft",
-    readiness_status: "blocked_seller_verification",
+    readiness_status: verification.verification_status === "verified" ? "catalog_only" : "blocked_seller_verification",
     created_at: nowIso(),
     updated_at: nowIso(),
     submitted_at: null
@@ -314,9 +324,31 @@ function recommendationForAttribute(attribute: string) {
   return map[attribute] ?? "seller_note";
 }
 
-async function suggestCluster(db: Db, category: string, garmentType: string, colorFamily: string) {
+async function suggestCluster(db: Db, draft: any) {
+  const similarCluster = await suggestClusterFromSimilarListings(db, draft);
+  if (similarCluster) return similarCluster;
+  const category = draft.category ?? "misc";
+  const garmentType = draft.garment_type ?? "product";
+  const colorFamily = draft.color_family ?? "mixed";
   const cluster = await collections(db).clusters.findOne({ category });
   return cluster?.cluster_id ?? `cluster_${category}_${garmentType}_${colorFamily}`.replaceAll(" ", "_").toLowerCase();
+}
+
+function sellerRating(products: any[]) {
+  const rated = products.filter((product) => typeof product.rating === "number");
+  const ratingCount = rated.reduce((sum, product) => sum + Number(product.rating_count ?? 0), 0);
+  if (!rated.length) {
+    return { current_rating: null as number | null, rating_count: 0 };
+  }
+  const weighted = rated.reduce((sum, product) => {
+    const count = Math.max(1, Number(product.rating_count ?? 0));
+    return sum + Number(product.rating) * count;
+  }, 0);
+  const denominator = rated.reduce((sum, product) => sum + Math.max(1, Number(product.rating_count ?? 0)), 0);
+  return {
+    current_rating: Number((weighted / Math.max(1, denominator)).toFixed(1)),
+    rating_count: ratingCount
+  };
 }
 
 function median(values: number[]) {
