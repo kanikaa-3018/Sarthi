@@ -119,8 +119,8 @@ export function TrustCenter({ buyerId }: Props) {
       <section className="trust-hero-section trust-hero-simple">
         <div>
           <span className="eyebrow">Trust Center</span>
-          <h2>Your shopping safety</h2>
-          <p>See what Sarthi uses, what stays private, and how advice is decided.</p>
+          <h2>Your trust controls</h2>
+          <p>Choose what Sarthi can use. Sellers never see your fit memory.</p>
         </div>
         <button className="btn-reset-db" onClick={load} disabled={busy} title="Refresh trust center">
           <RefreshCcw size={15} className={busy ? "spin-icon" : ""} />

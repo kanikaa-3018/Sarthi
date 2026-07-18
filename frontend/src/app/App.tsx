@@ -12,6 +12,7 @@ import type { AuthSession } from "../types/api";
 
 const LANGUAGE_STORAGE_KEY = "sarthi.language";
 const EXPERIENCE_MODE_STORAGE_KEY = "sarthi.experienceMode";
+const THEME_STORAGE_KEY = "sarthi.theme";
 
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -22,8 +23,7 @@ export function App() {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Theme state: light or dark
-  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
+  const [theme, setTheme] = useState<"light" | "dark" | "system">(readStoredTheme);
 
   useEffect(() => {
     const stored = getStoredSession();
@@ -57,6 +57,7 @@ export function App() {
           : "light"
         : theme;
     document.documentElement.setAttribute("data-theme", resolvedTheme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
   function handleAuthenticated(nextSession: AuthSession) {
@@ -198,9 +199,9 @@ export function App() {
                 >
                   <ShieldCheck size={14} />
                   <span className="hide-on-mobile">
-                    {experienceMode === "simple" ? t(language, "standardMode") : t(language, "simpleMode")}
+                    {experienceMode === "simple" ? t(language, "simpleMode") : t(language, "standardMode")}
                   </span>
-                  <span className="show-on-mobile">{experienceMode === "simple" ? "Detailed" : "Simple"}</span>
+                  <span className="show-on-mobile">{experienceMode === "simple" ? "Simple" : "Details"}</span>
                 </button>
               )}
 
@@ -310,4 +311,9 @@ function readStoredLanguage(): LanguageCode {
 
 function readStoredExperienceMode(): ExperienceMode {
   return window.localStorage.getItem(EXPERIENCE_MODE_STORAGE_KEY) === "standard" ? "standard" : "simple";
+}
+
+function readStoredTheme(): "light" | "dark" | "system" {
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return stored === "light" || stored === "system" ? stored : "dark";
 }

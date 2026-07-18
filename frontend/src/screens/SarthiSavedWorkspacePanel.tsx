@@ -121,9 +121,9 @@ export function SarthiSavedWorkspacePanel({
           />
           <div className="workspace-product-copy">
             <span className="eyebrow">Saved check</span>
-            <h2>Should you buy this?</h2>
+            <h2>Buy or ask proof?</h2>
             <p>
-              <strong>{savedProduct.title.split("-")[0].trim()}</strong> | Rs {savedProduct.base_price} | {similarSellerCount} same-looking sellers
+              <strong>{savedProduct.title.split("-")[0].trim()}</strong> | Rs {savedProduct.base_price} | {similarSellerCount} image-matched sellers
             </p>
           </div>
         </div>

@@ -645,9 +645,9 @@ function MarketplaceHome({
       <section className="buyer-shop-hero" aria-labelledby="buyer-shop-title">
         <div className="buyer-shop-copy">
           <span className="eyebrow">Catalog</span>
-          <h2 id="buyer-shop-title">Find a product. Tap Check trust.</h2>
+          <h2 id="buyer-shop-title">Find. Check. Buy safely.</h2>
           <p>
-            Sarthi checks seller, size, returns, price, and proof before you pay.
+            Seller, size, returns, price and proof checked before payment.
           </p>
         </div>
         <div className="shop-trust-row" aria-label="Sarthi trust checks">
@@ -663,7 +663,7 @@ function MarketplaceHome({
           <input
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search products, fabric, seller, or use case"
+            placeholder="Search product or seller"
           />
         </div>
 
@@ -702,10 +702,10 @@ function MarketplaceHome({
             <ShieldCheck size={17} />
           </span>
           <div>
-            <strong>{wishlistedProduct ? "Saved product evidence is ready" : "Evidence check starts after saving"}</strong>
+            <strong>{wishlistedProduct ? "Trust check ready" : "Save to check trust"}</strong>
             <p>
               {wishlistedProduct
-                ? `Trust check is ready for "${wishlistedProduct.title.split("-")[0].trim()}".`
+                ? `${wishlistedProduct.title.split("-")[0].trim()} is ready.`
                 : sarthiNudgeCopy}
               {activeFitProfile ? ` Fit context: ${activeFitProfile.label}.` : ""}
             </p>
