@@ -13,7 +13,7 @@ Buyer, seller, and admin surfaces are separated by authenticated roles. A buyer 
 
 The product is considered coherent only when all four surfaces use the same evidence layer:
 
-- SQLite facts are the source of truth;
+- MongoDB Atlas evidence documents are the source of truth;
 - graph paths explain multi-hop reasoning;
 - audit traces expose fact summaries;
 - privacy settings affect size advice;
@@ -66,7 +66,7 @@ These are not UI polish items; they are real production blockers:
 - real media upload/storage for listing photos;
 - marketplace catalog/inventory integration for approved listing publishing;
 - write authorization for seller actions;
-- proper migration system beyond SQLite seed reset;
+- proper migration system beyond seeded MongoDB reset;
 - admin-only operational controls instead of prototype reset/scenario APIs;
 - observability, rate limits, and error reporting;
 - accessibility pass with keyboard and screen-reader testing;

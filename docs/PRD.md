@@ -228,14 +228,14 @@ The buyer-facing timeline must show:
 
 ## 8. Data Requirements
 
-Current source of truth:
+Current evidence store:
 
-- SQLite stores buyers, sellers, products, variants, evidence, reviews, prices, campaigns, inventory, outcomes, memory, documents, drafts, accounts, sessions, and audit traces.
+- MongoDB Atlas stores buyers, buyer review profiles, sellers, products, variants, evidence, reviews, prices, campaigns, inventory, outcomes, memory, documents, drafts, accounts, sessions, checkout contracts, cache records, and audit traces.
 
 Graph layer:
 
-- Neo4j projection uses SQLite facts for multi-hop reasoning.
-- SQLite fallback graph paths exist for development and tests.
+- Neo4j projection uses MongoDB fact records for multi-hop reasoning.
+- MongoDB-backed graph paths exist for development and tests when Neo4j is unavailable.
 
 Production connectors needed:
 
@@ -300,7 +300,7 @@ Hackathon evaluation mapping:
 - Working prototype: end-to-end buyer, seller, and admin flows.
 - Innovation: trust receipt plus offer truth plus privacy-aware agentic checks.
 - Impact: protects COD-first buyers and improves seller quality feedback.
-- Feasibility: SQLite source of truth, graph projection, deterministic services.
+- Feasibility: MongoDB Atlas evidence store, graph projection, deterministic services.
 - Technical excellence: tests, RBAC, audit traces, data contracts, modular services.
 
 ## 12. Out Of Scope For Current Build

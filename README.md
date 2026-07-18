@@ -1,57 +1,88 @@
 # Sarthi
 
-Sarthi is a pre-purchase confidence agent for Bharat commerce. It helps buyers choose the safer duplicate listing, pick the right size, understand the one risk that matters, verify whether an offer is genuinely urgent, and learn from kept or returned outcomes.
+Sarthi is a pre-purchase trust and checkout confidence layer for online commerce. It helps buyers choose a safer product, seller, size, offer, and payment mode before checkout, while giving sellers aggregate evidence tasks and giving admins review control.
 
-The product is intentionally not a generic shopping chatbot. Sarthi is a trust layer inside an ecommerce journey: it uses deterministic tools, fact IDs, source-health checks, and audit traces before showing buyer-facing advice.
+## Current Direction
 
-## Current Product Slice
-
-```text
-Buyer feed -> Duplicate listing comparison -> Product detail -> Offer Sach Check -> Outcome learning
-Seller panel -> Seller onboarding -> Listing drafts
-Admin review -> Seller verification -> Listing publishing
-```
-
-## What Is Implemented
-
-- Marketplace-style buyer feed with realistic product cards.
-- Buyer, seller, and admin authentication with backend RBAC.
-- Confusion Resolver for duplicate seller listings.
-- Per-SKU Trust Card and source-health disclosure.
-- Size Oracle using buyer memory when enabled and aggregate evidence otherwise.
-- Galti Mat Dohrao warning for avoidable repeated mistakes.
-- Offer Sach Check before COD confirmation.
-- Sarthi Samvaad agent with tool routing and audit traces.
-- Buyer Trust Receipt and visible agent-check timeline.
-- Trust Center for memory controls and readiness disclosure.
-- Seller console with aggregate evidence and action items.
-- Seller onboarding with document upload metadata and listing drafts.
-- Admin review queue with seller approval, listing review, and reviewer audit events.
-- SQLite source of truth with Neo4j projection contracts.
-- Backend tests covering auth, trust, privacy, seller, admin, scenarios, and production guards.
-
-## Tech Stack
+The active backend direction is now:
 
 ```text
 Frontend: React + Vite + TypeScript
-Backend: FastAPI + Python
-Operational store: SQLite
-Graph layer: Neo4j projection contract with SQLite fallback paths
-Tests: Pytest
+Backend: Node.js + TypeScript + Fastify
+Database: MongoDB Atlas
+Graph reasoning: MongoDB evidence projection, optional Neo4j runtime projection
+Semantic retrieval: Optional MongoDB Atlas Vector Search over Gemini embeddings
+LLM: Optional Gemini grounded answer and confidence assignment
 ```
 
-## Run Locally
+The previous Python/FastAPI backend remains in `backend/` only as historical reference. New backend work should happen in `apps/api`.
 
-Backend:
+## Product Slice
+
+```text
+Buyer feed -> Trust score -> Similar listing resolver -> Product detail
+Checkout confidence -> Prepaid/COD nudge -> Outcome learning
+Buyer trust dashboard -> Seller evidence coach -> Admin review -> Future trust update
+```
+
+## Active Apps
+
+```text
+apps/api      Node.js + MongoDB Atlas backend
+frontend      React buyer/seller/admin UI
+docs          Product, HLD, mentorship, and submission docs
+```
+
+## Run Node Backend
+
+Create `.env` from `.env.example`, then set your MongoDB Atlas URI:
 
 ```powershell
-cd backend
-python -m pip install -r requirements.txt
-python -m app.seed
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+Copy-Item .env.example .env
 ```
 
-Frontend:
+Edit:
+
+```text
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DB=sarthi
+AUTH_SECRET=<strong-random-secret>
+```
+
+Optional Gemini, Neo4j, and Atlas Vector Search:
+
+```text
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-flash-lite-latest
+GEMINI_API_KEY=<your-gemini-key>
+
+NEO4J_ENABLED=true
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<password>
+
+VECTOR_SEARCH_ENABLED=true
+VECTOR_SEARCH_COLLECTION=evidence_embeddings
+VECTOR_SEARCH_INDEX=sarthi_evidence_vector
+EMBEDDING_MODEL=gemini-embedding-001
+EMBEDDING_DIMENSIONS=768
+```
+
+If Neo4j or Atlas Vector Search is not configured, Sarthi keeps working through MongoDB projection and lexical retrieval fallback. Local/community MongoDB cannot create Atlas Search indexes; use MongoDB Atlas for `npm run vector:index`, or keep `VECTOR_SEARCH_ENABLED=false` locally.
+
+Install and seed:
+
+```powershell
+cd apps\api
+npm install
+npm run seed
+npm run vector:index   # only when using MongoDB Atlas Vector Search
+npm run dev
+```
+
+The backend runs on `http://127.0.0.1:8000`.
+
+## Run Frontend
 
 ```powershell
 cd frontend
@@ -86,11 +117,11 @@ password: admin-reviewer-pass
 
 ## Verification
 
-Backend:
+Node backend:
 
 ```powershell
-cd backend
-python -m pytest
+cd apps\api
+npm run build
 ```
 
 Frontend:
@@ -100,25 +131,22 @@ cd frontend
 npm run build
 ```
 
-Latest local verification:
+## Important Notes
 
-- `python -m pytest`: 58 passed.
-- `npm run build`: passed.
+- MongoDB Atlas is the operational data-store target; local MongoDB also works for development.
+- MongoDB stores product evidence, trust scores, traces, checkout sessions, proof requests, and LLM/tool cache.
+- Review scoring downweights very new, repeated-pattern, or high-return reviewer profiles.
+- Neo4j projection is implemented behind `NEO4J_ENABLED=true`; the same evidence map remains MongoDB-backed when Neo4j is unavailable.
+- Atlas Vector Search retrieval is implemented behind `VECTOR_SEARCH_ENABLED=true`; it uses Gemini embeddings and falls back to lexical evidence retrieval if the vector index or key is unavailable.
+- Gemini is implemented behind `LLM_PROVIDER=gemini` plus `GEMINI_API_KEY`; deterministic fallback remains available for demos.
+- The Node backend preserves the frontend API contract so the current UI can migrate without a full rewrite.
+- The old Python backend should not be extended further unless it is being used as a reference during migration.
 
 ## Docs
 
-- [Docs Index](docs/README.md)
+- [Product Plan](docs/PLAN.md)
+- [Flowchart HLD](docs/FLOWCHART_HLD.md)
+- [Mentor Q&A](docs/MENTOR_QA.md)
 - [PRD](docs/PRD.md)
-- [Initial Features](docs/INITIAL_FEATURES.md)
-- [Judge Review Guide](docs/JUDGE_REVIEW_GUIDE.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
-- [Data Strategy And Edge Cases](docs/DATA_STRATEGY_AND_EDGE_CASES.md)
 - [Privacy And Trust](docs/PRIVACY_AND_TRUST.md)
-- [Product Readiness](docs/PRODUCT_READINESS.md)
-- [Open-Source Attribution](docs/ATTRIBUTION.md)
-- [Submission Checklist](docs/SUBMISSION_CHECKLIST.md)
-
-## Data Disclosure
-
-The current build uses deterministic synthetic marketplace data for evaluation. Production use requires official connectors for catalog, seller KYC, orders, returns, reviews, campaign pricing, inventory, and logistics. The product surfaces source-health and readiness disclosures so weak or missing evidence does not become confident buyer advice.
