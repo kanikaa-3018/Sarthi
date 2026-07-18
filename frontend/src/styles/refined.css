@@ -1,72 +1,5 @@
-/* Final Sarthi UI polish: compact, high-contrast, image-first commerce surfaces. */
-:root,
-[data-theme="dark"] {
-  --bg-canvas: #090a0c;
-  --bg-surface: #111316;
-  --bg-surface-muted: #181b1f;
-  --accent-primary: #ff9654;
-  --accent-primary-hover: #ffab72;
-  --accent-secondary: #38d39f;
-  --text-primary: #fbf6ec;
-  --text-secondary: #b7b0a4;
-  --text-on-accent: #15100b;
-  --border-subtle: #292d33;
-  --success: #38d39f;
-  --warning: #f0b45d;
-  --error: #ff6b5f;
-  --focus-ring: #ff9654;
-  --bg-beige: var(--bg-canvas);
-  --bg-sand: var(--bg-surface-muted);
-  --surface: var(--bg-surface);
-  --border-beige: var(--border-subtle);
-  --sage-green: var(--success);
-  --moss-green: var(--accent-primary-hover);
-  --primary-green: var(--success);
-  --forest-green: var(--text-primary);
-  --forest-green-hover: var(--accent-primary-hover);
-  --sage-light: var(--bg-surface-muted);
-  --accent-gold: var(--warning);
-  --accent-gold-bg: color-mix(in srgb, var(--warning) 12%, var(--bg-surface));
-  --danger-red: var(--error);
-  --danger-red-bg: color-mix(in srgb, var(--error) 12%, var(--bg-surface));
-  --danger-red-border: color-mix(in srgb, var(--error) 34%, var(--border-subtle));
-  --text-muted: var(--text-secondary);
-  --shadow-sm: 0 10px 28px rgba(0, 0, 0, 0.24);
-  --shadow-md: 0 18px 54px rgba(0, 0, 0, 0.34);
-  --shadow-lg: 0 26px 86px rgba(0, 0, 0, 0.48);
-}
-
-[data-theme="light"] {
-  --bg-canvas: #f7f2ea;
-  --bg-surface: #fffaf2;
-  --bg-surface-muted: #efe6d8;
-  --accent-primary: #da6f30;
-  --accent-primary-hover: #b95422;
-  --accent-secondary: #267f5e;
-  --text-primary: #211d18;
-  --text-secondary: #62584d;
-  --text-on-accent: #fffaf2;
-  --border-subtle: #dfd2c1;
-  --success: #267f5e;
-  --warning: #9a6a22;
-  --error: #b9473d;
-  --focus-ring: #da6f30;
-  --bg-beige: var(--bg-canvas);
-  --bg-sand: var(--bg-surface-muted);
-  --surface: var(--bg-surface);
-  --border-beige: var(--border-subtle);
-  --sage-green: var(--success);
-  --moss-green: var(--accent-primary-hover);
-  --primary-green: var(--success);
-  --forest-green: var(--text-primary);
-  --forest-green-hover: var(--accent-primary-hover);
-  --sage-light: var(--bg-surface-muted);
-  --accent-gold: var(--warning);
-  --accent-gold-bg: color-mix(in srgb, var(--warning) 10%, var(--bg-surface));
-  --danger-red: var(--error);
-  --danger-red-bg: color-mix(in srgb, var(--error) 9%, var(--bg-surface));
-  --danger-red-border: color-mix(in srgb, var(--error) 22%, var(--border-subtle));
-}
+/* Final Sarthi UI polish: compact, high-contrast, image-first commerce surfaces.
+   This layer uses the palette tokens from base.css. */
 
 html {
   background: var(--bg-canvas);
@@ -74,7 +7,7 @@ html {
 
 body {
   background:
-    linear-gradient(180deg, rgba(255, 150, 84, 0.035), transparent 320px),
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 320px),
     radial-gradient(color-mix(in srgb, var(--accent-primary) 18%, transparent) 1px, transparent 1px),
     var(--bg-canvas);
   background-size: auto, 72px 72px, auto;
@@ -241,14 +174,14 @@ input:focus {
 .auth-error-banner {
   background: color-mix(in srgb, var(--error) 13%, var(--bg-surface));
   border-color: color-mix(in srgb, var(--error) 38%, var(--border-subtle));
-  color: #ffd5d0;
+  color: var(--error);
 }
 
 .notice.success,
 .auth-success-banner {
   background: color-mix(in srgb, var(--success) 12%, var(--bg-surface));
   border-color: color-mix(in srgb, var(--success) 34%, var(--border-subtle));
-  color: #c6ffe8;
+  color: var(--success);
 }
 
 /* Auth */
@@ -692,7 +625,7 @@ input:focus {
   background:
     linear-gradient(var(--border-subtle) 1px, transparent 1px),
     linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px),
-    #0d0f12;
+    var(--bg-surface);
   background-size: 44px 44px;
   border-color: var(--border-subtle);
   border-radius: 8px;
@@ -850,7 +783,7 @@ input:focus {
 .btn-danger {
   background: color-mix(in srgb, var(--error) 14%, var(--bg-surface));
   border-color: color-mix(in srgb, var(--error) 40%, var(--border-subtle));
-  color: #ffd5d0;
+  color: var(--error);
 }
 
 /* Product detail and sheets */
