@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { collections } from "../db/mongo.js";
-import { hashPassword, sha256 } from "../services/crypto.js";
+import { clientPasswordSecret, hashPassword, sha256 } from "../services/crypto.js";
 import { futureIso, iso } from "../services/time.js";
 
 const sellers = [
@@ -525,8 +525,20 @@ function seedAccounts() {
 }
 
 function account(account_id: string, username: string, display_name: string, role: string, buyer_id: string | null, seller_id: string | null, password: string) {
-  const { salt, hash } = hashPassword(password);
-  return { account_id, username, display_name, role, buyer_id, seller_id, password_salt: salt, password_hash: hash, disabled: 0, created_at: iso(20) };
+  const { salt, hash } = hashPassword(clientPasswordSecret(sha256(password)));
+  return {
+    account_id,
+    username,
+    display_name,
+    role,
+    buyer_id,
+    seller_id,
+    password_salt: salt,
+    password_hash: hash,
+    password_client_hash_version: "sha256_v1",
+    disabled: 0,
+    created_at: iso(20)
+  };
 }
 
 function profile(seller_id: string, verification_status: string, gst_status: string, kyc_status: string, pickup_pincode: string, categories: string[], support_contact: string, data_access_level: string, restricted_reason: string | null, last_verified_at: string) {

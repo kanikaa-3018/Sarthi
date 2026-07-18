@@ -1,6 +1,8 @@
 import type { Db } from "mongodb";
 import { collections } from "../db/mongo.js";
+import { aggregateConfidenceScore, assignConfidenceItems, type ConfidenceItem } from "./confidenceScoring.js";
 import { id } from "./crypto.js";
+import { label, withoutId } from "./format.js";
 import { nowIso } from "./time.js";
 
 const TRUST_WEIGHT_KEYS = [
@@ -17,17 +19,18 @@ const TRUST_WEIGHT_KEYS = [
 
 type TrustWeightKey = typeof TRUST_WEIGHT_KEYS[number];
 type TrustWeights = Record<TrustWeightKey, number>;
+type TrustConfidenceItem = ConfidenceItem<TrustWeightKey>;
 
 const DEFAULT_TRUST_WEIGHTS: TrustWeights = {
-  fit_match: 0.18,
-  outcome_quality: 0.22,
-  seller_trust: 0.18,
-  review_signal: 0.14,
-  rating_signal: 0.1,
-  price_value: 0.06,
-  fulfilment_reliability: 0.08,
-  proof_coverage: 0.03,
-  offer_truth: 0.01
+  fit_match: 18,
+  outcome_quality: 22,
+  seller_trust: 18,
+  review_signal: 14,
+  rating_signal: 10,
+  price_value: 6,
+  fulfilment_reliability: 8,
+  proof_coverage: 3,
+  offer_truth: 1
 };
 
 type TrustWeightConfig = {
@@ -341,8 +344,7 @@ function numericWeight(value: unknown) {
 
 function normalizeTrustWeights(input: Partial<TrustWeights>): TrustWeights {
   const values = TRUST_WEIGHT_KEYS.map((key) => [key, input[key] ?? DEFAULT_TRUST_WEIGHTS[key]] as const);
-  const total = values.reduce((sum, [, value]) => sum + value, 0) || 1;
-  return Object.fromEntries(values.map(([key, value]) => [key, Number((value / total).toFixed(4))])) as TrustWeights;
+  return Object.fromEntries(values.map(([key, value]) => [key, Math.max(1, Math.round(value))])) as TrustWeights;
 }
 
 function proofCoverageScore(coverage: Record<string, any>) {
@@ -391,18 +393,48 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
     const fairStartBoost = verification.verification_status === "verified" && evidence.delivered_orders_90d < 30 ? (30 - evidence.delivered_orders_90d) / 30 * 0.07 : 0;
     const uncertaintyPenalty = evidence.evidence_strength === "strong" ? 0 : evidence.evidence_strength === "medium" ? 0.06 : 0.18;
     const fulfilmentReliability = 1 - Math.min(1, evidence.median_dispatch_hours / 72);
-    const weightedScore =
-      fitScore * weightConfig.weights.fit_match +
-      outcomeQuality * weightConfig.weights.outcome_quality +
-      sellerScore * weightConfig.weights.seller_trust +
-      reviewSignal * weightConfig.weights.review_signal +
-      ratingSignal * weightConfig.weights.rating_signal +
-      priceValue * weightConfig.weights.price_value +
-      fulfilmentReliability * weightConfig.weights.fulfilment_reliability +
-      proofScore * weightConfig.weights.proof_coverage +
-      offerScore * weightConfig.weights.offer_truth;
+    const confidenceAssignment = await assignConfidenceItems({
+      product: {
+        category: product.category,
+        garment_type: product.garment_type,
+        fabric: product.fabric,
+        base_price: product.base_price,
+        rating: product.rating
+      },
+      seller: {
+        verification_status: verification.verification_status,
+        pickup_pincode: verification.pickup_pincode,
+        locality: verification.pickup_pincode ?? "unknown"
+      },
+      season_hint: currentSeasonHint(),
+      priority: "buyer_keep_confidence",
+      evidence: {
+        delivered_orders_90d: evidence.delivered_orders_90d,
+        returns_90d: evidence.returns_90d,
+        return_rate: evidence.return_rate,
+        median_dispatch_hours: evidence.median_dispatch_hours,
+        evidence_strength: evidence.evidence_strength
+      },
+      review_credibility: {
+        weighted_average: reviewCredibility.weighted_average,
+        average_weight: reviewCredibility.average_weight,
+        review_count: reviewCredibility.review_count
+      },
+      offer_status: offer.status
+    }, [
+      { key: "fit_match", label: "Fit match", weight: weightConfig.weights.fit_match, confidence: fitScore, rationale: `Fit confidence is ${fit.confidence}` },
+      { key: "outcome_quality", label: "Kept-order quality", weight: weightConfig.weights.outcome_quality, confidence: outcomeQuality, rationale: `${evidence.returns_90d} returns from ${evidence.delivered_orders_90d} delivered orders` },
+      { key: "seller_trust", label: "Seller trust", weight: weightConfig.weights.seller_trust, confidence: sellerScore, rationale: `Seller verification is ${verification.verification_status}` },
+      { key: "review_signal", label: "Credible reviews", weight: weightConfig.weights.review_signal, confidence: reviewSignal, rationale: `${reviewCredibility.review_count} reviews weighted by buyer credibility` },
+      { key: "rating_signal", label: "Rating signal", weight: weightConfig.weights.rating_signal, confidence: ratingSignal, rationale: `Current rating is ${product.rating}/5` },
+      { key: "price_value", label: "Price value", weight: weightConfig.weights.price_value, confidence: priceValue, rationale: `Current price is Rs ${product.base_price}` },
+      { key: "fulfilment_reliability", label: "Dispatch reliability", weight: weightConfig.weights.fulfilment_reliability, confidence: fulfilmentReliability, rationale: `${evidence.median_dispatch_hours} hour median dispatch` },
+      { key: "proof_coverage", label: "Proof coverage", weight: weightConfig.weights.proof_coverage, confidence: proofScore, rationale: "Seller proof coverage for size, fabric, color, and offer evidence" },
+      { key: "offer_truth", label: "Offer truth", weight: weightConfig.weights.offer_truth, confidence: offerScore, rationale: `Offer status is ${offer.status}` }
+    ]);
+    const confidenceBreakdown = aggregateConfidenceScore(confidenceAssignment.items);
     const score = Number(Math.max(0.05, Math.min(0.98,
-      weightedScore -
+      confidenceBreakdown.score -
       uncertaintyPenalty +
       fairStartBoost
     )).toFixed(3));
@@ -414,6 +446,7 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
       product_id: product.product_id,
       seller_id: product.seller_id,
       score,
+      score_percent: Math.floor(score * 100),
       factors: {
         fit_match: Number(fitScore.toFixed(2)),
         outcome_quality: Number(outcomeQuality.toFixed(2)),
@@ -428,6 +461,23 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
         offer_truth: Number(offerScore.toFixed(2)),
         uncertainty_penalty: uncertaintyPenalty,
         fair_start_boost: Number(fairStartBoost.toFixed(2))
+      },
+      score_breakdown: {
+        ...confidenceBreakdown,
+        confidence_source: confidenceAssignment.source,
+        prompt_version: "gemini_confidence_assignment_v1",
+        adjusted_score: score,
+        adjusted_score_percent: Math.floor(score * 100),
+        adjustments: {
+          uncertainty_penalty: uncertaintyPenalty,
+          fair_start_boost: Number(fairStartBoost.toFixed(3))
+        },
+        scoring_context: {
+          item_category: product.category,
+          locality: verification.pickup_pincode ?? "unknown",
+          season_hint: currentSeasonHint(),
+          priority: "buyer_keep_confidence"
+        }
       },
       weight_version: weightConfig.version,
       fact_ids: evidence.fact_ids.slice(0, 5)
@@ -444,7 +494,9 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
       seller_id: candidate.seller_id,
       decision_intent: options.intent ?? "rank_cluster",
       score: candidate.score,
+      score_percent: candidate.score_percent,
       factors: candidate.factors,
+      score_breakdown: candidate.score_breakdown,
       weights: weightConfig.weights,
       weight_version: weightConfig.version,
       fact_ids: candidate.fact_ids,
@@ -466,6 +518,14 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
   };
 }
 
+function currentSeasonHint() {
+  const month = new Date().getMonth() + 1;
+  if ([3, 4, 5, 6].includes(month)) return "summer";
+  if ([7, 8, 9].includes(month)) return "monsoon";
+  if ([10, 11].includes(month)) return "festive";
+  return "winter";
+}
+
 export async function productForVariant(db: Db, variantId: string) {
   const variant = await collections(db).variants.findOne({ variant_id: variantId });
   if (!variant) return null;
@@ -475,7 +535,7 @@ export async function productForVariant(db: Db, variantId: string) {
 export function graphPath(variantId: string, factIds: string[] = []) {
   return {
     path_type: "trust_decision",
-    available_from: "mongodb_atlas_weighted_graph",
+    available_from: "mongodb_evidence_projection",
     nodes: ["buyer", "fit_memory", variantId, "seller", "reviews", "returns", "offer"],
     relationships: ["USES", "MATCHES", "SOLD_BY", "HAS_REVIEW", "HAS_OUTCOME", "HAS_OFFER"],
     fact_ids: factIds.slice(0, 8),
@@ -920,25 +980,4 @@ function reviewWeight(review: any) {
   if ((review.credibility_flags ?? []).includes("repeated_text_pattern")) weight -= 0.14;
   if ((review.credibility_flags ?? []).includes("generic_quality_text")) weight -= 0.1;
   return Math.max(0.2, Math.min(1, weight));
-}
-
-export function inferAttribute(question = "") {
-  const lower = question.toLowerCase();
-  if (lower.includes("transparent") || lower.includes("thin") || lower.includes("see through")) return "transparency";
-  if (lower.includes("fabric") || lower.includes("kapda") || lower.includes("material")) return "fabric";
-  if (lower.includes("color") || lower.includes("colour")) return "color";
-  if (lower.includes("size") || lower.includes("fit") || lower.includes("tight") || lower.includes("loose")) return "size";
-  if (lower.includes("pack")) return "packaging";
-  if (lower.includes("offer") || lower.includes("price")) return "offer";
-  return "fabric";
-}
-
-export function label(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
-}
-
-export function withoutId(row: any) {
-  if (!row) return row;
-  const { _id, ...rest } = row;
-  return rest;
 }

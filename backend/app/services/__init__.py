@@ -1,2 +1,0 @@
-"""Deterministic commerce service package."""
-

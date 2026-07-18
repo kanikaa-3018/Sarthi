@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "seed": "tsx src/scripts/seed.ts",
+    "vector:index": "tsx src/scripts/createVectorIndex.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "mongodb": "^6.12.0",
+    "neo4j-driver": "^5.28.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {

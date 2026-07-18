@@ -1,2 +1,0 @@
-"""Sarthi backend package."""
-

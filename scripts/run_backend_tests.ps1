@@ -1,12 +1,12 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$backend = Join-Path $PSScriptRoot "..\backend"
+$backend = Join-Path $PSScriptRoot "..\apps\api"
 Push-Location $backend
 try {
-  python -m pytest
+  npm run typecheck
+  npm run build
 }
 finally {
   Pop-Location
 }
-

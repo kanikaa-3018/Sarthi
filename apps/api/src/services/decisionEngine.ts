@@ -6,7 +6,6 @@ import {
   createTrace,
   evidenceGaps,
   graphPath,
-  label,
   productForVariant,
   productWithSeller,
   proofCoverage,
@@ -16,10 +15,10 @@ import {
   skuPassport,
   variantEvidence,
   variantsForProduct,
-  verifyOffer,
-  withoutId
+  verifyOffer
 } from "./domain.js";
 import { id } from "./crypto.js";
+import { label, withoutId } from "./format.js";
 import { nowIso } from "./time.js";
 
 const SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "ONE_SIZE"];
@@ -71,13 +70,13 @@ export async function buyerFitProfileState(db: Db, buyerId: string) {
     }
   };
 }
-
 export async function upsertBuyerFitProfile(db: Db, buyerId: string, input: FitProfileInput) {
   const c = collections(db);
   if (input.profile_id) {
     const existing = await c.buyerFitProfiles.findOne({ profile_id: input.profile_id });
     if (existing && existing.buyer_id !== buyerId) throw new Error("Fit profile not found");
   }
+
   const profileId = input.profile_id ?? id("fit_profile");
   const now = nowIso();
   const active = input.active === false ? 0 : 1;
@@ -253,6 +252,9 @@ export async function computeCartConfidence(db: Db, buyerId: string, input: {
     fact_ids: [...factIds].slice(0, 18),
     graph_paths: [graphPath(lineItems[0]?.variant.variant_id ?? "cart", [...factIds])]
   });
+  for (const line of lineItems as any[]) {
+    line.keep_confidence.trace_id = trace.trace_id;
+  }
   const snapshot = {
     snapshot_id: id("cart_confidence"),
     trace_id: trace.trace_id,
@@ -466,7 +468,7 @@ async function buildTrustRadar(db: Db, intent: any, profile: any, proofRequest: 
     summary: betterOptionFound
       ? `${winnerProduct?.seller_name ?? "Another seller"} scores higher for this same product cluster, based on seller, return, review, proof, and offer evidence.`
       : winnerScore >= 0.72
-        ? "The saved product aligns with the current trust graph. Sarthi will still check offer truth at checkout."
+        ? "The saved product aligns with the current evidence map. Sarthi will still check offer truth at checkout."
         : "Sarthi is not blocking the product, but it needs one confidence-improving step before checkout.",
     selected_score: Number(selectedScore.toFixed(3)),
     recommended_score: Number((winnerScore ?? 0).toFixed(3)),
@@ -541,7 +543,7 @@ function nextRadarAction(betterOptionFound: boolean, gaps: any[], proofRequest: 
     type: "continue_to_detail",
     label: "Review size and checkout confidence",
     variant_id: winnerCandidate?.variant_id ?? null,
-    reason: "Main trust graph signals are aligned."
+    reason: "Main evidence signals are aligned."
   };
 }
 

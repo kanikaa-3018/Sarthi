@@ -7,6 +7,9 @@ Node.js + TypeScript backend for Sarthi.
 ```text
 Fastify
 MongoDB Atlas
+Neo4j driver
+Atlas Vector Search
+Gemini API
 Zod
 TypeScript
 ```
@@ -21,13 +24,31 @@ MONGODB_DB=sarthi
 AUTH_SECRET=<strong-random-secret>
 ```
 
-For local-only testing, `MONGODB_URI=mongodb://127.0.0.1:27017` also works if MongoDB is running locally.
+For local-only testing, `MONGODB_URI=mongodb://127.0.0.1:27017` also works if MongoDB is running locally. Local/community MongoDB does not support Atlas Search commands such as `createSearchIndexes`, so keep `VECTOR_SEARCH_ENABLED=false` unless `MONGODB_URI` points to MongoDB Atlas.
+
+Optional runtime integrations:
+
+```text
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=<your-gemini-key>
+
+NEO4J_ENABLED=true
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<password>
+
+VECTOR_SEARCH_ENABLED=true
+VECTOR_SEARCH_INDEX=sarthi_evidence_vector
+```
+
+Without these values, the API keeps deterministic MongoDB-backed fallbacks active.
 
 ## Commands
 
 ```powershell
 npm install
 npm run seed
+npm run vector:index   # optional, only on MongoDB Atlas
 npm run dev
 ```
 
@@ -57,6 +78,9 @@ The Node backend preserves the existing frontend `/api` contract:
 - buyer privacy and memory controls
 - buyer trust dashboard
 - reviewer credibility weighting for reviews from new or high-return users
+- optional Neo4j evidence graph projection
+- optional Atlas Vector Search evidence retrieval
+- optional Gemini grounded answers and confidence assignment
 
 ## Product Data Shape
 

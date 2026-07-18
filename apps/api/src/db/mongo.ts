@@ -1,5 +1,6 @@
 import { MongoClient, type Collection, type Db } from "mongodb";
 import { env } from "../config/env.js";
+import { ensureVectorSearchIndexes } from "../services/vectorSearch.js";
 
 let client: MongoClient | null = null;
 let database: Db | null = null;
@@ -109,6 +110,7 @@ async function ensureIndexes(db: Db) {
     c.buyerFitProfiles.createIndex({ profile_id: 1 }, { unique: true }),
     c.buyerFitProfiles.createIndex({ buyer_id: 1, active: -1 }),
     c.sellers.createIndex({ seller_id: 1 }, { unique: true }),
+    c.sellerProfiles.createIndex({ seller_id: 1 }, { unique: true }),
     c.accounts.createIndex({ username: 1 }, { unique: true }),
     c.sessions.createIndex({ token_hash: 1 }, { unique: true }),
     c.sessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
@@ -122,9 +124,21 @@ async function ensureIndexes(db: Db) {
     c.reviews.createIndex({ product_id: 1 }),
     c.reviews.createIndex({ reviewer_buyer_id: 1 }),
     c.priceEvents.createIndex({ variant_id: 1 }),
+    c.priceEvents.createIndex({ variant_id: 1, created_at: -1 }),
+    c.campaigns.createIndex({ variant_id: 1 }),
+    c.inventorySnapshots.createIndex({ variant_id: 1 }),
     c.proofRequests.createIndex({ seller_id: 1, status: 1 }),
+    c.proofRequests.createIndex({ buyer_id: 1, product_id: 1, status: 1 }),
+    c.proofRequests.createIndex({ seller_id: 1, product_id: 1, attribute: 1, status: 1 }),
     c.sellerEvidenceAssets.createIndex({ product_id: 1, attribute: 1 }),
+    c.sellerApplications.createIndex({ seller_id: 1, created_at: -1 }),
+    c.sellerApplications.createIndex({ status: 1, created_at: -1 }),
+    c.sellerVerificationDocuments.createIndex({ seller_id: 1, submitted_at: -1 }),
+    c.listingDrafts.createIndex({ seller_id: 1, updated_at: -1 }),
+    c.listingDrafts.createIndex({ status: 1, updated_at: -1 }),
     c.auditTraces.createIndex({ trace_id: 1 }, { unique: true }),
+    c.expectationContracts.createIndex({ contract_id: 1 }, { unique: true }),
+    c.expectationContracts.createIndex({ buyer_id: 1, created_at: -1 }),
     c.llmCache.createIndex({ cache_key: 1 }, { unique: true }),
     c.llmCache.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
     c.trustScoreSnapshots.createIndex({ buyer_id: 1, created_at: -1 }),
@@ -137,6 +151,7 @@ async function ensureIndexes(db: Db) {
     c.trustRadarEvents.createIndex({ buyer_id: 1, created_at: -1 }),
     c.trustRadarEvents.createIndex({ intent_id: 1, created_at: -1 }),
     c.cartConfidenceSnapshots.createIndex({ snapshot_id: 1 }, { unique: true }),
-    c.cartConfidenceSnapshots.createIndex({ buyer_id: 1, created_at: -1 })
+    c.cartConfidenceSnapshots.createIndex({ buyer_id: 1, created_at: -1 }),
+    ensureVectorSearchIndexes(db)
   ]);
 }
