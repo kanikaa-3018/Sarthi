@@ -3,8 +3,13 @@ import { env } from "../config/env.js";
 type GeminiJsonInput = {
   systemInstruction: string;
   userText: string;
+  userParts?: GeminiUserPart[];
   temperature?: number;
 };
+
+export type GeminiUserPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
 
 let geminiDisabledUntil = 0;
 let lastGeminiError: string | null = null;
@@ -12,13 +17,17 @@ let lastGenerateModel: string | null = null;
 let lastEmbeddingModel: string | null = null;
 
 const GENERATE_MODEL_FALLBACKS = [
-  "gemini-flash-lite-latest",
-  "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
   "gemini-3.5-flash",
-  "gemini-3-flash-preview"
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-flash-lite-latest",
+  "gemini-flash-latest"
 ];
 const EMBEDDING_MODEL_FALLBACKS = ["gemini-embedding-001"];
+const MODEL_ALIASES: Record<string, string> = {
+  "gemini-flash-lite-latest": "gemini-3.1-flash-lite"
+};
 
 export function geminiConfigured() {
   return env.llmProvider === "gemini" && Boolean(env.geminiApiKey);
@@ -105,7 +114,8 @@ export function parseJsonObject(text: string) {
 }
 
 function modelName(value: string) {
-  return value.replace(/^models\//, "");
+  const model = value.replace(/^models\//, "");
+  return MODEL_ALIASES[model] ?? model;
 }
 
 function modelCandidates(primary: string, fallbacks: string[]) {
@@ -125,7 +135,7 @@ async function postGenerateContent(model: string, input: GeminiJsonInput) {
       },
       contents: [{
         role: "user",
-        parts: [{ text: input.userText }]
+        parts: input.userParts?.length ? input.userParts : [{ text: input.userText }]
       }],
       generationConfig: {
         temperature: input.temperature ?? 0.2,

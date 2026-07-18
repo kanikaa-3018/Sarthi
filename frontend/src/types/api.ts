@@ -663,7 +663,13 @@ export type SimilarityCandidate = {
   title: string;
   image_url: string;
   score: number;
+  deterministic_score?: number;
+  ai_score?: number;
+  visual_match?: "same_item" | "same_style" | "different_item" | "unclear";
+  source?: "deterministic" | "gemini" | "gemini_cache" | "deterministic_after_gemini_error";
   reasons: string[];
+  match_signals?: string[];
+  risk_flags?: string[];
 };
 
 export type SimilaritySummary = {
@@ -674,6 +680,15 @@ export type SimilaritySummary = {
   distinct_seller_count: number;
   summary: string;
   candidates: SimilarityCandidate[];
+  agent?: {
+    provider: "gemini" | "deterministic";
+    used: boolean;
+    status: "disabled" | "not_enough_candidates" | "used" | "cache_hit" | "error";
+    prompt_version: string;
+    candidate_count: number;
+    image_inputs: number;
+    error?: string;
+  };
 };
 
 export type WishlistRadarEvent = {

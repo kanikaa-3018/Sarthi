@@ -249,7 +249,8 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
         method: similarity.method,
         summary: similarity.summary,
         distinct_seller_count: similarity.distinct_seller_count,
-        candidates: similarity.candidates.slice(0, 4)
+        candidates: similarity.candidates.slice(0, 4),
+        agent: similarity.agent
       } : null,
       source_health: await sourceHealth(db),
       fact_count: factIds.size

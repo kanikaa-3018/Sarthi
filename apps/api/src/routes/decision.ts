@@ -278,7 +278,8 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
           summary: similarity.summary,
           distinct_seller_count: similarity.distinct_seller_count,
           comparable_product_ids: similarity.comparable_product_ids,
-          candidates: similarity.candidates.slice(0, 4)
+          candidates: similarity.candidates.slice(0, 4),
+          agent: similarity.agent
         }
       },
       decision: missing

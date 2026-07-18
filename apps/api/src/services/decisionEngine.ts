@@ -493,7 +493,8 @@ async function buildTrustRadar(db: Db, intent: any, profile: any, proofRequest: 
       method: similarity.method,
       summary: similarity.summary,
       distinct_seller_count: similarity.distinct_seller_count,
-      candidates: similarity.candidates.slice(0, 4)
+      candidates: similarity.candidates.slice(0, 4),
+      agent: similarity.agent
     },
     next_best_action: nextRadarAction(betterOptionFound, gaps, proofRequest, winnerCandidate),
     fact_ids: [...factIds].slice(0, 24),

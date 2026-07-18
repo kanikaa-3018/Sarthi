@@ -162,6 +162,13 @@ export function KnowledgeGraphExplorer({
     : answer
       ? "Fact answer"
       : "Ask Sarthi";
+  const similarityLabel = similarity?.agent?.provider === "gemini"
+    ? similarity.agent.used
+      ? `Image AI ${similarity.agent.image_inputs} pics`
+      : `Image AI ${similarity.agent.status}`
+    : similarity
+      ? `${similarity.distinct_seller_count} similar sellers`
+      : null;
 
   return (
     <>
@@ -185,8 +192,8 @@ export function KnowledgeGraphExplorer({
       <div className="kg-system-strip" aria-label="Runtime status">
         <span><ShieldCheck size={13} /> {engineLabel}</span>
         <span><Sparkles size={13} /> {aiLabel}</span>
-        {similarity && (
-          <span><PackageCheck size={13} /> {similarity.distinct_seller_count} similar sellers</span>
+        {similarityLabel && (
+          <span><PackageCheck size={13} /> {similarityLabel}</span>
         )}
       </div>
 
