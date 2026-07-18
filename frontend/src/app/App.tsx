@@ -118,7 +118,7 @@ export function App() {
             <div className="web-brand-badge">S</div>
             <div className="commerce-brand-copy">
               <span className="web-brand-title">Sarthi</span>
-              <span className="web-brand-subtitle">Truth-first shopping</span>
+              <span className="web-brand-subtitle">Shop with proof</span>
             </div>
           </button>
 
@@ -309,5 +309,5 @@ function readStoredLanguage(): LanguageCode {
 }
 
 function readStoredExperienceMode(): ExperienceMode {
-  return window.localStorage.getItem(EXPERIENCE_MODE_STORAGE_KEY) === "simple" ? "simple" : "standard";
+  return window.localStorage.getItem(EXPERIENCE_MODE_STORAGE_KEY) === "standard" ? "standard" : "simple";
 }

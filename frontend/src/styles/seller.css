@@ -348,7 +348,7 @@
 }
 
 .seller-score-row.compact {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .seller-score-box,
@@ -380,6 +380,25 @@
   color: var(--forest-green);
   font-size: 13px;
   text-transform: capitalize;
+}
+
+.seller-data-point.rating-highlight {
+  border-color: color-mix(in srgb, var(--accent-secondary) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent-secondary) 12%, var(--bg-surface));
+}
+
+.seller-data-point.rating-highlight span {
+  align-items: center;
+  color: var(--text-primary);
+  display: flex;
+  gap: 4px;
+  font-weight: 950;
+}
+
+.seller-data-point.rating-highlight strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 950;
 }
 
 .seller-card-actions {

@@ -77,26 +77,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function login(username: string, password: string) {
+export async function login(username: string, password: string) {
   return request<AuthSession>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password_hash: await passwordHash(password) })
   });
 }
 
-export function signupBuyer(payload: {
+export async function signupBuyer(payload: {
   username: string;
   password: string;
   display_name: string;
   language: LanguageCode;
 }) {
+  const { password, ...rest } = payload;
   return request<AuthSession>("/auth/signup/buyer", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ ...rest, password_hash: await passwordHash(password) })
   });
 }
 
-export function signupSeller(payload: {
+export async function signupSeller(payload: {
   username: string;
   password: string;
   business_name: string;
@@ -104,9 +105,10 @@ export function signupSeller(payload: {
   pickup_pincode: string;
   support_contact: string;
 }) {
+  const { password, ...rest } = payload;
   return request<SellerSignupSession>("/auth/signup/seller", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ ...rest, password_hash: await passwordHash(password) })
   });
 }
 
@@ -489,4 +491,12 @@ export function deleteMemory(buyerId: string) {
   return request<DeleteMemoryResponse>(`/buyers/${encodeURIComponent(buyerId)}/memory`, {
     method: "DELETE"
   });
+}
+
+async function passwordHash(password: string) {
+  const bytes = new TextEncoder().encode(password);
+  const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }

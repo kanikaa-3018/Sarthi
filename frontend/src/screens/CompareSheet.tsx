@@ -67,7 +67,7 @@ export function CompareSheet({
             </div>
           </div>
           <div className="compare-score-ring">
-            <strong>{winnerCandidate ? Math.round(winnerCandidate.score * 100) : "--"}</strong>
+            <strong>{winnerCandidate ? trustScorePercent(winnerCandidate) : "--"}</strong>
             <span>/100</span>
           </div>
         </div>
@@ -182,9 +182,9 @@ export function CompareSheet({
                   </div>
                 </div>
                 <div className="compare-score-cell">
-                  <strong>{Math.round(candidate.score * 100)}</strong>
+                  <strong>{trustScorePercent(candidate)}</strong>
                   <span>/100</span>
-                  <i style={{ width: `${Math.round(candidate.score * 100)}%` }} />
+                  <i style={{ width: `${trustScorePercent(candidate)}%` }} />
                 </div>
               </div>
             ))}
@@ -195,7 +195,7 @@ export function CompareSheet({
       <div className="compare-sheet-footer">
         <span>
           <Info size={12} />
-          {isSimple ? t(language, "proofAvailable") : `Traversed ${comparison.graph_path.relationships.length} graph paths`}
+          {isSimple ? t(language, "proofAvailable") : `Checked ${comparison.graph_path.relationships.length} evidence links`}
         </span>
         <button type="button" onClick={onOpenAudit}>
           <HelpCircle size={12} />
@@ -260,6 +260,10 @@ function factorRowsForCandidate(candidate: CandidateScore) {
     ...row,
     value: Math.round((candidate.factors[row.key] ?? 0) * 100)
   }));
+}
+
+function trustScorePercent(candidate: CandidateScore) {
+  return candidate.score_percent ?? Math.floor(candidate.score * 100);
 }
 
 function formatPolicyLabel(version: string) {

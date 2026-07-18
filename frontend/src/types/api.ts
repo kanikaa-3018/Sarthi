@@ -65,6 +65,7 @@ export type RankingResult = {
     product_id?: string;
     seller_id?: string;
     score: number;
+    score_percent?: number;
     factors: {
       fit_match: number;
       outcome_quality: number;
@@ -79,6 +80,34 @@ export type RankingResult = {
       offer_truth?: number;
       uncertainty_penalty: number;
       fair_start_boost?: number;
+    };
+    score_breakdown?: {
+      formula: string;
+      confidence_source?: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+      prompt_version?: string;
+      score: number;
+      score_percent: number;
+      adjusted_score: number;
+      adjusted_score_percent: number;
+      weight_sum: number;
+      items: Array<{
+        key: string;
+        label: string;
+        weight: number;
+        confidence: number;
+        contribution: number;
+        rationale: string;
+      }>;
+      adjustments: {
+        uncertainty_penalty: number;
+        fair_start_boost: number;
+      };
+      scoring_context: {
+        item_category: string;
+        locality: string;
+        season_hint: string;
+        priority: string;
+      };
     };
     weight_version?: string;
     fact_ids: string[];
@@ -124,6 +153,8 @@ export type KnowledgeGraphNode = {
     | "fabric"
     | "rating"
     | "price"
+    | "offer"
+    | "proof"
     | "return_reason";
   label: string;
   subtitle: string;
@@ -171,7 +202,9 @@ export type SellerGraphContext = {
     latest_price: number;
     campaign: Record<string, any> | null;
     inventory: Record<string, any> | null;
+    offer?: OfferCheck;
   };
+  proof_coverage?: Record<ProofAttribute, ProofCoverageItem>;
   candidate: RankingResult["candidates"][number] | null;
   node_ids: Record<string, string>;
 };
@@ -188,6 +221,15 @@ export type ClusterKnowledgeGraph = {
     title: string;
     body: string;
     dynamic: boolean;
+    graph_engine?: "mongodb_projection" | string;
+    neo4j_projection?: {
+      enabled: boolean;
+      status: "disabled" | "projected" | "unavailable";
+      engine: "mongodb_projection" | "neo4j_projection";
+      projected_nodes?: number;
+      projected_edges?: number;
+      error?: string;
+    };
     source_health: SourceHealth;
     fact_count: number;
   };
@@ -218,6 +260,11 @@ export type KnowledgeGraphChatResponse = {
   graph_path: GraphPath;
   agent?: {
     provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  };
+  retrieval?: {
+    source: "atlas_vector_search" | "lexical_fallback" | "lexical_fallback_after_vector_error" | "disabled_no_gemini_key";
+    result_count: number;
+    error?: string;
   };
   cache?: {
     hit: boolean;
@@ -422,6 +469,32 @@ export type SystemReadiness = {
   data_mode: string;
   user_disclosure: string;
   source_health: SourceHealth;
+  runtime_integrations?: {
+    gemini: {
+      enabled: boolean;
+      provider: string;
+      model: string;
+      embedding_model: string;
+      status: "disabled" | "configured" | "temporarily_unavailable";
+      last_error: string | null;
+    };
+    neo4j: {
+      enabled: boolean;
+      status: "disabled" | "connected" | "unavailable";
+      error?: string;
+    };
+    atlas_vector_search: {
+      enabled: boolean;
+      status: "disabled" | "ready_for_queries" | "waiting_for_gemini_key" | "index_missing" | "unsupported_mongodb" | "unavailable";
+      collection: string;
+      index: string;
+      index_exists?: boolean;
+      embedding_model: string;
+      embedding_dimensions: number;
+      embedded_documents: number;
+      error?: string | null;
+    };
+  };
   implemented_controls: string[];
   production_connectors: Array<{
     name: string;
@@ -544,6 +617,7 @@ export type CheckoutResponse = {
   trace_id: string;
   offer: OfferCheck;
   keep_confidence: KeepConfidenceResponse;
+  cart_confidence?: CartConfidenceResponse;
   graph_path: GraphPath;
 };
 

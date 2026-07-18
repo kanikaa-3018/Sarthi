@@ -181,7 +181,7 @@ export function LandingPage({ onStartDemo }: Props) {
             </div>
             <h3>Sarthi Samvaad</h3>
             <p>
-              Ask any clothing query by text or voice in Hinglish. Sarthi maps questions to structured parameters and queries the GraphRAG store.
+              Ask any clothing query in simple Hinglish. Sarthi checks seller, SKU, return, proof, and offer facts before answering.
             </p>
           </div>
 
@@ -216,7 +216,7 @@ export function LandingPage({ onStartDemo }: Props) {
           <div>
             <h3>Buy-to-Keep Feedback Learning Loop</h3>
             <p style={{ marginTop: 4 }}>
-              The core engine Compounds with every transaction. Kept or returned delivery outcomes write new edges back to the Commerce Knowledge Graph, immediately refining future sizing recommendations and vendor scores. Sarthi becomes smarter with every order placed.
+              The core engine improves with every transaction. Kept or returned delivery outcomes update the evidence store, refining future sizing recommendations and seller scores.
             </p>
           </div>
         </div>
@@ -227,9 +227,9 @@ export function LandingPage({ onStartDemo }: Props) {
         <div className="arch-container">
           <div className="arch-content">
             <div className="eyebrow" style={{ color: "var(--sage-green)" }}>Under the Hood</div>
-            <h2>Factual GraphRAG Decision Pipeline</h2>
+            <h2>Factual Evidence Decision Pipeline</h2>
             <p style={{ color: "#b3c2b8" }}>
-              Unlike simple conversational models, Sarthi ensures accuracy by verifying all queries through a multi-layered commerce graph database.
+              Unlike a free-chat assistant, Sarthi verifies answers against product, seller, return, proof, offer, and audit records.
             </p>
             
             <div className="arch-steps">
@@ -243,8 +243,8 @@ export function LandingPage({ onStartDemo }: Props) {
               <div className="arch-step-row">
                 <div className="arch-step-num">2</div>
                 <div className="arch-step-text">
-                  <h4>Neo4j Knowledge Graph</h4>
-                  <p>Maps cross-brand closet models and relationships between sellers, buyers, and fit outcomes.</p>
+                  <h4>MongoDB Evidence Projection</h4>
+                  <p>Builds a server-side evidence map between sellers, SKUs, reviews, returns, proof, offers, and private buyer fit context.</p>
                 </div>
               </div>
               <div className="arch-step-row">
@@ -262,7 +262,7 @@ export function LandingPage({ onStartDemo }: Props) {
             <div className="diagram-arrow">↓</div>
             <div className="diagram-node active">2. Agent Intent Extraction</div>
             <div className="diagram-arrow">↓</div>
-            <div className="diagram-node">3. GraphRAG Traversal (Neo4j)</div>
+            <div className="diagram-node">3. Evidence Map Projection</div>
             <div className="diagram-arrow">↓</div>
             <div className="diagram-node active">4. Cross-Brand Sizing & Warnings</div>
             <div className="diagram-arrow">↓</div>
@@ -276,7 +276,7 @@ export function LandingPage({ onStartDemo }: Props) {
         <div className="cta-banner">
           <h2>Ready to experience Sarthi?</h2>
           <p>
-            Step into the product workspace. Switch buyer personas, compare items, ask evidence-backed questions, and sync delivery results back to the graph.
+            Step into the product workspace. Compare items, ask evidence-backed questions, and sync delivery results back to future trust checks.
           </p>
           <button className="btn-primary" onClick={onStartDemo} style={{ padding: "16px 36px", fontSize: 16 }}>
             Open Product Workspace

@@ -47,7 +47,7 @@ export function CheckoutSheet({
     verifyOffer(buyerId, variantId)
       .then((payload) => {
         setCheckout(payload);
-        setPaymentMode(payload.offer.status === "verified_price_drop" ? "prepaid" : "cod");
+        setPaymentMode(payload.cart_confidence?.checkout_nudge.prepaid_recommended ? "prepaid" : "cod");
       })
       .catch((err: Error) => setError(err.message));
   }, [buyerId, variantId]);
@@ -87,14 +87,17 @@ export function CheckoutSheet({
   const dealStatus = getDealStatusContent();
   const size = variantId.split("_").pop() || "XL";
   const keepConfidence = checkout?.keep_confidence ?? null;
-  const keepScore = keepConfidence ? Math.round(keepConfidence.score * 100) : null;
+  const cartConfidence = checkout?.cart_confidence ?? null;
+  const checkoutNudge = cartConfidence?.checkout_nudge ?? null;
+  const cartScore = cartConfidence ? Math.floor(cartConfidence.overall_score * 100) : null;
+  const keepScore = keepConfidence ? Math.floor(keepConfidence.score * 100) : null;
   const keepStrong = (keepConfidence?.score ?? 0) >= 0.75;
-  const prepaidRecommended = checkout?.offer.status === "verified_price_drop" && keepStrong;
-  const paymentCopy = prepaidRecommended
-    ? "Online payment is recommended because the offer is verified and keep confidence is strong. COD is still available."
-    : checkout?.offer.status === "verified_price_drop"
-      ? "The offer is verified, but Sarthi is not pushing prepaid until product confidence is stronger."
-      : "COD stays selected because a strong prepaid claim is not available for this item yet.";
+  const prepaidRecommended = Boolean(checkoutNudge?.prepaid_recommended);
+  const paymentCopy = checkoutNudge
+    ? checkoutNudge.message
+    : keepStrong
+      ? "Product proof looks strong. COD is still available."
+      : "COD stays selected. No pressure to pay online.";
 
   return (
     <div className="checkout-sheet-root">
@@ -127,7 +130,7 @@ export function CheckoutSheet({
             </div>
 
             <p className="checkout-supporting-copy">
-              {isSimple ? `${dealStatus.label}. ${dealStatus.text}` : dealStatus.text}
+              {isSimple ? dealStatus.label : dealStatus.text}
             </p>
           </div>
 
@@ -144,12 +147,18 @@ export function CheckoutSheet({
           <div className="checkout-payment-card">
             <div className="checkout-payment-header">
               <div>
-                <span className="eyebrow">Payment choice</span>
-                <strong>{prepaidRecommended ? "Online payment recommended" : "COD selected for now"}</strong>
+                <span className="eyebrow">Checkout check</span>
+                <strong>{checkoutNudge?.title ?? (prepaidRecommended ? "Online payment recommended" : "COD selected for now")}</strong>
               </div>
-              <span>{prepaidRecommended ? "Verified" : "Cautious"}</span>
+              <span>{cartScore === null ? (prepaidRecommended ? "Verified" : "Cautious") : `${cartScore}/100`}</span>
             </div>
             <p>{paymentCopy}</p>
+            {!isSimple && checkoutNudge && (
+              <div className="checkout-trust-condition">
+                <ShieldCheck size={14} />
+                <span>{checkoutNudge.trust_condition}</span>
+              </div>
+            )}
             <div className="checkout-payment-options">
               <button
                 type="button"
@@ -160,7 +169,7 @@ export function CheckoutSheet({
                 <CreditCard size={16} />
                 <span>
                   <strong>Pay online</strong>
-                  <small>{prepaidRecommended ? "Recommended with verified offer" : "Available, but not pushed"}</small>
+                  <small>{prepaidRecommended ? "Recommended by checkout check" : "Available, but not pushed"}</small>
                 </span>
               </button>
               <button
@@ -178,13 +187,15 @@ export function CheckoutSheet({
             </div>
           </div>
 
-          <CheckoutImpactLedger
-            paymentMode={paymentMode}
-            prepaidRecommended={prepaidRecommended}
-            offerStatus={checkout?.offer.status ?? null}
-          />
+          {!isSimple && (
+            <CheckoutImpactLedger
+              paymentMode={paymentMode}
+              prepaidRecommended={prepaidRecommended}
+              offerStatus={checkout?.offer.status ?? null}
+            />
+          )}
 
-          {expectationContract && (
+          {expectationContract && !isSimple && (
             <CheckoutExpectationContract
               contract={expectationContract}
               isSimple={isSimple}
@@ -208,7 +219,7 @@ export function CheckoutSheet({
                 onClick={() => onOpenAudit(checkout.trace_id)}
               >
                 <HelpCircle size={12} />
-                <span>{isSimple ? "Proof" : "Inspect price events log"}</span>
+                <span>Proof</span>
               </button>
             </div>
           )}
@@ -296,20 +307,30 @@ function CheckoutKeepConfidence({
   isSimple: boolean;
   onOpenAudit: (traceId: string) => void;
 }) {
-  const score = Math.round(confidence.score * 100);
+  const score = Math.floor(confidence.score * 100);
   const drivers = confidence.drivers.slice(0, isSimple ? 2 : 4);
   const primaryAction = confidence.interventions[0];
+  const simpleTitle = confidence.confidence_band === "high"
+    ? "Good to order"
+    : confidence.confidence_band === "medium"
+      ? "Check once"
+      : "Do not rush";
+  const simpleSummary = confidence.confidence_band === "high"
+    ? "Size and seller signals look okay."
+    : confidence.confidence_band === "medium"
+      ? "One proof check can avoid a return."
+      : "Ask proof or change size before paying.";
 
   return (
     <div className={`checkout-keep-card ${confidence.confidence_band}`}>
       <div className="checkout-keep-header">
         <div>
-          <span className="eyebrow">Product confidence</span>
-          <strong>{confidence.headline}</strong>
+          <span className="eyebrow">Buy check</span>
+          <strong>{isSimple ? simpleTitle : confidence.headline}</strong>
         </div>
         <span>{score}/100</span>
       </div>
-      <p>{confidence.summary}</p>
+      <p>{isSimple ? simpleSummary : confidence.summary}</p>
       {!isSimple && drivers.length > 0 && (
         <div className="checkout-keep-driver-row">
           {drivers.map((driver) => (
@@ -365,6 +386,18 @@ function OfferTruthEvidence({
         offer.price_evidence.current_price_age_days === null
           ? "Age unavailable"
           : `${offer.price_evidence.current_price_age_days} day(s) at current price`,
+      icon: <Clock size={15} />
+    },
+    {
+      label: "Timer",
+      value: campaign
+        ? campaign.timer_reset_count > 1
+          ? "Do not rush"
+          : "Real window"
+        : "No timer proof",
+      helper: campaign
+        ? `Ends ${formatDate(campaign.end_at)}`
+        : "Countdown not used for pressure",
       icon: <Clock size={15} />
     },
     {

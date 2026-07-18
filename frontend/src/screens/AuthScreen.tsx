@@ -49,20 +49,20 @@ const PORTAL_COPY: Record<AuthPortal, {
   buyer: {
     title: "Buyer app",
     shortLabel: "Buyer",
-    description: "Shop with simple proof before you place an order.",
-    lockText: "Buyer-only shopping and trust settings."
+    description: "Check before paying.",
+    lockText: "Your size memory stays private."
   },
   seller: {
     title: "Seller portal",
     shortLabel: "Seller",
-    description: "Improve listings after seller and document checks.",
-    lockText: "Seller accounts see only their own listings and aggregate evidence."
+    description: "Add proof. Fix listings.",
+    lockText: "Only store data is shown."
   },
   reviewer: {
     title: "Reviewer queue",
     shortLabel: "Reviewer",
-    description: "Approve sellers, documents, and listing drafts with audit trails.",
-    lockText: "Reviewer access is restricted to admin accounts."
+    description: "Review sellers.",
+    lockText: "Admin access only."
   }
 };
 
@@ -188,7 +188,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
           <div className="brand-logo-badge">S</div>
           <div>
             <h1 className="brand-logo-text">Sarthi</h1>
-            <span className="brand-logo-sub">Truth-first pre-purchase confidence</span>
+            <span className="brand-logo-sub">Check before you buy</span>
           </div>
         </div>
 
@@ -197,7 +197,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             portal="buyer"
             active={portal === "buyer"}
             title={PORTAL_COPY.buyer.shortLabel}
-            description="Shop safely"
+            description="Shop"
             icon={<UserRound size={18} />}
             onClick={selectPortal}
           />
@@ -205,7 +205,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             portal="seller"
             active={portal === "seller"}
             title={PORTAL_COPY.seller.shortLabel}
-            description="Business access"
+            description="Store"
             icon={<Store size={18} />}
             onClick={selectPortal}
           />
@@ -213,7 +213,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             portal="reviewer"
             active={portal === "reviewer"}
             title={PORTAL_COPY.reviewer.shortLabel}
-            description="Admin only"
+            description="Admin"
             icon={<ClipboardCheck size={18} />}
             onClick={selectPortal}
           />
@@ -222,7 +222,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
         <div className="auth-portal-summary">
           <div>
             <span className="eyebrow">{activeCopy.shortLabel} access</span>
-            <h2 className="auth-step-heading">{flow === "signin" ? `Sign in to ${activeCopy.title}` : `Create ${activeCopy.title}`}</h2>
+            <h2 className="auth-step-heading">{flow === "signin" ? `Welcome ${activeCopy.shortLabel}` : `Create ${activeCopy.shortLabel}`}</h2>
             <p className="auth-step-desc">{activeCopy.description}</p>
           </div>
           <div className="auth-portal-lock">
@@ -267,7 +267,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
         <form onSubmit={flow === "signin" ? handleSignin : handleSignup} className="auth-form-step">
           <div className="auth-security-note">
             <ShieldCheck size={15} />
-            <span>Backend checks role before opening a workspace.</span>
+            <span>Password is protected before it leaves this device.</span>
           </div>
 
           {flow === "signin" && (
@@ -299,7 +299,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             <label>Password</label>
             <input
               type="password"
-              placeholder={flow === "signin" ? "Enter password" : "Minimum 10 chars, letters and numbers"}
+              placeholder={flow === "signin" ? "Enter password" : "Minimum 8 characters"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete={flow === "signin" ? "current-password" : "new-password"}
@@ -400,7 +400,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
           )}
 
           <button type="submit" className="auth-primary-btn" disabled={loading || !canSubmit}>
-            <span>{loading ? "Checking..." : flow === "signin" ? "Continue securely" : portal === "seller" ? "Submit application" : "Create account"}</span>
+            <span>{loading ? "Checking..." : flow === "signin" ? "Continue" : portal === "seller" ? "Apply" : "Create account"}</span>
             <ArrowRight size={16} />
           </button>
         </form>
@@ -408,7 +408,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
 
       <div className="auth-bottom-banner">
         <ShieldCheck size={14} />
-        <span>Private buyer memory, seller verification, and reviewer audit logs stay separated.</span>
+        <span>Buyer, seller, and reviewer data stay separate.</span>
       </div>
     </div>
   );

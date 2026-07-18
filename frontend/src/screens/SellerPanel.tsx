@@ -5,10 +5,10 @@ import {
   ChevronRight,
   TrendingUp,
   RefreshCcw,
-  Sparkles,
   Info,
   X,
-  Plus
+  Plus,
+  Star
 } from "lucide-react";
 import { getSellerPanel, correctMeasurement, getSellerEvidenceCoach, submitSellerEvidenceAsset, getSellerOnboarding, submitSellerDocument, createListingDraft, submitListingDraft } from "../api/client";
 import type { SellerPanelResponse, SellerPanelListing, SellerEvidenceCoachResponse, SellerEvidenceCoachTask, SellerOnboardingResponse, SellerVerificationDocument, ListingDraft } from "../types/api";
@@ -357,7 +357,7 @@ export function SellerPanel() {
               <small>{panel.fact_ids.length} facts connected</small>
             </div>
             <div className="seller-metric-tile">
-              <span className="seller-metric-icon"><Sparkles size={16} /></span>
+              <span className="seller-metric-icon"><Info size={16} /></span>
               <span>Buyer proof asks</span>
               <strong>{evidenceCoach?.open_task_count ?? 0}</strong>
               <small>{evidenceCoach?.resolved_request_count ?? 0} resolved</small>
@@ -417,6 +417,10 @@ export function SellerPanel() {
                             <div className="seller-data-point">
                               <span>Kept score</span>
                               <strong>{listing.metrics.kept_rate ? `${Math.round(listing.metrics.kept_rate * 100)}%` : "N/A"}</strong>
+                            </div>
+                            <div className="seller-data-point rating-highlight">
+                              <span><Star size={11} fill="currentColor" /> Current rating</span>
+                              <strong>{listing.product.rating.toFixed(1)}/5</strong>
                             </div>
                             <div className="seller-data-point">
                               <span>Fit accuracy</span>
@@ -761,7 +765,7 @@ export function SellerPanel() {
 
             <div className="seller-why-body">
               <p>
-                This is a second view into Sarthi's ranking graph. These factors reflect comparable listing performance.
+                This is a second view into Sarthi's evidence ranking. These factors reflect comparable listing performance.
               </p>
 
               <div className="seller-why-metrics">

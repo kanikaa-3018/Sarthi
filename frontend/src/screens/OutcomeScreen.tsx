@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, AlertTriangle, ArrowLeft, RotateCcw } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ArrowLeft, RotateCcw, Route, ShieldCheck, PackageSearch } from "lucide-react";
 import { simulateOutcome } from "../api/client";
 import type { OutcomeResponse } from "../types/api";
 
@@ -138,6 +138,13 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
             </span>
           </div>
 
+          <OutcomeLoopCard
+            status={result.outcome.status}
+            selectedReason={chosenReason}
+            memoryUpdated={result.outcome.memory_update.updated}
+            graphSynced={result.graph_sync.available}
+          />
+
           <div className="outcome-confirm-facts">
             <div className="kv-row">
               <span>Outcome ID</span>
@@ -162,7 +169,7 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
               </div>
             )}
             <div className="kv-row">
-              <span>Knowledge graph</span>
+              <span>Evidence map</span>
               <strong>{result.graph_sync.available ? "Synced" : "Grounded facts active"}</strong>
             </div>
           </div>
@@ -175,6 +182,79 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function OutcomeLoopCard({
+  status,
+  selectedReason,
+  memoryUpdated,
+  graphSynced
+}: {
+  status: string;
+  selectedReason: string;
+  memoryUpdated: boolean;
+  graphSynced: boolean;
+}) {
+  const returned = status === "returned";
+  const returnReason = selectedReason || "Return reason";
+  const items = returned
+    ? [
+        {
+          label: "Buyer memory",
+          value: memoryUpdated
+            ? `${returnReason} will reduce similar mistakes in future recommendations.`
+            : "No private fit-memory change was needed for this return.",
+          icon: <ShieldCheck size={15} />
+        },
+        {
+          label: "Seller signal",
+          value: "Only aggregate reason counts are shared, so sellers can fix size, color, fabric, or packaging issues.",
+          icon: <PackageSearch size={15} />
+        },
+        {
+          label: "Return rescue",
+          value: "Clean returns can move to exchange, nearby demand, or faster relisting instead of blindly moving backward.",
+          icon: <Route size={15} />
+        }
+      ]
+    : [
+        {
+          label: "Buyer memory",
+          value: memoryUpdated
+            ? "Your retained size signal improves future fit decisions."
+            : "This kept order strengthens confidence without exposing private buyer data.",
+          icon: <ShieldCheck size={15} />
+        },
+        {
+          label: "Seller signal",
+          value: "A kept outcome adds positive SKU evidence after quality checks.",
+          icon: <PackageSearch size={15} />
+        },
+        {
+          label: "Graph loop",
+          value: graphSynced
+            ? "Future decision evidence is refreshed with this outcome."
+            : "Grounded facts stay active until the evidence sync is available.",
+          icon: <Route size={15} />
+        }
+      ];
+
+  return (
+    <div className={`outcome-loop-card ${returned ? "returned" : "kept"}`}>
+      <div className="outcome-loop-header">
+        <span className="eyebrow">{returned ? "Return loop" : "Trust loop"}</span>
+        <strong>{returned ? "What happens after this return" : "How this improves future checks"}</strong>
+      </div>
+      <div className="outcome-loop-list">
+        {items.map((item) => (
+          <div key={item.label}>
+            <span>{item.icon}{item.label}</span>
+            <p>{item.value}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
