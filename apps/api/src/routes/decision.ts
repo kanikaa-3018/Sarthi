@@ -3,7 +3,7 @@ import type { Db } from "mongodb";
 import { collections } from "../db/mongo.js";
 import { assertBuyer, requireRole } from "../middleware/auth.js";
 import { generateGroundedAgentAnswer } from "../services/agent.js";
-import { recordOrderOutcome } from "../services/buyerOperations.js";
+import { placeCheckoutOrder, recordOrderOutcome, returnAlternativeAssistant } from "../services/buyerOperations.js";
 import { expectationContract } from "../services/contracts.js";
 import { computeCartConfidence } from "../services/decisionEngine.js";
 import { geminiConfigured } from "../services/gemini.js";
@@ -445,5 +445,19 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const body: any = request.body;
     assertBuyer(account, body.buyer_id);
     return recordOrderOutcome(db, body);
+  });
+
+  app.post("/orders/place", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const body: any = request.body;
+    assertBuyer(account, body.buyer_id);
+    return placeCheckoutOrder(db, body);
+  });
+
+  app.post("/orders/return-assistant", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const body: any = request.body;
+    assertBuyer(account, body.buyer_id);
+    return returnAlternativeAssistant(db, body);
   });
 }

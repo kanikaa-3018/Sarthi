@@ -16,17 +16,19 @@ import {
   conflicts,
   createTrace,
   facts,
+  feedTrustSummary,
   fitPrediction,
   graphPath,
   productWithSeller,
   publicProduct,
   reviewEvidence,
+  sourceHealth,
   skuPassport,
   trustState,
   variantEvidence,
   variantsForProduct
 } from "../services/domain.js";
-import { buyerDashboard, privacySummary } from "../services/buyerOperations.js";
+import { buyerDashboard, buyerOrders, buyerProofLedger, buyerWishlist, correctOrderOutcome, privacySummary } from "../services/buyerOperations.js";
 import { withoutId } from "../services/format.js";
 
 export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
@@ -40,19 +42,24 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     if (query.category && query.category !== "All") filter.category = query.category;
     if (query.q) filter.$text = { $search: String(query.q) };
     const c = collections(db);
-    const [total, products, sellers] = await Promise.all([
+    const [total, products, sellers, health] = await Promise.all([
       c.products.countDocuments(filter),
       c.products.find(filter).skip(offset).limit(limit).toArray(),
-      c.sellers.find({}).toArray()
+      c.sellers.find({}).toArray(),
+      sourceHealth(db)
     ]);
     const sellerMap = new Map(sellers.map((seller: any) => [seller.seller_id, seller]));
+    const publicProducts = products.map((product: any) => publicProduct({
+      ...product,
+      seller_name: sellerMap.get(product.seller_id)?.name,
+      median_dispatch_hours: sellerMap.get(product.seller_id)?.median_dispatch_hours
+    }));
     return {
       buyer_id: query.buyer_id,
-      products: products.map((product: any) => publicProduct({
+      products: await Promise.all(publicProducts.map(async (product: any) => ({
         ...product,
-        seller_name: sellerMap.get(product.seller_id)?.name,
-        median_dispatch_hours: sellerMap.get(product.seller_id)?.median_dispatch_hours
-      })),
+        buyer_trust: await feedTrustSummary(db, product, { health })
+      }))),
       total,
       limit,
       offset,
@@ -174,6 +181,13 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     return wishlistRadar(db, buyerId);
   });
 
+  app.get("/buyers/:buyer_id/wishlist", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const buyerId = (request.params as any).buyer_id;
+    assertBuyer(account, buyerId);
+    return buyerWishlist(db, buyerId);
+  });
+
   app.post("/cart/confidence", async (request, reply) => {
     const account = await requireRole(db, request, reply, "buyer");
     const body = z.object({
@@ -203,6 +217,31 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     const buyerId = (request.params as any).buyer_id;
     assertBuyer(account, buyerId);
     return buyerDashboard(db, buyerId);
+  });
+
+  app.get("/buyers/:buyer_id/orders", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const buyerId = (request.params as any).buyer_id;
+    assertBuyer(account, buyerId);
+    return buyerOrders(db, buyerId);
+  });
+
+  app.get("/buyers/:buyer_id/proofs", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const buyerId = (request.params as any).buyer_id;
+    assertBuyer(account, buyerId);
+    return buyerProofLedger(db, buyerId);
+  });
+
+  app.patch("/buyers/:buyer_id/orders/:order_id/correction", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const buyerId = (request.params as any).buyer_id;
+    assertBuyer(account, buyerId);
+    const body = z.object({
+      return_reason: z.string(),
+      correction_note: z.string().optional()
+    }).parse(request.body);
+    return correctOrderOutcome(db, buyerId, (request.params as any).order_id, body);
   });
 
   app.get("/buyers/:buyer_id/memory", async (request, reply) => {

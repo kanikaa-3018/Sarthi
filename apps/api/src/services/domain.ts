@@ -43,13 +43,36 @@ type TrustWeightConfig = {
 
 export async function sourceHealth(db: Db) {
   const rows = await collections(db).dataSources.find({}).sort({ source_id: 1 }).toArray();
+  const nowMs = seededDemoSnapshot(rows)
+    ? Math.max(...rows.map((source: any) => new Date(source.last_synced_at).getTime()).filter(Number.isFinite)) + 5 * 60 * 1000
+    : Date.now();
   const sources = rows.map((source: any) => {
-    const hours = Math.max(0, (Date.now() - new Date(source.last_synced_at).getTime()) / 36e5);
+    const hours = Math.max(0, (nowMs - new Date(source.last_synced_at).getTime()) / 36e5);
     const effective_status = source.status === "operational" && hours > source.freshness_sla_hours ? "stale" : source.status;
     return { ...withoutId(source), hours_since_sync: Number(hours.toFixed(1)), effective_status, fresh: effective_status === "operational" };
   });
   const blocking = sources.some((source) => ["stale", "unavailable"].includes(source.effective_status));
   return { overall_status: blocking ? "stale" : "operational", blocking, sources };
+}
+
+function seededDemoSnapshot(rows: any[]) {
+  const seededSourceIds = new Set([
+    "buyer_fit_profiles",
+    "buyer_memory",
+    "buyer_review_profiles",
+    "campaigns",
+    "catalog",
+    "graph_projection",
+    "inventory",
+    "orders",
+    "pricing",
+    "returns",
+    "reviews",
+    "seller_verification"
+  ]);
+  return rows.length >= 8 &&
+    rows.every((source: any) => seededSourceIds.has(source.source_id)) &&
+    rows.every((source: any) => source.reliability === "first_party_contract");
 }
 
 export async function sellerVerification(db: Db, sellerId: string) {
@@ -189,9 +212,9 @@ export async function fitPrediction(db: Db, buyerId: string, variantId: string, 
   };
 }
 
-export async function trustState(db: Db, product: any, evidence: any) {
-  const verification = await sellerVerification(db, product.seller_id);
-  const health = await sourceHealth(db);
+export async function trustState(db: Db, product: any, evidence: any, options: { health?: any; verification?: any } = {}) {
+  const verification = options.verification ?? await sellerVerification(db, product.seller_id);
+  const health = options.health ?? await sourceHealth(db);
   if (verification.verification_status === "restricted") {
     return state("seller_restricted", "blocked", false, "Seller is restricted", "This listing cannot be recommended until seller restrictions are resolved.", ["Seller restriction is a hard blocker."], ["seller_verification"], health, verification);
   }
@@ -212,6 +235,51 @@ export async function trustState(db: Db, product: any, evidence: any) {
 
 function state(status: string, confidence: string, can_recommend: boolean, headline: string, buyer_guidance: string, reasons: string[], missing_data: string[], data_freshness: any, seller_verification: any) {
   return { status, confidence, can_recommend, headline, summary: buyer_guidance, buyer_guidance, reasons, missing_data, data_freshness, seller_verification };
+}
+
+export async function feedTrustSummary(db: Db, product: any, options: { health?: any } = {}) {
+  const c = collections(db);
+  const [variants, verification, openProofCount] = await Promise.all([
+    variantsForProduct(db, product.product_id),
+    sellerVerification(db, product.seller_id),
+    c.proofRequests.countDocuments({
+      product_id: product.product_id,
+      status: { $in: ["open", "submitted"] }
+    })
+  ]);
+  const selected = variants.find((variant: any) => variant.size === "XL") ?? variants[0];
+  if (!selected) {
+    return {
+      status: "limited_evidence",
+      confidence: "low",
+      can_recommend: false,
+      headline: "Need more proof",
+      buyer_guidance: "This listing can be viewed, but Sarthi cannot check a SKU yet.",
+      reasons: ["No SKU found for this product."],
+      missing_data: ["sku"],
+      source_status: options.health?.overall_status ?? "unknown",
+      seller_status: verification.verification_status,
+      evidence_strength: "unknown",
+      delivered_orders_90d: 0,
+      open_proof_count: openProofCount
+    };
+  }
+  const evidence = await variantEvidence(db, selected.variant_id);
+  const trust = await trustState(db, product, evidence, { health: options.health, verification });
+  return {
+    status: trust.status,
+    confidence: trust.confidence,
+    can_recommend: trust.can_recommend,
+    headline: trust.headline,
+    buyer_guidance: trust.buyer_guidance,
+    reasons: trust.reasons,
+    missing_data: trust.missing_data,
+    source_status: trust.data_freshness.overall_status,
+    seller_status: trust.seller_verification.verification_status,
+    evidence_strength: evidence.evidence_strength,
+    delivered_orders_90d: evidence.delivered_orders_90d,
+    open_proof_count: openProofCount
+  };
 }
 
 export async function reviewEvidence(db: Db, productId: string) {
@@ -582,14 +650,14 @@ export async function verifyOffer(db: Db, variantId: string) {
   const message = status === "verified_price_drop"
     ? "Verified deal. This is lower than the recent reference price."
     : status === "no_need_to_rush"
-      ? "No need to rush. This price has been active and the timer has reset before."
+      ? "Timer repeated before. Judge this offer by current price proof, not urgency."
       : "Not enough history to verify this offer yet.";
   const fact_ids = [...events.map((event: any) => event.fact_id), campaign?.fact_id, inventory?.fact_id].filter(Boolean);
   return {
     variant_id: variantId,
     status,
     message,
-    buyer_guidance: status === "verified_price_drop" ? "You can use the offer if product trust is also strong." : "Do not choose only because of urgency.",
+    buyer_guidance: status === "verified_price_drop" ? "You can use the offer if product trust is also strong." : "Use the current price proof, not timer pressure, to decide.",
     truth_basis: status === "verified_price_drop" ? "price_drop" : status === "no_need_to_rush" ? "timer_reset" : "insufficient_history",
     price_evidence: {
       latest_price: latest?.price ?? null,
@@ -603,7 +671,7 @@ export async function verifyOffer(db: Db, variantId: string) {
     inventory_evidence: inventory ? { available_to_promise: inventory.available_to_promise, sales_velocity_24h: inventory.sales_velocity_24h, captured_at: inventory.captured_at, fact_id: inventory.fact_id } : null,
     checks: [
       { key: "price_history", label: "Price history", status: hasDrop ? "positive" : "neutral", detail: hasDrop ? `Price is Rs ${delta} below baseline.` : "Not enough price movement for a strong deal claim.", fact_ids: events.map((event: any) => event.fact_id) },
-      { key: "campaign_timer", label: "Timer behavior", status: timerReset ? "caution" : "neutral", detail: timerReset ? "Campaign timer has reset before, so urgency should be treated calmly." : "No repeated timer reset found.", fact_ids: campaign?.fact_id ? [campaign.fact_id] : [] },
+      { key: "campaign_timer", label: "Timer behavior", status: timerReset ? "caution" : "neutral", detail: timerReset ? "Campaign timer has reset before, so Sarthi does not use urgency as proof." : "No repeated timer reset found.", fact_ids: campaign?.fact_id ? [campaign.fact_id] : [] },
       { key: "inventory_pressure", label: "Inventory pressure", status: inventory?.available_to_promise < 5 ? "caution" : "neutral", detail: inventory ? `${inventory.available_to_promise} units available to promise.` : "Inventory snapshot unavailable.", fact_ids: inventory?.fact_id ? [inventory.fact_id] : [] }
     ],
     fact_ids

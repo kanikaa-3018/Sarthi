@@ -57,6 +57,22 @@ type BracketAlert = {
   message: string;
 };
 
+type PaymentAssistOffer = {
+  offer_id: string;
+  label: string;
+  amount_rupees: number;
+  eligible: boolean;
+  reason: string;
+  payment_method: "upi" | "card" | "wallet" | "prepaid";
+};
+
+type PaymentAssistCheck = {
+  key: string;
+  label: string;
+  status: "passed" | "watch";
+  detail: string;
+};
+
 export async function buyerFitProfileState(db: Db, buyerId: string) {
   const profiles = await ensureBuyerFitProfiles(db, buyerId);
   const activeProfile = profiles.find((profile: any) => profile.active) ?? profiles[0] ?? null;
@@ -249,7 +265,8 @@ export async function computeCartConfidence(db: Db, buyerId: string, input: {
   const quantityTotal = lineItems.reduce((sum: number, line: any) => sum + line.quantity, 0);
   const bracketPenalty = bracketAlerts.some((alert) => alert.severity === "high") ? 0.06 : bracketAlerts.length ? 0.03 : 0;
   const overallScore = clamp(weightedTotal / Math.max(1, quantityTotal) - bracketPenalty);
-  const nudge = checkoutNudge(overallScore, bracketAlerts, input.payment_mode ?? "cod");
+  const paymentAssist = buildPaymentAssist(overallScore, bracketAlerts, input.payment_mode ?? "cod", lineItems);
+  const nudge = checkoutNudge(overallScore, bracketAlerts, input.payment_mode ?? "cod", paymentAssist.recommended_mode === "prepaid");
   const trace = await createTrace(db, {
     buyer_id: buyerId,
     variant_id: lineItems[0]?.variant.variant_id ?? null,
@@ -272,6 +289,7 @@ export async function computeCartConfidence(db: Db, buyerId: string, input: {
     confidence_band: band(overallScore),
     bracket_alerts: bracketAlerts,
     checkout_nudge: nudge,
+    payment_assist: paymentAssist,
     line_items: lineItems.map((line: any) => ({
       product_id: line.product.product_id,
       variant_id: line.variant.variant_id,
@@ -294,6 +312,7 @@ export async function computeCartConfidence(db: Db, buyerId: string, input: {
     confidence_band: snapshot.confidence_band,
     bracket_alerts: bracketAlerts,
     checkout_nudge: nudge,
+    payment_assist: paymentAssist,
     line_items: lineItems,
     fact_ids: snapshot.fact_ids,
     graph_path: graphPath(lineItems[0]?.variant.variant_id ?? "cart", snapshot.fact_ids),
@@ -608,7 +627,7 @@ function cartReasonChips(keep: any, offer: any, evidence: any, sizeMismatch: boo
   const chips = [];
   chips.push({ type: "keep_confidence", label: `${Math.round(keep.score * 100)}/100 keep confidence`, sentiment: keep.score >= 0.72 ? "positive" : "watch" });
   chips.push({ type: "return_rate", label: `${Math.round(evidence.return_rate * 100)}% return rate`, sentiment: evidence.return_rate <= 0.16 ? "positive" : "watch" });
-  chips.push({ type: "offer_truth", label: offer.status === "verified_price_drop" ? "Verified offer" : "No rush signal", sentiment: offer.status === "verified_price_drop" ? "positive" : "neutral" });
+  chips.push({ type: "offer_truth", label: offer.status === "verified_price_drop" ? "Verified offer" : "Timer not trusted", sentiment: offer.status === "verified_price_drop" ? "positive" : "neutral" });
   if (sizeMismatch) chips.push({ type: "size_mismatch", label: "Size differs from profile", sentiment: "watch" });
   if (bracketed) chips.push({ type: "bracketing", label: "Multiple sizes in cart", sentiment: "watch" });
   return chips;
@@ -633,7 +652,7 @@ function cartInterventions(keep: any, item: NormalizedCartItem, profileSize: str
   if (offer.status !== "verified_price_drop") {
     actions.push({
       type: "ignore_fake_urgency",
-      label: "Do not rush for timer",
+      label: "Ignore timer pressure",
       reason: offer.message
     });
   }
@@ -649,15 +668,15 @@ function cartInterventions(keep: any, item: NormalizedCartItem, profileSize: str
   return actions.slice(0, 3);
 }
 
-function checkoutNudge(score: number, bracketAlerts: any[], paymentMode: string) {
+function checkoutNudge(score: number, bracketAlerts: any[], paymentMode: string, prepaidAllowed: boolean) {
   const highBracket = bracketAlerts.some((alert) => alert.severity === "high");
-  if (score >= 0.76 && !highBracket) {
+  if (prepaidAllowed) {
     return {
       code: "prepaid_safe_to_nudge",
       prepaid_recommended: true,
-      title: paymentMode === "prepaid" ? "Prepaid choice is backed by evidence" : "Prepaid is safe to consider",
-      message: "Product confidence is strong enough to show prepaid benefits without pressuring the buyer.",
-      trust_condition: "Only nudge prepaid when product confidence, offer truth, and return risk are acceptable.",
+      title: paymentMode === "prepaid" ? "Pay online choice is backed by evidence" : "Pay online is safe to consider",
+      message: "Sarthi checked product trust, return risk, offer truth, and available rewards before recommending Pay online.",
+      trust_condition: "Only suggest Pay online when product confidence, offer truth, and return risk are acceptable.",
       company_benefit: "Lower RTO risk, fewer failed delivery attempts, and better delivery partner utilization."
     };
   }
@@ -665,8 +684,8 @@ function checkoutNudge(score: number, bracketAlerts: any[], paymentMode: string)
     return {
       code: "prepaid_after_one_check",
       prepaid_recommended: false,
-      title: "Complete one check before prepaid",
-      message: "Sarthi should first resolve the size/proof signal, then prepaid can be nudged.",
+      title: "Complete one check before Pay online",
+      message: "Sarthi should first resolve the size/proof signal, then Pay online rewards can be shown.",
       trust_condition: "Do not trade buyer trust for payment conversion.",
       company_benefit: "Balanced conversion with lower avoidable returns."
     };
@@ -677,9 +696,135 @@ function checkoutNudge(score: number, bracketAlerts: any[], paymentMode: string)
     title: "Keep checkout cautious",
     message: highBracket
       ? "Remove bracketed sizes before payment nudges."
-      : "Confidence is low, so the buyer needs proof or size correction before payment nudges.",
+      : "Confidence is low, so the buyer needs proof or size correction before Pay online rewards.",
     trust_condition: "Payment nudges pause when product confidence is not strong.",
     company_benefit: "Prevents prepaid pushback, cancellations, and support tickets."
+  };
+}
+
+export function buildPaymentAssist(score: number, bracketAlerts: BracketAlert[], paymentMode: "cod" | "prepaid", lineItems: any[]) {
+  const cartValue = lineItems.reduce((sum: number, line: any) => {
+    const price = Number(line.variant?.current_price ?? line.product?.base_price ?? 0);
+    const quantity = Number(line.quantity ?? 1);
+    return sum + price * Math.max(1, quantity);
+  }, 0);
+  const highBracket = bracketAlerts.some((alert) => alert.severity === "high");
+  const anyBracket = bracketAlerts.length > 0;
+  const productTrustPassed = score >= 0.66 && lineItems.every((line: any) => {
+    const lineScore = Number(line.keep_confidence?.score ?? 0);
+    return lineScore >= 0.64 && line.confidence_band !== "low";
+  });
+  const offerTruthPassed = lineItems.every((line: any) => line.offer?.status === "verified_price_drop" || line.offer?.status === "no_need_to_rush");
+  const returnRiskPassed = !anyBracket && !highBracket;
+  const prepaidAllowed = productTrustPassed && offerTruthPassed && returnRiskPassed;
+  const recommendedMode = prepaidAllowed ? "prepaid" : "cod";
+  const rewardPoints = prepaidAllowed ? Math.max(20, Math.round(cartValue * 0.06)) : 0;
+  const rewardValue = prepaidAllowed ? Math.max(5, Math.round(rewardPoints * 0.25)) : 0;
+  const upiReward = prepaidAllowed ? Math.min(30, Math.max(10, Math.round(cartValue * 0.03))) : 0;
+  const bankRewardEligible = prepaidAllowed && cartValue >= 399;
+  const bankReward = bankRewardEligible ? Math.min(45, Math.max(15, Math.round(cartValue * 0.05))) : 0;
+  const offers: PaymentAssistOffer[] = [
+    {
+      offer_id: "upi_prepaid_reward",
+      label: "UPI Pay online reward",
+      amount_rupees: upiReward,
+      eligible: prepaidAllowed,
+      reason: prepaidAllowed
+        ? "Unlocked because trust and return checks passed."
+        : "Paused until trust and return checks improve.",
+      payment_method: "upi"
+    },
+    {
+      offer_id: "bank_card_value",
+      label: "Bank/card extra value",
+      amount_rupees: bankReward,
+      eligible: bankRewardEligible,
+      reason: bankRewardEligible
+        ? "Cart value is eligible and Sarthi marked Pay online safe."
+        : cartValue < 399
+          ? "Cart value is below the offer threshold."
+          : "Paused because Pay online is not the safest choice yet.",
+      payment_method: "card"
+    },
+    {
+      offer_id: "sarthi_points_next_order",
+      label: "Sarthi points for next order",
+      amount_rupees: rewardValue,
+      eligible: prepaidAllowed,
+      reason: prepaidAllowed
+        ? "Points unlock after delivery feedback is completed."
+        : "Points unlock only when Pay online is safe to suggest.",
+      payment_method: "wallet"
+    }
+  ];
+  const eligibleOffers = offers.filter((offer) => offer.eligible && offer.amount_rupees > 0);
+  const bestOffer = eligibleOffers.sort((left, right) => right.amount_rupees - left.amount_rupees)[0] ?? null;
+  const totalBenefit = eligibleOffers.reduce((sum, offer) => sum + offer.amount_rupees, 0);
+  const checks: PaymentAssistCheck[] = [
+    {
+      key: "product_trust",
+      label: "Product trust",
+      status: productTrustPassed ? "passed" : "watch",
+      detail: productTrustPassed
+        ? "Product confidence is strong enough for a Pay online nudge."
+        : "Product confidence needs one more check before Pay online."
+    },
+    {
+      key: "return_risk",
+      label: "Return risk",
+      status: returnRiskPassed ? "passed" : "watch",
+      detail: returnRiskPassed
+        ? "No size bracketing or high return-risk pattern found."
+        : "Remove duplicate sizes or resolve return-risk warnings first."
+    },
+    {
+      key: "offer_truth",
+      label: "Offer truth",
+      status: offerTruthPassed ? "passed" : "watch",
+      detail: offerTruthPassed
+        ? "Offer was checked against saved price/timer records."
+        : "Offer history is thin, so Pay online reward is not pushed."
+    }
+  ];
+
+  return {
+    recommended_mode: recommendedMode,
+    confidence_label: prepaidAllowed ? "Pay online safe to suggest" : "COD safer for now",
+    title: prepaidAllowed ? "Sarthi recommends Pay online" : "Sarthi recommends COD for now",
+    summary: prepaidAllowed
+      ? "Pay online is suggested because trust, return risk, and offer checks passed."
+      : "Sarthi keeps COD as the safer choice until missing checks improve.",
+    cart_value_rupees: Math.round(cartValue),
+    total_prepaid_benefit_rupees: totalBenefit,
+    reward_points: rewardPoints,
+    reward_value_rupees: rewardValue,
+    best_offer: bestOffer,
+    offers,
+    safety_checks: checks,
+    buyer_next_step: prepaidAllowed
+      ? "Use Pay online to claim rewards, or keep COD if you prefer cash."
+      : "Use COD now, or fix the highlighted checks before Pay online.",
+    agent_actions: [
+      {
+        label: "Checked payment safety",
+        detail: `${Math.round(score * 100)}/100 cart confidence`,
+        done: true
+      },
+      {
+        label: prepaidAllowed ? "Unlocked Pay online value" : "Paused Pay online push",
+        detail: prepaidAllowed ? `Rs ${totalBenefit} estimated Pay online value` : "Buyer trust kept higher than payment conversion",
+        done: true
+      },
+      {
+        label: "Kept fallback open",
+        detail: prepaidAllowed
+          ? "COD stays available if buyer prefers cash"
+          : paymentMode === "prepaid"
+            ? "COD stays available if buyer changes mind"
+            : "COD remains selected",
+        done: true
+      }
+    ]
   };
 }
 
