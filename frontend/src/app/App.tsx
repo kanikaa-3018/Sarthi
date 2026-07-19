@@ -179,6 +179,7 @@ export function App() {
   const buyerId = session?.account.buyer_id;
   const isCheckoutRoute = location.pathname.startsWith("/shop/checkout");
   const isAdminRoute = location.pathname.startsWith("/admin");
+  const isSellerRoute = location.pathname.startsWith("/seller");
   const sellerNavCopy = SELLER_NAV_COPY[language] ?? SELLER_NAV_COPY.english;
   const sellerNavActive = (path: string) => {
     const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
@@ -198,7 +199,7 @@ export function App() {
   };
 
   return (
-    <div className={`web-app-container${isCheckoutRoute ? " checkout-app-route" : ""}${isAdminRoute ? " admin-app-route" : ""}`}>
+    <div className={`web-app-container${isCheckoutRoute ? " checkout-app-route" : ""}${isAdminRoute ? " admin-app-route" : ""}${isSellerRoute ? " seller-app-route" : ""}`}>
       <header className="web-header commerce-header">
         <div className="web-header-container commerce-header-container">
           <button
