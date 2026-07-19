@@ -7,16 +7,20 @@ export function SarthiMark({ className = "" }: Props) {
     <svg className={`sarthi-mark ${className}`.trim()} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
       <rect className="sarthi-mark-bg" x="4" y="4" width="56" height="56" rx="16" />
       <path
-        className="sarthi-mark-shield"
-        d="M32 13.5 46 19v12.2c0 9.4-5.8 16.3-14 19.3-8.2-3-14-9.9-14-19.3V19l14-5.5Z"
+        className="sarthi-mark-hand left"
+        d="M14.5 38.5c4.6-1.2 8.5-.1 11.6 3.2l3.4 3.6c1.4 1.5 3.8 1.5 5.2 0l3.3-3.5c3.1-3.3 7-4.4 11.5-3.3"
       />
       <path
-        className="sarthi-mark-route"
-        d="M39.5 23.5c-2.8-3.2-12.6-3.1-14.2.7-1.5 3.6 2.6 5.4 7.3 6.1 5 .8 8.5 2.6 6.7 6.5-1.9 4.1-11.4 4.3-15.1.7"
+        className="sarthi-mark-hand right"
+        d="M17 44.5c3.5 3.8 8.3 6 15 6s11.5-2.2 15-6"
       />
-      <circle className="sarthi-mark-node start" cx="25.7" cy="24.1" r="3.1" />
-      <circle className="sarthi-mark-node end" cx="38.8" cy="37.1" r="3.1" />
-      <path className="sarthi-mark-check" d="M25.5 43.1 30 47.3 40.5 34.8" />
+      <path
+        className="sarthi-mark-shield"
+        d="M32 14.5 43 19v9.6c0 7.2-4.5 12.3-11 14.7-6.5-2.4-11-7.5-11-14.7V19l11-4.5Z"
+      />
+      <path className="sarthi-mark-check" d="M27 29.6 30.5 33l7-8.4" />
+      <circle className="sarthi-mark-proof-dot" cx="22.6" cy="36.8" r="2.6" />
+      <circle className="sarthi-mark-proof-dot" cx="41.4" cy="36.8" r="2.6" />
     </svg>
   );
 }

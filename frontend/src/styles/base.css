@@ -265,28 +265,34 @@ select:focus, textarea:focus, input:focus {
   fill: var(--text-primary);
 }
 
+.sarthi-mark-hand {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sarthi-mark-hand.left {
+  stroke: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  stroke-width: 4.2;
+}
+
+.sarthi-mark-hand.right {
+  stroke: var(--accent-primary);
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+
 .sarthi-mark-shield {
-  fill: color-mix(in srgb, var(--bg-surface) 12%, transparent);
-  stroke: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+  fill: color-mix(in srgb, var(--bg-surface) 16%, transparent);
+  stroke: color-mix(in srgb, var(--bg-surface) 90%, transparent);
   stroke-linejoin: round;
   stroke-width: 2.6;
 }
 
-.sarthi-mark-route {
-  fill: none;
-  stroke: var(--accent-primary);
-  stroke-linecap: round;
-  stroke-width: 4.3;
-}
-
-.sarthi-mark-node {
+.sarthi-mark-proof-dot {
   fill: var(--bg-surface);
   stroke: var(--accent-primary);
-  stroke-width: 2.4;
-}
-
-.sarthi-mark-node.end {
-  stroke: var(--success);
+  stroke-width: 2.2;
 }
 
 .sarthi-mark-check {

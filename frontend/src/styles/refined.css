@@ -13127,7 +13127,7 @@ button,
   filter: drop-shadow(0 8px 18px rgba(31, 24, 35, 0.12));
 }
 
-.commerce-brand:hover .sarthi-mark-route {
+.commerce-brand:hover .sarthi-mark-hand.right {
   stroke: var(--success);
 }
 
