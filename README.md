@@ -299,6 +299,13 @@ For a timed flow, see [docs/DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md).
 
 ## Verification
 
+Full local verification from the repository root:
+
+```powershell
+npm run build:test
+npm run e2e
+```
+
 Backend:
 
 ```powershell
