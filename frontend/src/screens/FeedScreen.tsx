@@ -3,17 +3,26 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { 
   Search, 
   ShieldCheck, 
-  Star, 
-  Truck, 
   AlertTriangle,
   X,
-  Heart,
   BookmarkCheck,
-  Ruler
+  ClipboardCheck,
+  MapPin,
+  ShoppingCart,
+  Eye,
+  Heart,
+  PackageCheck,
+  RotateCcw,
+  FileCheck2,
+  Gift,
+  ArrowRight
 } from "lucide-react";
 import {
   askKnowledgeGraph,
   createWishlistIntent,
+  getBuyerOrders,
+  getBuyerProofs,
+  getBuyerWishlist,
   getClusterKnowledgeGraph,
   getFeed,
   getFitProfiles,
@@ -28,14 +37,17 @@ import type {
   KnowledgeGraphChatResponse,
   Product,
   RegretDecisionResponse,
-  WishlistRadarEvent
+  BuyerProofLedgerItem,
+  BuyerOrderItem,
+  BuyerWishlistItem,
+  WishlistRadarEvent,
+  Variant
 } from "../types/api";
 import { CompareSheet } from "./CompareSheet";
-import { CheckoutSheet } from "./CheckoutSheet";
 import { AuditDrawer } from "./AuditDrawer";
 import { ProductDetailPanel } from "./ProductDetailPanel";
-import { SarthiLensPanel } from "./SarthiLensPanel";
 import { SarthiSavedWorkspacePanel } from "./SarthiSavedWorkspacePanel";
+import { OutcomeScreen } from "./OutcomeScreen";
 
 type Props = {
   buyerId: string;
@@ -50,25 +62,26 @@ type AutoScanState =
   | { status: "ready"; clusterId: string; title: string; listingCount: number; result: CompareResponse }
   | { status: "error"; clusterId: string; title: string; message: string };
 
+type BuyerShopStep = "feed" | "detail" | "saved" | "wishlist" | "orders" | "proofs";
+
 export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ productId?: string }>();
   const routeMode = shopRouteMode(location.pathname);
-  const routeVariantId = useMemo(() => new URLSearchParams(location.search).get("variant"), [location.search]);
+  const routeSearch = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const routeVariantId = routeSearch.get("variant");
   const hydratedSavedRouteRef = useRef<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
   const [wishlistedProduct, setWishlistedProduct] = useState<Product | null>(null);
-  const [fitProfiles, setFitProfiles] = useState<FitProfile[]>([]);
   const [activeFitProfile, setActiveFitProfile] = useState<FitProfile | null>(null);
   const [wishlistRadar, setWishlistRadar] = useState<WishlistRadarEvent | null>(null);
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarError, setRadarError] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-  const [activeExpectationContract, setActiveExpectationContract] = useState<ExpectationContract | null>(null);
   const [auditTraceId, setAuditTraceId] = useState<string | null>(null);
   const [knowledgeGraph, setKnowledgeGraph] = useState<ClusterKnowledgeGraph | null>(null);
   const [graphAnswer, setGraphAnswer] = useState<KnowledgeGraphChatResponse | null>(null);
@@ -81,12 +94,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [decisionLoading, setDecisionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Buyer flow step: "feed" | "detail" | "saved"
-  const [step, setStep] = useState<"feed" | "detail" | "saved">(routeMode);
+  const [step, setStep] = useState<BuyerShopStep>(routeMode);
   
   // Overlay/Sheet visibility
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
   
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
@@ -99,11 +110,9 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setComparison(null);
     setSelectedProductId(null);
     setSelectedVariantId(null);
-    setActiveExpectationContract(null);
     setAuditTraceId(null);
     setAutoScan({ status: "idle" });
     setWishlistedProduct(null);
-    setFitProfiles([]);
     setActiveFitProfile(null);
     setWishlistRadar(null);
     setRadarLoading(false);
@@ -128,7 +137,6 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           setError(feedOutcome.reason instanceof Error ? feedOutcome.reason.message : "Unable to load catalog");
         }
         if (profileOutcome.status === "fulfilled") {
-          setFitProfiles(profileOutcome.value.profiles);
           setActiveFitProfile(profileOutcome.value.active_profile);
         }
       })
@@ -158,6 +166,14 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       setStep("feed");
       return;
     }
+    if (routeMode === "wishlist" || routeMode === "orders") {
+      setStep(routeMode);
+      return;
+    }
+    if (routeMode === "proofs") {
+      setStep("proofs");
+      return;
+    }
     if (!routeProductId || products.length === 0) return;
 
     const routeProduct = products.find((product) => product.product_id === routeProductId);
@@ -185,19 +201,17 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   function handleViewProductDetail(prodId: string, varId?: string | null) {
     setSelectedProductId(prodId);
     setSelectedVariantId(varId ?? null);
-    setActiveExpectationContract(null);
     setStep("detail");
     setCompareSheetOpen(false);
     navigate(`/shop/product/${encodeURIComponent(prodId)}${varId ? `?variant=${encodeURIComponent(varId)}` : ""}`);
   }
 
-  async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean } = {}) {
-    if (options.syncRoute !== false) {
+  async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean; openCompare?: boolean } = {}) {
+    if (options.syncRoute === true) {
       navigate(`/shop/saved/${encodeURIComponent(product.product_id)}`);
     }
     setWishlistedProduct(product);
     setSelectedClusterId(product.cluster_id);
-    setActiveExpectationContract(null);
     setKnowledgeGraph(null);
     setGraphAnswer(null);
     setGraphQuery("");
@@ -254,6 +268,9 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       const result = compareFromDecision(decision);
       setRegretDecision(decision);
       setComparison(result);
+      if (options.openCompare) {
+        setCompareSheetOpen(true);
+      }
       setAutoScan({
         status: "ready",
         clusterId: product.cluster_id,
@@ -273,15 +290,34 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
   }
 
-  async function handleAskDecision(question: string) {
+  async function handleSaveToWishlist(product: Product) {
+    await handleWishlistProduct(product);
+    navigate("/shop/wishlist");
+  }
+
+  async function handleOpenProofForProduct(product: Product) {
+    await handleWishlistProduct(product);
+    openSavedProofLayer(product);
+  }
+
+  async function handleAskDecision(question: string, product = wishlistedProduct) {
     const prompt = question.trim();
-    if (!prompt || !wishlistedProduct) return;
+    if (!prompt) {
+      setError("Ask a simple buying question first.");
+      return;
+    }
+    if (!product) {
+      setError("Open an item before asking Sarthi to check it.");
+      return;
+    }
     setDecisionLoading(true);
     setError(null);
+    setWishlistedProduct(product);
+    setSelectedClusterId(product.cluster_id);
     try {
       const decision = await runRegretFirewall({
         buyer_id: buyerId,
-        product_id: wishlistedProduct.product_id,
+        product_id: product.product_id,
         query: prompt,
         create_missing_proof_request: true
       });
@@ -322,18 +358,32 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     }
   }
 
-  function handleOpenCheckout(variantId: string, contract: ExpectationContract) {
-    setSelectedVariantId(variantId);
-    setActiveExpectationContract(contract);
-    setCheckoutOpen(true);
+  async function handleRetryKnowledgeGraph() {
+    if (!wishlistedProduct) return;
+    setGraphLoading(true);
+    setGraphError(null);
+    try {
+      const graph = await getClusterKnowledgeGraph(buyerId, wishlistedProduct.cluster_id, wishlistedProduct.product_id);
+      setKnowledgeGraph(graph);
+      setGraphQuery((current) => current || graph.chat_suggestions[0] || "");
+    } catch (err) {
+      setGraphError(err instanceof Error ? err.message : "Unable to build evidence map");
+    } finally {
+      setGraphLoading(false);
+    }
   }
 
-function openAutoScanResult(result: CompareResponse) {
-    setComparison(result);
-    setSelectedClusterId(autoScan.status === "ready" ? autoScan.clusterId : activeClusterId);
-    setSelectedProductId(result.selected_product_id);
-    setSelectedVariantId(result.ranking.winner);
-    setCompareSheetOpen(true);
+  function handleOpenCheckout(variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant }) {
+    setSelectedVariantId(variantId);
+    navigate(`/shop/checkout/${encodeURIComponent(item.product.product_id)}/${encodeURIComponent(variantId)}`, {
+      state: { contract, item }
+    });
+  }
+
+  function openSavedProofLayer(product = wishlistedProduct) {
+    if (!product) return;
+    setStep("saved");
+    navigate(`/shop/saved/${encodeURIComponent(product.product_id)}?proof=1`);
   }
 
   return (
@@ -350,28 +400,39 @@ function openAutoScanResult(result: CompareResponse) {
           onCategoryChange={setSelectedCategory}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          autoScan={autoScan}
           wishlistedProduct={wishlistedProduct}
-          activeFitProfile={activeFitProfile}
-          fitProfileCount={fitProfiles.length}
-          knowledgeGraph={knowledgeGraph}
-          graphLoading={graphLoading}
-          graphError={graphError}
-          regretDecision={regretDecision}
-          decisionQuestion={decisionQuestion}
-          decisionLoading={decisionLoading}
-          hasBuyerIntent={Boolean(searchTerm.trim()) || selectedCategory !== "All" || Boolean(wishlistedProduct)}
+          language={language}
           onQuickSearch={setSearchTerm}
           onProductOpen={(product) => handleViewProductDetail(product.product_id, null)}
           onWishlistProduct={handleWishlistProduct}
-          onOpenAutoScan={openAutoScanResult}
-          onOpenGraph={() => setStep("saved")}
-          onDecisionQuestionChange={setDecisionQuestion}
-          onAskDecision={handleAskDecision}
-          onOpenAutoScanProof={(traceId) => {
-            setAuditTraceId(traceId);
-            setAuditDrawerOpen(true);
-          }}
+          onSaveProduct={handleSaveToWishlist}
+          onOpenSavedItem={(product) => openSavedProofLayer(product)}
+          onOpenOrders={() => navigate("/shop/orders")}
+        />
+      ) : step === "wishlist" ? (
+        <WishlistWorkspace
+          buyerId={buyerId}
+          products={products}
+          language={language}
+          onBack={() => navigate("/shop")}
+          onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
+          onCheckTrust={(product) => handleWishlistProduct(product, { openCompare: true })}
+          onOpenProof={handleOpenProofForProduct}
+        />
+      ) : step === "orders" ? (
+        <OrdersWorkspace
+          buyerId={buyerId}
+          language={language}
+          onBack={() => navigate("/shop")}
+          onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
+        />
+      ) : step === "proofs" ? (
+        <ProofsWorkspace
+          buyerId={buyerId}
+          language={language}
+          onBack={() => navigate("/shop")}
+          onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
+          onOpenProductProof={(product) => handleOpenProofForProduct(product)}
         />
       ) : step === "saved" && wishlistedProduct ? (
         <SarthiSavedWorkspacePanel
@@ -392,7 +453,9 @@ function openAutoScanResult(result: CompareResponse) {
           radarLoading={radarLoading}
           radarError={radarError}
           activeFitProfile={activeFitProfile}
+          language={language}
           onBack={() => navigate("/shop")}
+          onOpenProduct={(product, variantId) => handleViewProductDetail(product.product_id, variantId ?? null)}
           onOpenResult={(res) => {
             setComparison(res);
             setCompareSheetOpen(true);
@@ -405,6 +468,7 @@ function openAutoScanResult(result: CompareResponse) {
           onAskDecision={handleAskDecision}
           onQueryChange={setGraphQuery}
           onAskGraph={handleAskKnowledgeGraph}
+          onRetryGraph={handleRetryKnowledgeGraph}
         />
       ) : (
         selectedProductId && (
@@ -432,8 +496,8 @@ function openAutoScanResult(result: CompareResponse) {
           <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-success">Evidence-picked match</span>
-                <h3 className="sheet-title">Listings Resolved</h3>
+                <span className="eyebrow sheet-eyebrow-success">{t(language, "evidencePickedMatch")}</span>
+                <h3 className="sheet-title">{t(language, "listingsResolved")}</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setCompareSheetOpen(false)}>
                 <X size={16} />
@@ -455,44 +519,14 @@ function openAutoScanResult(result: CompareResponse) {
         </div>
       )}
 
-      {/* Screen 4 & 5: Modal Checkout and Outcome loop */}
-      {checkoutOpen && selectedVariantId && (
-        <div className="bottom-sheet-overlay" onClick={() => setCheckoutOpen(false)}>
-          <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
-            <div className="bottom-sheet-header">
-              <div>
-                <span className="eyebrow sheet-eyebrow-secondary">Secure Checkout</span>
-                <h3 className="sheet-title">Offer Sach Check</h3>
-              </div>
-              <button className="bottom-sheet-close" onClick={() => setCheckoutOpen(false)}>
-                <X size={16} />
-              </button>
-            </div>
-            
-            <CheckoutSheet
-              buyerId={buyerId}
-              variantId={selectedVariantId}
-              expectationContract={activeExpectationContract}
-              onOpenAudit={(traceId) => {
-                setAuditTraceId(traceId);
-                setAuditDrawerOpen(true);
-              }}
-              onClose={() => setCheckoutOpen(false)}
-              language={language}
-              experienceMode={experienceMode}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Diagnostic Audit Drawer */}
       {auditDrawerOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setAuditDrawerOpen(false)}>
           <div className="bottom-sheet-content audit-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-primary">Pre-purchase Diagnostic Logs</span>
-                <h3 className="sheet-title">How the score was decided</h3>
+                <span className="eyebrow sheet-eyebrow-primary">{t(language, "prePurchaseDiagnosticLogs")}</span>
+                <h3 className="sheet-title">{t(language, "howScoreWasDecided")}</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setAuditDrawerOpen(false)}>
                 <X size={16} />
@@ -502,6 +536,7 @@ function openAutoScanResult(result: CompareResponse) {
             <AuditDrawer
               traceId={auditTraceId}
               onClose={() => setAuditDrawerOpen(false)}
+              language={language}
             />
           </div>
         </div>
@@ -514,14 +549,14 @@ function openAutoScanResult(result: CompareResponse) {
         >
           <ShieldCheck size={16} />
           <div className="sarthi-toast-content">
-            <span>Saved-product radar is ready.</span>
-            <button
-              type="button"
-              onClick={() => navigate(`/shop/saved/${encodeURIComponent(wishlistedProduct.product_id)}`)}
-              className="sarthi-toast-action"
-            >
-              Open
-            </button>
+            <span>{t(language, "savedRadarReady")}</span>
+              <button
+                type="button"
+                onClick={() => openSavedProofLayer(wishlistedProduct)}
+                className="sarthi-toast-action"
+              >
+              {t(language, "seeProof")}
+              </button>
           </div>
         </div>
       )}
@@ -531,10 +566,10 @@ function openAutoScanResult(result: CompareResponse) {
         <button
           type="button"
           className="sarthi-floating-trigger"
-          onClick={() => navigate(`/shop/saved/${encodeURIComponent(wishlistedProduct.product_id)}`)}
+          onClick={() => openSavedProofLayer(wishlistedProduct)}
         >
           <ShieldCheck size={18} className={autoScan.status === "scanning" ? "spin-icon" : ""} />
-          <span>Radar</span>
+          <span>{t(language, "radar")}</span>
           {autoScan.status === "ready" && (
             <span className="floating-ready-count">1</span>
           )}
