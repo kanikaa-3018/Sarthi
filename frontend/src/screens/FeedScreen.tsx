@@ -1451,200 +1451,210 @@ function MarketplaceHome({
   onCategoryChange: (category: string) => void;
   searchTerm: string;
   onSearchChange: (value: string) => void;
-  autoScan: AutoScanState;
   wishlistedProduct: Product | null;
-  activeFitProfile: FitProfile | null;
-  fitProfileCount: number;
-  knowledgeGraph: ClusterKnowledgeGraph | null;
-  graphLoading: boolean;
-  graphError: string | null;
-  regretDecision: RegretDecisionResponse | null;
-  decisionQuestion: string;
-  decisionLoading: boolean;
-  hasBuyerIntent: boolean;
+  language: LanguageCode;
   onQuickSearch: (value: string) => void;
   onProductOpen: (product: Product) => void;
-  onWishlistProduct: (product: Product) => void;
-  onOpenAutoScan: (result: CompareResponse) => void;
-  onOpenGraph: () => void;
-  onDecisionQuestionChange: (value: string) => void;
-  onAskDecision: (question: string) => void;
-  onOpenAutoScanProof: (traceId: string) => void;
+  onWishlistProduct: (product: Product, options?: { openCompare?: boolean }) => void;
+  onSaveProduct: (product: Product) => void;
+  onOpenSavedItem: (product: Product) => void;
+  onOpenOrders: () => void;
 }) {
-  const quickSearches = ["cotton kurti", "kurta set", "office palazzo", "work bag"];
-  const savedSimilarProducts = wishlistedProduct
-    ? clusterProducts(allProducts, wishlistedProduct.cluster_id).slice(0, 4)
-    : [];
+  const quickSearches = [
+    { label: t(language, "quickSearchCottonKurti"), value: "cotton kurti" },
+    { label: t(language, "quickSearchKurtaSet"), value: "kurta set" },
+    { label: t(language, "quickSearchOfficePalazzo"), value: "office palazzo" },
+    { label: t(language, "quickSearchWorkBag"), value: "work bag" }
+  ];
+  const visibleCategories = categories.slice(0, 7);
   const possibleComparableCount = new Set(
     products.filter((product) => product.is_sarthi_eligible).map((product) => product.cluster_id)
   ).size;
+  const safeProductCount = products.filter((product) => product.buyer_trust?.can_recommend).length;
+  const proofGapCount = products.filter((product) =>
+    (product.buyer_trust?.open_proof_count ?? 0) > 0 || (product.buyer_trust?.missing_data?.length ?? 0) > 0
+  ).length;
+  const agentStartProduct = products.find((product) => product.is_sarthi_eligible && product.buyer_trust?.can_recommend)
+    ?? products.find((product) => product.is_sarthi_eligible)
+    ?? products[0]
+    ?? null;
   const trimmedSearch = searchTerm.trim();
   const shelfTitle = trimmedSearch
-    ? `Results for "${trimmedSearch}"`
+    ? `${t(language, "resultsFor")} "${trimmedSearch}"`
     : selectedCategory !== "All"
-      ? `${selectedCategory} products`
-      : "Popular products";
-  const sarthiNudgeCopy = hasBuyerIntent
-    ? `${possibleComparableCount} product groups are ready for trust check.`
-    : "";
+      ? `${selectedCategory} ${t(language, "products")}`
+      : t(language, "popularProducts");
 
   return (
     <div className="marketplace-home buyer-shop-shell">
-      <section className="buyer-shop-hero" aria-labelledby="buyer-shop-title">
-        <div className="buyer-shop-copy">
-          <span className="eyebrow">Catalog</span>
-          <h2 id="buyer-shop-title">Find. Check. Buy safely.</h2>
-          <p>
-            Seller, size, returns, price and proof checked before payment.
-          </p>
-        </div>
-        <div className="shop-trust-row" aria-label="Sarthi trust checks">
-          <span><ShieldCheck size={14} /> Seller proof</span>
-          <span><Ruler size={14} /> {activeFitProfile ? `${activeFitProfile.label} fit` : "Size fit"}</span>
-          <span><AlertTriangle size={14} /> Return risk</span>
-        </div>
-      </section>
-
-      <section className="shop-search-card" aria-label="Search catalog">
-        <div className="shop-search-input">
-          <Search size={18} />
-          <input
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search product or seller"
-          />
-        </div>
-
-        <div className="quick-search-row" aria-label="Quick searches">
-          <span>Popular</span>
-          <div>
-            {quickSearches.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => onQuickSearch(item)}
-              >
-                {item}
-              </button>
-            ))}
+      <section className="marketplace-toolbar" aria-label={t(language, "searchCatalog")}>
+        <div className="marketplace-top-row">
+          <div className="marketplace-location">
+            <MapPin size={16} />
+            <div>
+              <span>{t(language, "deliverTo")}</span>
+              <strong>{t(language, "buyerHome")}</strong>
+            </div>
           </div>
+          <label className="marketplace-search-bar">
+            <Search size={18} />
+            <input
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder={t(language, "searchProductOrSeller")}
+            />
+          </label>
+          <button className="marketplace-cart-button" type="button" aria-label={t(language, "myOrders")} onClick={onOpenOrders}>
+            <ShoppingCart size={17} />
+            <span>{t(language, "orders")}</span>
+          </button>
         </div>
 
-        <div className="category-chip-row" aria-label="Product categories">
-          {categories.map((cat) => (
+        <div className="marketplace-category-row" aria-label={t(language, "productCategories")}>
+          <span>{t(language, "allCategories")}</span>
+          {visibleCategories.map((cat) => (
             <button
               key={cat}
               type="button"
               onClick={() => onCategoryChange(cat)}
               className={cat === selectedCategory ? "active" : ""}
             >
-              {cat}
+              {cat === "All" ? t(language, "all") : cat}
+            </button>
+          ))}
+        </div>
+        <div className="marketplace-quick-row" aria-label={t(language, "quickSearches")}>
+          {quickSearches.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => onQuickSearch(item.value)}
+              className={item.value === trimmedSearch.toLowerCase() ? "active" : ""}
+            >
+              {item.label}
             </button>
           ))}
         </div>
       </section>
 
-      {(hasBuyerIntent || wishlistedProduct) && (
-        <div className="sarthi-nudge-strip" aria-live="polite">
-          <span className="sarthi-nudge-icon">
-            <ShieldCheck size={17} />
-          </span>
-          <div>
-            <strong>{wishlistedProduct ? "Trust check ready" : "Save to check trust"}</strong>
-            <p>
-              {wishlistedProduct
-                ? `${wishlistedProduct.title.split("-")[0].trim()} is ready.`
-                : sarthiNudgeCopy}
-              {activeFitProfile ? ` Fit context: ${activeFitProfile.label}.` : ""}
-            </p>
-          </div>
-          <span>{fitProfileCount ? `${fitProfileCount} profiles` : `${possibleComparableCount} groups`}</span>
-        </div>
-      )}
+      <BuyerAgentPlan
+        productCount={products.length}
+        safeProductCount={safeProductCount}
+        proofGapCount={proofGapCount}
+        savedProduct={wishlistedProduct}
+        startProduct={agentStartProduct}
+        language={language}
+        onStartSearch={() => onQuickSearch("cotton kurti")}
+        onRunCheck={(product) => onWishlistProduct(product, { openCompare: true })}
+        onOpenSavedItem={onOpenSavedItem}
+      />
+
+      <div className="marketplace-trust-strip" aria-live="polite">
+        <span><ShieldCheck size={15} /> {t(language, "sarthiTrustOn")}</span>
+        <strong>{wishlistedProduct ? t(language, "trustCheckReady") : feedTrustStripMessage(possibleComparableCount, language)}</strong>
+      </div>
 
       <div className="shop-section-heading">
         <div>
-          <span className="eyebrow">Catalog</span>
           <h3>{shelfTitle}</h3>
         </div>
-        <span>{products.length} options</span>
+        <span>{products.length} {t(language, "options")}</span>
       </div>
 
       {products.length > 0 && (
         <div className="web-product-grid">
           {products.map((p) => {
-            const strikePrice = Math.round(p.base_price * 1.35);
             const isSaved = wishlistedProduct?.product_id === p.product_id;
+            const trustBadge = productTrustBadge(p, isSaved, allProducts, language);
             return (
               <article
                 key={p.product_id}
                 className={`buyer-product-card ${isSaved ? "saved" : ""}`}
               >
                 <div className="buyer-product-image">
-                  <img
-                    src={p.image_url || fallbackProductImage(p.color_family)}
-                    alt={p.title}
-                    onError={(e) => { e.currentTarget.src = fallbackProductImage(p.color_family); }}
-                  />
-                  {p.commerce_badge && (
-                    <span className="product-badge commerce">{p.commerce_badge}</span>
-                  )}
-                  {p.is_sarthi_eligible ? (
-                    <span className="product-badge mapped">Checkable</span>
-                  ) : (
-                    <span className="product-badge catalog">Catalog only</span>
-                  )}
+                  <button
+                    type="button"
+                    className="buyer-product-open-area"
+                    onClick={() => onProductOpen(p)}
+                    aria-label={`${t(language, "view")} ${p.title}`}
+                  >
+                    <img
+                      src={productImageSource(p)}
+                      alt={p.title}
+                      onError={(e) => { e.currentTarget.src = fallbackProductImage(p.color_family); }}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className={`product-trust-badge ${trustBadge.tone}`}
+                    onClick={() => {
+                      if (trustBadge.action === "check") {
+                        void onWishlistProduct(p, { openCompare: true });
+                      } else {
+                        onProductOpen(p);
+                      }
+                    }}
+                    title={t(language, "tapTrustBadge")}
+                  >
+                    {isSaved ? <BookmarkCheck size={13} /> : trustBadge.tone === "proof" ? <FileCheck2 size={13} /> : trustBadge.tone === "watch" ? <AlertTriangle size={13} /> : <ShieldCheck size={13} />}
+                    <span>{trustBadge.label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`buyer-save-icon ${isSaved ? "saved" : ""}`}
+                    onClick={() => void onSaveProduct(p)}
+                    aria-label={isSaved ? t(language, "saved") : t(language, "saveItem")}
+                  >
+                    <Heart size={16} />
+                  </button>
                 </div>
-                <div className="buyer-product-body">
-                  <strong className="buyer-product-title">
-                    {p.title.split("-")[0].trim()}
-                  </strong>
-                  <div className="buyer-product-seller-row">
+                  <div className="buyer-product-body">
+                  <div className="buyer-card-kicker">
                     <span>{p.seller_name}</span>
-                    {p.is_sarthi_eligible ? (
-                      <strong>{clusterListingCount(allProducts, p.cluster_id)} mapped</strong>
-                    ) : null}
+                    <span>{p.rating.toFixed(1)} ({p.rating_count})</span>
                   </div>
-
-                  <div className="product-rating-row">
-                    <span>
-                      {p.rating.toFixed(1)}
-                      <Star size={9} fill="currentColor" />
-                    </span>
-                    <small>{p.rating_count.toLocaleString("en-IN")} reviews</small>
-                  </div>
-
+                  <button
+                    type="button"
+                    className="buyer-product-title"
+                    onClick={() => onProductOpen(p)}
+                  >
+                    {p.title.split("-")[0].trim()}
+                  </button>
                   <div className="product-price-row">
                     <strong>Rs {p.base_price}</strong>
-                    <span>Rs {strikePrice}</span>
-                    <small>35% off</small>
+                    {p.commerce_badge && <span>{p.commerce_badge}</span>}
                   </div>
-
-                  <div className="product-delivery-row">
-                    <Truck size={12} />
-                    <span>{p.delivery_text || "Free delivery"}</span>
+                  <div className="buyer-delivery-row">
+                    <PackageCheck size={12} />
+                    <span>{p.delivery_text}</span>
                   </div>
-
-                  <div className="buyer-product-actions">
+                  <div className={`product-trust-phrase ${trustBadge.tone}`}>
+                    {trustBadge.tone === "safe" ? <ShieldCheck size={13} /> : <AlertTriangle size={13} />}
+                    <span>{trustBadge.phrase}</span>
+                  </div>
+                  <div className="buyer-product-actions compact">
                     <button
                       type="button"
+                      className="secondary"
                       onClick={() => onProductOpen(p)}
-                      className="buyer-view-btn"
+                      aria-label={`${t(language, "viewItem")}: ${p.title}`}
                     >
-                      View
+                      <Eye size={14} />
+                      <span>{t(language, "viewItem")}</span>
                     </button>
                     <button
                       type="button"
+                      className="primary"
                       onClick={() => {
-                        if (p.is_sarthi_eligible) {
-                          void onWishlistProduct(p);
+                        if (trustBadge.action === "check") {
+                          void onWishlistProduct(p, { openCompare: true });
+                        } else {
+                          onProductOpen(p);
                         }
                       }}
-                      disabled={!p.is_sarthi_eligible}
-                      className={`buyer-save-btn ${isSaved ? "saved" : ""}`}
                     >
-                      {isSaved ? <BookmarkCheck size={13} /> : <Heart size={13} />}
-                      <span>{isSaved ? "Saved" : p.is_sarthi_eligible ? "Check" : "Catalog"}</span>
+                      <ShieldCheck size={14} />
+                      <span>{trustBadge.actionLabel}</span>
                     </button>
                   </div>
                 </div>
@@ -1656,48 +1666,196 @@ function MarketplaceHome({
 
       {products.length === 0 && (
         <div className="catalog-empty-state">
-          <strong>No matching products found</strong>
-          <p>Try a broader search like kurti, saree, bag, or bedsheet.</p>
+          <strong>{t(language, "noMatchingProductsFound")}</strong>
+          <p>{t(language, "broaderSearchTip")}</p>
         </div>
       )}
     </div>
   );
 }
 
-function proofCount(result: CompareResponse) {
-  return new Set([
-    ...result.ranking.fact_ids,
-    ...result.fit.fact_ids,
-    ...result.graph_path.fact_ids
-  ]).size;
+function BuyerAgentPlan({
+  productCount,
+  safeProductCount,
+  proofGapCount,
+  savedProduct,
+  startProduct,
+  language,
+  onStartSearch,
+  onRunCheck,
+  onOpenSavedItem
+}: {
+  productCount: number;
+  safeProductCount: number;
+  proofGapCount: number;
+  savedProduct: Product | null;
+  startProduct: Product | null;
+  language: LanguageCode;
+  onStartSearch: () => void;
+  onRunCheck: (product: Product) => void;
+  onOpenSavedItem: (product: Product) => void;
+}) {
+  const copy = buyerAgentPlanCopy(language);
+  const signals = [
+    {
+      icon: <ShieldCheck size={16} />,
+      value: safeProductCount > 0 ? `${safeProductCount} ${copy.safePicks}` : `${productCount} ${copy.options}`
+    },
+    {
+      icon: <FileCheck2 size={16} />,
+      value: proofGapCount > 0 ? `${proofGapCount} ${copy.proofChecks}` : copy.proofReady
+    }
+  ];
+
+  return (
+    <section className="buyer-agent-plan" aria-label={copy.title}>
+      <div className="buyer-agent-plan-copy">
+        <span className="eyebrow">{copy.eyebrow}</span>
+        <h2>{copy.title}</h2>
+        <p>{copy.body}</p>
+      </div>
+      <div className="buyer-agent-plan-steps">
+        {signals.map((step) => (
+          <span key={step.value}>
+            {step.icon}
+            <b>{step.value}</b>
+          </span>
+        ))}
+      </div>
+      <button
+        type="button"
+        className={savedProduct ? "primary" : ""}
+        onClick={() => savedProduct ? onOpenSavedItem(savedProduct) : startProduct ? onRunCheck(startProduct) : onStartSearch()}
+      >
+        {savedProduct ? copy.openSaved : startProduct ? copy.runCheck : copy.start}
+        <ArrowRight size={15} />
+      </button>
+    </section>
+  );
 }
 
-function evidenceGapLabel(count: number) {
-  if (count === 0) return "Proof complete";
-  if (count === 1) return "1 proof gap";
-  return `${count} proof gaps`;
+function buyerAgentPlanCopy(language: LanguageCode) {
+  if (language === "hindi") {
+    return {
+      eyebrow: "Buyer safety",
+      title: "Shop with proof",
+      body: "Product pasand karo. Sarthi seller aur proof check karke simple next step dikhata hai.",
+      safePicks: "safe picks",
+      proofChecks: "proof checks",
+      options: "options",
+      proofReady: "proof ready",
+      openSaved: "Open saved check",
+      runCheck: "Safety check",
+      start: "Find trusted items"
+    };
+  }
+  if (language === "hinglish") {
+    return {
+      eyebrow: "Buyer safety",
+      title: "Shop with proof",
+      body: "Product pasand karo. Sarthi seller aur proof check karke simple next step dikhata hai.",
+      safePicks: "safe picks",
+      proofChecks: "proof checks",
+      options: "options",
+      proofReady: "proof ready",
+      openSaved: "Open saved check",
+      runCheck: "Safety check",
+      start: "Find trusted items"
+    };
+  }
+  return {
+    eyebrow: "Buyer safety",
+    title: "Shop with proof",
+    body: "Pick a product. Sarthi checks seller and proof signals, then shows one clear next step.",
+    safePicks: "safe picks",
+    proofChecks: "proof checks",
+    options: "options",
+    proofReady: "proof ready",
+    openSaved: "Open saved check",
+    runCheck: "Safety check",
+    start: "Find trusted items"
+  };
+}
+
+function productTrustBadge(product: Product, isSaved: boolean, products: Product[], language: LanguageCode) {
+  const listingCount = clusterListingCount(products, product.cluster_id);
+  const safetyAction = safetyCheckActionLabel(language);
+  if (isSaved) {
+    return {
+      label: t(language, "trustCheckReady"),
+      phrase: `${listingCount} ${t(language, "similarSellers")}`,
+      actionLabel: t(language, "open"),
+      tone: "safe" as const,
+      action: "check" as const
+    };
+  }
+  if (!product.is_sarthi_eligible) {
+    return {
+      label: t(language, "browseOnly"),
+      phrase: t(language, "catalogOnly"),
+      actionLabel: t(language, "viewItem"),
+      tone: "proof" as const,
+      action: "view" as const
+    };
+  }
+  const trust = product.buyer_trust;
+  if (!trust) {
+    return {
+      label: t(language, "recommendationPaused"),
+      phrase: `${listingCount} ${t(language, "similarSellers")}`,
+      actionLabel: `${t(language, "checkTrust")} (${listingCount})`,
+      tone: "watch" as const,
+      action: "check" as const
+    };
+  }
+  const ordersLine = trust.delivered_orders_90d > 0
+    ? `${trust.delivered_orders_90d} ${t(language, "ordersChecked")}`
+    : t(language, "notEnoughProof");
+  if (trust.can_recommend) {
+    return {
+      label: trust.status === "specific_caution" ? t(language, "checkOnce") : t(language, "recommendationReady"),
+      phrase: trust.status === "specific_caution" ? trust.headline : ordersLine,
+      actionLabel: safetyAction,
+      tone: trust.status === "specific_caution" ? "watch" as const : "safe" as const,
+      action: "check" as const
+    };
+  }
+  const blockedPhrase = trust.open_proof_count > 0
+    ? t(language, "sellerProofAsked")
+    : trust.status === "seller_verification_pending"
+      ? t(language, "sellerPendingShort")
+      : trust.status === "data_degraded"
+        ? t(language, "freshDataMissing")
+        : ordersLine;
+  return {
+    label: trust.status === "limited_evidence" ? t(language, "notEnoughProof") : t(language, "recommendationBlocked"),
+    phrase: blockedPhrase,
+    actionLabel: safetyAction,
+    tone: "proof" as const,
+    action: "check" as const
+  };
+}
+
+function feedTrustStripMessage(count: number, language: LanguageCode) {
+  void count;
+  if (language === "hindi") return "Seller, returns aur proof buy se pehle check hote hain";
+  if (language === "hinglish") return "Seller, returns aur proof buy se pehle check hote hain";
+  return "Seller, returns and proof checked before you buy";
+}
+
+function safetyCheckActionLabel(language: LanguageCode) {
+  if (language === "hindi") return "Safety";
+  if (language === "hinglish") return "Safety";
+  return "Safety";
 }
 
 function clusterListingCount(products: Product[], clusterId: string) {
   return products.filter((product) => product.cluster_id === clusterId).length;
 }
 
-function clusterProducts(products: Product[], clusterId: string) {
-  return products.filter((product) => product.cluster_id === clusterId && product.is_sarthi_eligible);
-}
-
 function productForVariant(variantId: string, products: Product[]) {
   const productId = variantProductId(variantId);
   return products.find((product) => product.product_id === productId) ?? null;
-}
-
-function candidateForProduct(result: CompareResponse, product: Product) {
-  return result.ranking.candidates.find((candidate) => variantProductId(candidate.variant_id) === product.product_id) ?? null;
-}
-
-function candidateRank(result: CompareResponse, product: Product) {
-  const rank = result.ranking.candidates.findIndex((candidate) => variantProductId(candidate.variant_id) === product.product_id);
-  return rank === -1 ? 999 : rank;
 }
 
 function variantProductId(variantId: string) {
@@ -1716,4 +1874,12 @@ function fallbackProductImage(color: string) {
   if (color === "pink") return "/product-pink.svg";
   if (color === "maroon") return "/product-maroon.svg";
   return "/product-blue.svg";
+}
+
+function productImageSource(product: Pick<Product, "image_url" | "color_family">) {
+  const source = product.image_url?.trim() ?? "";
+  if (!source || source.includes("placehold.co") || source.includes("text=")) {
+    return fallbackProductImage(product.color_family);
+  }
+  return source;
 }
