@@ -573,7 +573,8 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
   const [error, setError] = useState<string | null>(null);
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
 
-  const [activeTab, setActiveTab] = useState<"performance" | "onboarding">("performance");
+  const [workbenchTab, setWorkbenchTab] = useState<SellerWorkbenchTab>("overview");
+  const topFeature = parseSellerTopFeature(location.pathname);
 
   // Modals/Sheets
   const [activeWhyListing, setActiveWhyListing] = useState<SellerPanelListing | null>(null);
