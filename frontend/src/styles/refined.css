@@ -6,11 +6,7 @@ html {
 }
 
 body {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 4%, transparent), transparent 320px),
-    radial-gradient(color-mix(in srgb, var(--accent-primary) 18%, transparent) 1px, transparent 1px),
-    var(--bg-canvas);
-  background-size: auto, 72px 72px, auto;
+  background: var(--bg-canvas);
   color: var(--text-primary);
 }
 
