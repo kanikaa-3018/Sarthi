@@ -881,22 +881,11 @@ input:focus {
 
   .buyer-product-title {
     font-size: 12px;
-    min-height: 46px;
-  }
-
-  .buyer-product-seller-row,
-  .product-delivery-row {
-    display: none;
+    min-height: 31px;
   }
 
   .product-price-row {
-    align-items: flex-start;
-    flex-direction: column;
     gap: 2px;
-  }
-
-  .buyer-product-actions {
-    grid-template-columns: 1fr;
   }
 
   .workspace-hero {
