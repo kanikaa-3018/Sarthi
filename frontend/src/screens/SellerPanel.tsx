@@ -662,9 +662,21 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
 
   function openProofTask(task: SellerEvidenceCoachTask) {
     setActiveProofTask(task);
-    setProofTitle(task.title);
-    setProofDescription(`Evidence submitted to resolve ${task.attribute} questions for ${task.product_title.split("-")[0].trim()}.`);
+    setProofTitle("");
+    setProofDescription("");
     setProofAssetUrl("");
+    setProofSuccess(null);
+  }
+
+  function applySuggestedProof(task: SellerEvidenceCoachTask) {
+    const listing = (panel?.seller_all_listings ?? panel?.seller_listings ?? [])
+      .find((item) => item.product.product_id === task.product_id);
+    const draft = suggestedProofDraft(task, listing);
+    setProofTitle(draft.title);
+    setProofDescription(draft.description);
+    if (draft.assetUrl) {
+      setProofAssetUrl(draft.assetUrl);
+    }
   }
 
   function closeProofTask() {
