@@ -1020,454 +1020,363 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
             type="button"
             className="btn-reset-db seller-refresh-btn"
             onClick={() => loadPanel(selectedClusterId)}
-            title="Refresh seller console"
+            title={copy.refreshSellerConsole}
           >
             <RefreshCcw size={16} className={loading ? "spin-icon" : ""} />
           </button>
         </div>
       </section>
 
-      <div className="workspace-nav" style={{ marginBottom: "16px", alignSelf: "flex-start" }}>
-        <button
-          type="button"
-          className={activeTab === "performance" ? "active" : ""}
-          onClick={() => setActiveTab("performance")}
-          disabled={!panel}
-        >
-          Performance
-        </button>
-        <button
-          type="button"
-          className={activeTab === "onboarding" ? "active" : ""}
-          onClick={() => setActiveTab("onboarding")}
-        >
-          Verify & drafts {onboarding && onboarding.listing_drafts.length > 0 && `(${onboarding.listing_drafts.length})`}
-        </button>
-      </div>
-
       {error && <div className="notice error">{error}</div>}
+      {proofSuccess && <div className="notice success">{proofSuccess}</div>}
       {docSuccess && <div className="notice success">{docSuccess}</div>}
       {draftSuccess && <div className="notice success">{draftSuccess}</div>}
 
-      {/* Tab 1: Active Performance & Doubt Inbox */}
-      {activeTab === "performance" && panel && (
+      {topFeature !== "console" ? (
+        <SellerTopFeaturePage
+          feature={topFeature}
+          listings={sellerListings}
+          tasks={proofTasks}
+          actionBoard={actionBoard}
+          topProofTask={topProofTask}
+          proofNav={evidenceCoach?.proof_nav ?? null}
+          proofAssets={evidenceCoach?.proof_assets ?? []}
+          draftReadiness={draftReadiness}
+          draftWarnings={draftWarnings}
+          ratingText={ratingText}
+          ratingCount={ratingCount}
+          liveProductCount={liveProductCount}
+          openRequestCount={openRequestCount}
+          resolvedProofCount={evidenceCoach?.resolved_request_count ?? 0}
+          verificationStatus={verificationStatus}
+          onOpenProofTask={openProofTask}
+          onOpenDetails={setActiveWhyListing}
+          onOpenFix={(listing) => {
+            setActiveFixListing(listing);
+            setFixSuccess(false);
+          }}
+          onAddProduct={openAddProduct}
+          onOpenConsole={() => navigate("/seller")}
+          copy={copy}
+        />
+      ) : (
         <>
-          <section className="seller-stats-band">
-            <div className="seller-metric-tile">
-              <span className="seller-metric-icon"><TrendingUp size={16} /></span>
-              <span>Cluster</span>
-              <strong>{panel.cluster.listing_count}</strong>
-              <small>{panel.cluster.seller_count} seller option(s)</small>
+          <SellerWorkbenchNav
+            active={workbenchTab}
+            counts={{
+              products: liveProductCount,
+              openProofTasks: openRequestCount,
+              drafts: onboarding?.listing_drafts.length ?? 0,
+              submittedProofs: evidenceCoach?.proof_assets.length ?? 0,
+              facts: panel?.fact_ids.length ?? 0
+            }}
+            panelAvailable={Boolean(panel)}
+            onSelect={selectWorkbenchTab}
+            copy={copy}
+          />
+
+          {workbenchTab === "overview" && (
+        <section className="seller-workbench-panel">
+          <SellerAgentInsight insight={sellerInsight} copy={copy} />
+          <SellerQuickActions
+            topProofTask={topProofTask}
+            onOpenProofTask={openProofTask}
+            onShowProducts={() => selectWorkbenchTab("products")}
+            onAddProduct={openAddProduct}
+            copy={copy}
+          />
+          <SellerTrustOpsStrip
+            insights={sellerTrustOps}
+            onOpenProofTask={topProofTask ? () => openProofTask(topProofTask) : undefined}
+            onShowProducts={() => selectWorkbenchTab("products")}
+          />
+          {evidenceCoach && (
+            <SellerProofImpactPanel
+              proofNav={evidenceCoach.proof_nav}
+              proofAssets={evidenceCoach.proof_assets}
+              tasks={proofTasks}
+              ratingText={ratingText}
+              onOpenProofTask={topProofTask ? () => openProofTask(topProofTask) : undefined}
+              copy={copy}
+            />
+          )}
+
+          <div className="seller-overview-grid">
+            <SellerMetricCard
+              label={copy.currentRating}
+              value={ratingText}
+              detail={ratingCount ? `${ratingCount.toLocaleString("en-IN")} ${copy.buyerRatings}` : copy.buildFirstRatings}
+              tone="brand"
+            />
+            <SellerMetricCard
+              label={copy.liveProducts}
+              value={String(liveProductCount)}
+              detail={panel ? `${sellerListings.length} ${copy.productsTracked}` : copy.addAndSubmitProducts}
+              tone="neutral"
+            />
+            <SellerMetricCard
+              label={copy.buyerProofAsks}
+              value={String(openRequestCount)}
+              detail={openRequestCount ? copy.fixBeforeTrust : copy.noOpenBuyerDoubts}
+              tone={openRequestCount ? "watch" : "good"}
+            />
+            <SellerMetricCard
+              label={copy.verification}
+              value={labelize(verificationStatus)}
+              detail={verificationStatus === "verified" ? copy.buyerFeedReady : copy.uploadDocsReview}
+              tone={verificationStatus === "verified" ? "good" : "watch"}
+            />
+          </div>
+
+          <SellerReviewLoopPanel
+            onboarding={onboarding}
+            proofAssets={evidenceCoach?.proof_assets ?? []}
+            tasks={proofTasks}
+            copy={copy}
+            onOpenProofTask={openProofTask}
+            onAddProduct={openAddProduct}
+          />
+
+          {actionBoard ? (
+            <>
+              <SellerActionBoardPanel
+                board={actionBoard}
+                listings={sellerListings}
+                tasks={proofTasks}
+                onOpenDetails={setActiveWhyListing}
+                onOpenFix={(listing) => {
+                  setActiveFixListing(listing);
+                  setFixSuccess(false);
+                }}
+                onOpenProofTask={openProofTask}
+                copy={copy}
+              />
+              <SellerRatingCoachPanel board={actionBoard} ratingText={ratingText} copy={copy} />
+            </>
+          ) : (
+            <div className="seller-today-grid">
+              <article className="seller-next-action-card primary">
+                <span className="eyebrow">{copy.doFirst}</span>
+                <strong>{topProofTask ? topProofTask.title : copy.keepProductProofReady}</strong>
+                <p>
+                  {topProofTask
+                    ? `${topProofTask.buyer_demand} buyer request(s) are waiting for ${proofTypeLabel(topProofTask.recommended_proof_type)}.`
+                    : copy.noUrgentBuyerRequest}
+                </p>
+                {topProofTask ? (
+                  <button type="button" className="seller-primary-action" onClick={() => openProofTask(topProofTask)}>
+                    {copy.addProof}
+                    <ChevronRight size={14} />
+                  </button>
+                ) : (
+                  <button type="button" className="seller-secondary-action" onClick={() => selectWorkbenchTab("proofs_submitted")}>
+                    {copy.viewProofGuide}
+                    <ChevronRight size={14} />
+                  </button>
+                )}
+              </article>
             </div>
-            <div className="seller-metric-tile">
-              <span className="seller-metric-icon"><AlertTriangle size={16} /></span>
-              <span>Median returns</span>
-              <strong>{panel.cluster.stats.median_return_rate === null ? "N/A" : `${Math.round(panel.cluster.stats.median_return_rate * 100)}%`}</strong>
-              <small>{panel.cluster.stats.delivered_orders_90d} delivered orders</small>
-            </div>
-            <div className="seller-metric-tile">
-              <span className="seller-metric-icon"><CheckCircle2 size={16} /></span>
-              <span>Verification</span>
-              <strong>{labelize(panel.seller_verification.verification_status)}</strong>
-              <small>{labelize(panel.seller_verification.data_access_level)}</small>
-            </div>
-            <div className="seller-metric-tile">
-              <span className="seller-metric-icon"><RefreshCcw size={16} /></span>
-              <span>Source health</span>
-              <strong>{labelize(panel.data_freshness.overall_status)}</strong>
-              <small>{panel.fact_ids.length} facts connected</small>
-            </div>
-            <div className="seller-metric-tile">
-              <span className="seller-metric-icon"><Info size={16} /></span>
-              <span>Buyer proof asks</span>
-              <strong>{evidenceCoach?.open_task_count ?? 0}</strong>
-              <small>{evidenceCoach?.resolved_request_count ?? 0} resolved</small>
-            </div>
-          </section>
-
-          <section className="seller-console-grid">
-            <div className="seller-main-column">
-              <section className="seller-live-section seller-section">
-                <div className="section-heading-row">
-                  <div>
-                    <span className="eyebrow">Your live options</span>
-                    <h3>{panel.cluster.label}</h3>
-                  </div>
-                  <span className="seller-size-pill">Size {panel.cluster.size}</span>
-                </div>
-                <div className="seller-listing-stack">
-                  {panel.seller_listings.map((listing) => {
-                    const isActionNeeded = listing.decision_status === "needs_seller_action";
-                    const filledSegments = listing.cluster_position
-                      ? Math.max(1, 4 - Math.min(listing.cluster_position, 3))
-                      : 0;
-                    return (
-                      <article
-                        key={listing.variant.variant_id}
-                        className={`seller-listing-card ${isActionNeeded ? "needs-action" : ""}`}
-                      >
-                        <div className="seller-listing-image">
-                          <img src={listing.product.image_url || "/product-blue.svg"} alt={listing.product.title} />
-                        </div>
-
-                        <div className="seller-listing-body">
-                          <div className="seller-listing-topline">
-                            <div>
-                              <h4>{listing.product.title.split("-")[0].trim()}</h4>
-                              <span>SKU {listing.variant.variant_id}</span>
-                            </div>
-                            <span className={`ui-badge ${isActionNeeded ? "caution" : "positive"}`}>
-                              {isActionNeeded ? "Needs action" : "Eligible"}
-                            </span>
-                          </div>
-
-                          <div className="seller-rank-line">
-                            <div className="rank-dots" aria-hidden="true">
-                              {[1, 2, 3].map((dot) => (
-                                <span key={dot} className={dot <= filledSegments ? "filled" : ""} />
-                              ))}
-                            </div>
-                            <strong>
-                              {listing.cluster_position
-                                ? `You're #${listing.cluster_position} of ${panel.cluster.listing_count} comparable listings`
-                                : "Rank pending until enough evidence"}
-                            </strong>
-                          </div>
-
-                          <div className="seller-score-row compact">
-                            <div className="seller-data-point">
-                              <span>Kept score</span>
-                              <strong>{listing.metrics.kept_rate ? `${Math.round(listing.metrics.kept_rate * 100)}%` : "N/A"}</strong>
-                            </div>
-                            <div className="seller-data-point rating-highlight">
-                              <span><Star size={11} fill="currentColor" /> Current rating</span>
-                              <strong>{listing.product.rating.toFixed(1)}/5</strong>
-                            </div>
-                            <div className="seller-data-point">
-                              <span>Fit accuracy</span>
-                              <strong>{listing.metrics.fit_as_expected_rate ? `${Math.round(listing.metrics.fit_as_expected_rate * 100)}%` : "N/A"}</strong>
-                            </div>
-                            <div className="seller-data-point">
-                              <span>Dispatch</span>
-                              <strong>{listing.metrics.median_dispatch_hours}h</strong>
-                            </div>
-                          </div>
-
-                          <div className="seller-card-actions">
-                            <button className="seller-secondary-action" onClick={() => setActiveWhyListing(listing)}>
-                              Why ranked here
-                            </button>
-
-                            <button
-                              className="seller-primary-action"
-                              onClick={() => {
-                                setActiveFixListing(listing);
-                                setFixSuccess(false);
-                              }}
-                            >
-                              Fix it
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="seller-section">
-                <div className="section-heading-row">
-                  <div>
-                    <span className="eyebrow">Comparable listings</span>
-                    <h3>Masked cluster context</h3>
-                  </div>
-                  <span className="seller-size-pill">Aggregate only</span>
-                </div>
-                <div className="seller-table-wrap">
-                  <table className="seller-table">
-                    <thead>
-                      <tr>
-                        <th>Seller listing</th>
-                        <th>Kept rate</th>
-                        <th>Top issue</th>
-                        <th>Rank</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {panel.competing_listings.map((comp, idx) => (
-                        <tr key={comp.variant.variant_id}>
-                          <td>Competitor listing #{idx + 1}</td>
-                          <td>{comp.metrics.kept_rate ? `${Math.round(comp.metrics.kept_rate * 100)}%` : "N/A"}</td>
-                          <td>{comp.top_issue ? labelize(comp.top_issue.return_reason) : "None"}</td>
-                          <td>#{idx + 2}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <aside className="seller-side-column">
-              {evidenceCoach && (
-                <section className="seller-evidence-coach">
-                  <div className="seller-section-heading">
-                    <div>
-                      <span className="eyebrow">Buyer doubt inbox</span>
-                      <h3>Evidence requests from shoppers</h3>
-                    </div>
-                    <strong>{evidenceCoach.open_task_count} open</strong>
-                  </div>
-                  {evidenceCoach.tasks.length === 0 ? (
-                    <p className="seller-empty-copy">{evidenceCoach.privacy_guard.summary}</p>
-                  ) : (
-                    <div className="seller-proof-task-list">
-                      {evidenceCoach.tasks.map((task) => {
-                        const taskId = proofTaskId(task);
-                        return (
-                          <article key={taskId} className="seller-proof-task">
-                            <div>
-                              <span>{task.priority}</span>
-                              <strong>{task.title}</strong>
-                              <p>{task.rationale}</p>
-                              <small>
-                                {task.type === "broken_expectation" ? "Expectation gap" : "Buyer proof request"} |{" "}
-                                {task.product_title.split("-")[0].trim()} | {task.recommended_proof_type.replace(/_/g, " ")}
-                              </small>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => openProofTask(task)}
-                              disabled={proofSubmittingId === taskId}
-                            >
-                              {proofSubmittingId === taskId
-                                ? "Submitting"
-                                : task.type === "broken_expectation"
-                                  ? "Add fix proof"
-                                  : "Add proof"}
-                            </button>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-              )}
-
-              <section className="seller-section">
-                <div className="seller-section-heading">
-                  <div>
-                    <span className="eyebrow">Privacy boundary</span>
-                    <h3>What sellers can see</h3>
-                  </div>
-                  <strong>{panel.privacy_guard.safe_for_seller ? "Safe" : "Check"}</strong>
-                </div>
-                <p className="seller-empty-copy">{panel.privacy_guard.summary}</p>
-              </section>
-            </aside>
-          </section>
-        </>
+          )}
+        </section>
       )}
 
-      {/* Tab 2: Verification & Catalog Drafts (Onboarding) */}
-      {activeTab === "onboarding" && onboarding && (
-        <section className="seller-onboarding-workspace">
-          <div className="seller-console-grid">
-            <div className="seller-main-column">
-              {/* Document upload card */}
-              <div className="seller-section">
-                <div className="section-heading-row">
-                  <div>
-                    <span className="eyebrow">Identity verification</span>
-                    <h3>Verification Documents</h3>
-                  </div>
-                </div>
-
-                <div className="seller-doc-uploader" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", margin: "16px 0" }}>
-                  <form onSubmit={handleDocSubmit} className="seller-proof-form-body" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <strong>Upload New Document</strong>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "11px", fontWeight: "700" }}>Document Type</span>
-                      <select value={docType} onChange={(e) => setDocType(e.target.value as any)}>
-                        <option value="gst_certificate">GST Certificate</option>
-                        <option value="pan_card">PAN Card</option>
-                        <option value="address_proof">Address Proof (Aadhaar / Utility)</option>
-                        <option value="bank_proof">Bank Proof (Cancelled Cheque)</option>
-                      </select>
-                    </label>
-
-                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "11px", fontWeight: "700" }}>Reference Number</span>
-                      <input value={docRef} onChange={(e) => setDocRef(e.target.value)} placeholder="e.g. GSTIN / Document ID" required />
-                    </label>
-
-                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "11px", fontWeight: "700" }}>File Name</span>
-                      <input value={docFileName} onChange={(e) => setDocFileName(e.target.value)} placeholder="e.g. gst.pdf" />
-                    </label>
-
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
-                      <button type="button" className="seller-secondary-action" onClick={() => handleAutoFillDoc(docType)}>
-                        Auto-fill Mock Info
-                      </button>
-                      <button type="submit" className="seller-primary-action" disabled={docSubmitting || !docRef.trim()}>
-                        {docSubmitting ? "Submitting..." : "Submit Document"}
-                      </button>
-                    </div>
-                  </form>
-
-                  <div className="submitted-docs-list">
-                    <strong>Uploaded Proof References ({onboarding.documents.length})</strong>
-                    {onboarding.documents.length === 0 ? (
-                      <p style={{ fontStyle: "italic", fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>No documents uploaded yet. Identity verification requires GST & PAN card reference.</p>
-                    ) : (
-                      <div className="admin-card-stack" style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                        {onboarding.documents.map((doc) => (
-                          <div key={doc.document_id} className="admin-doc-row" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "10px", padding: "10px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <strong>{labelize(doc.document_type)}</strong>
-                              <span className={`ui-badge ${doc.status === "approved" ? "positive" : doc.status === "rejected" ? "caution" : "neutral"}`}>
-                                {doc.status}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>Ref: {doc.reference}</div>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>File: {doc.file_name}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Listing Drafts section */}
-              <div id="seller-create-product" className="seller-section" style={{ marginTop: "20px" }}>
-                <div className="section-heading-row">
-                  <div>
-                    <span className="eyebrow">Catalog creation</span>
-                    <h3>Add product</h3>
-                  </div>
-                </div>
-
-                <div className="seller-draft-workspace" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "20px", margin: "16px 0" }}>
-                  {/* Create Draft Form */}
-                  <form onSubmit={handleCreateDraft} className="seller-proof-form-body" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <strong>Create listing draft</strong>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "11px", fontWeight: "700" }}>Product Title</span>
-                      <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="e.g. Cotton Ethnic Kurta" required />
-                    </label>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Category</span>
-                        <input value={draftCategory} onChange={(e) => setDraftCategory(e.target.value)} required />
-                      </label>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Garment Type</span>
-                        <input value={draftGarmentType} onChange={(e) => setDraftGarmentType(e.target.value)} required />
-                      </label>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Fabric</span>
-                        <input value={draftFabric} onChange={(e) => setDraftFabric(e.target.value)} required />
-                      </label>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Color Family</span>
-                        <input value={draftColor} onChange={(e) => setDraftColor(e.target.value)} required />
-                      </label>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "10px" }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Base Price (Rs)</span>
-                        <input type="number" value={draftPrice} onChange={(e) => setDraftPrice(e.target.value)} required />
-                      </label>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: "700" }}>Image URL (Optional)</span>
-                        <input value={draftImageUrl} onChange={(e) => setDraftImageUrl(e.target.value)} placeholder="https://..." />
-                      </label>
-                    </div>
-
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
-                      <button type="button" className="seller-secondary-action" onClick={handleAutoFillDraft}>
-                        Auto-fill Sample Draft
-                      </button>
-                      <button type="submit" className="seller-primary-action" disabled={draftCreating || !draftTitle.trim()}>
-                        {draftCreating ? "Creating..." : "Save Draft"}
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* Drafts List */}
-                  <div className="seller-drafts-list">
-                    <strong>Current Drafts ({onboarding.listing_drafts.length})</strong>
-                    {onboarding.listing_drafts.length === 0 ? (
-                      <p style={{ fontStyle: "italic", fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>No drafts saved yet. Create a draft to start publishing catalog products.</p>
-                    ) : (
-                      <div className="admin-card-stack" style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                        {onboarding.listing_drafts.map((draft) => (
-                          <div key={draft.draft_id} className="admin-doc-row" style={{ background: "var(--bg-canvas)", border: "1px solid var(--border-subtle)", borderRadius: "10px", padding: "10px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                              <div>
-                                <strong style={{ fontSize: "13px" }}>{draft.title}</strong>
-                                <div style={{ fontSize: "10px", color: "var(--text-secondary)" }}>ID: {draft.draft_id} | Rs {draft.base_price}</div>
-                              </div>
-                              <span className={`ui-badge ${draft.status === "approved" ? "positive" : draft.status === "submitted" ? "neutral" : "caution"}`}>
-                                {draft.status}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
-                              Readiness: <strong>{labelize(draft.readiness_status)}</strong>
-                            </div>
-                            {draft.status === "draft" && (
-                              <button
-                                type="button"
-                                style={{ marginTop: "8px", padding: "5px 10px", fontSize: "11px", borderRadius: "6px", width: "100%" }}
-                                className="seller-primary-action"
-                                onClick={() => void handleDraftSubmit(draft.draft_id)}
-                                disabled={draftSubmittingId === draft.draft_id}
-                              >
-                                {draftSubmittingId === draft.draft_id ? "Submitting..." : "Submit to Admin"}
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+      {workbenchTab === "products" && panel && (
+        <section className="seller-workbench-panel">
+          <div className="seller-section-heading clean">
+            <div>
+              <span className="eyebrow">{copy.productHealth}</span>
+              <h3>{copy.whatEachListingNeeds}</h3>
+              <p>{copy.productHealthBody}</p>
             </div>
+            <button type="button" className="seller-primary-action" onClick={openAddProduct}>
+              <Plus size={14} />
+              {copy.addProduct}
+            </button>
+          </div>
+          <SellerProductHealthTable
+            listings={sellerListings}
+            tasks={proofTasks}
+            actionCards={actionBoard?.cards ?? []}
+            onOpenDetails={setActiveWhyListing}
+            onOpenFix={(listing) => {
+              setActiveFixListing(listing);
+              setFixSuccess(false);
+            }}
+            onOpenProofTask={openProofTask}
+          />
+        </section>
+      )}
 
-            <aside className="seller-side-column">
-              <div className="seller-section">
-                <span className="eyebrow">Onboarding Steps</span>
-                <h3>Next Actions</h3>
-                <div className="policy-list" style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {onboarding.next_actions.map((act, idx) => (
-                    <div key={idx} style={{ padding: "10px", background: "var(--bg-canvas)", borderLeft: `3px solid var(--${act.priority === "high" ? "error" : act.priority === "medium" ? "warning" : "success"})`, borderRadius: "4px" }}>
-                      <strong style={{ fontSize: "12px", display: "block" }}>{act.title}</strong>
-                      <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{act.detail}</span>
-                    </div>
-                  ))}
+      {workbenchTab === "products" && !panel && (
+        <SellerEmptyState
+          title={copy.noLiveProductData}
+              detail={copy.finishVerificationOrDraft}
+          action={copy.addProduct}
+          onAction={openAddProduct}
+        />
+      )}
+
+      {workbenchTab === "add_product" && onboarding && (
+        <section id="seller-create-product" className="seller-workbench-panel seller-add-product-workbench">
+          <div className="seller-section-heading clean">
+            <div>
+              <span className="eyebrow">{copy.addProductEyebrow}</span>
+              <h3>{copy.createTrustedListing}</h3>
+              <p>{copy.readinessBody}</p>
+            </div>
+            <span className={`seller-status-pill ${verificationStatus === "verified" ? "good" : "watch"}`}>
+              {labelize(verificationStatus)}
+            </span>
+          </div>
+
+          <div className="seller-add-grid">
+            <form onSubmit={handleCreateDraft} className="seller-clean-form">
+              <div className={`seller-readiness-live ${draftReadiness.tone}`}>
+                <div>
+                  <span>{copy.readyToSubmit}</span>
+                  <strong>{draftReadiness.score}/100</strong>
+                </div>
+                <p>{draftReadiness.message}</p>
+              </div>
+              <SellerUploadWarningList title={copy.listingUploadChecks} warnings={draftWarnings} />
+
+              <label>
+                <span>{copy.productTitle}</span>
+                <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="Blue floral cotton kurti" required />
+              </label>
+
+              <div className="seller-form-row">
+                <label>
+                  <span>{copy.category}</span>
+                  <input value={draftCategory} onChange={(e) => setDraftCategory(e.target.value)} required />
+                </label>
+                <label>
+                  <span>{copy.garmentType}</span>
+                  <input value={draftGarmentType} onChange={(e) => setDraftGarmentType(e.target.value)} required />
+                </label>
+              </div>
+
+              <div className="seller-form-row">
+                <label>
+                  <span>{copy.fabric}</span>
+                  <input value={draftFabric} onChange={(e) => setDraftFabric(e.target.value)} required />
+                </label>
+                <label>
+                  <span>{copy.colourFamily}</span>
+                  <input value={draftColor} onChange={(e) => setDraftColor(e.target.value)} required />
+                </label>
+              </div>
+
+              <div className="seller-form-row">
+                <label>
+                  <span>{copy.basePrice}</span>
+                  <input type="number" value={draftPrice} onChange={(e) => setDraftPrice(e.target.value)} required />
+                </label>
+                <label>
+                  <span>{copy.imageUrl}</span>
+                  <input value={draftImageUrl} onChange={(e) => setDraftImageUrl(e.target.value)} placeholder="https://..." />
+                </label>
+              </div>
+              <label className="seller-file-upload">
+                <UploadCloud size={15} />
+                <span>{draftImageUrl.startsWith("data:image/") ? copy.productImageSelected : copy.uploadProductImage}</span>
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleDraftImageFileSelect(event)} />
+              </label>
+
+              <div className="seller-form-actions">
+                <button type="button" className="seller-secondary-action" onClick={handleImproveDraftTitle} disabled={!draftGarmentType.trim() && !draftFabric.trim() && !draftColor.trim()}>
+                  {copy.improveTitle}
+                </button>
+                <button type="submit" className="seller-primary-action" disabled={draftCreating || !draftTitle.trim() || draftHasBlockingIssue}>
+                  {draftCreating ? copy.saving : copy.saveDraft}
+                </button>
+              </div>
+            </form>
+
+            <aside className="seller-draft-panel">
+              <div className="seller-doc-status">
+                <span className="eyebrow">{copy.verificationDocs}</span>
+                <strong>{onboarding.documents.length} {copy.uploaded}</strong>
+                <p>{verificationStatus === "verified" ? copy.docsApproved : copy.uploadSellerProof}</p>
+              </div>
+
+              <div className="seller-mini-doc-form">
+                <strong>{copy.quickDocumentUpload}</strong>
+                <select value={docType} onChange={(e) => setDocType(e.target.value as typeof docType)}>
+                  <option value="gst_certificate">GST Certificate</option>
+                  <option value="pan_card">PAN Card</option>
+                  <option value="address_proof">Address Proof</option>
+                  <option value="bank_proof">Bank Proof</option>
+                </select>
+                <input value={docRef} onChange={(e) => setDocRef(e.target.value)} placeholder={copy.referenceNumber} />
+                <label className="seller-file-upload compact">
+                  <UploadCloud size={14} />
+                  <span>{docFileName || copy.attachDocumentFile}</span>
+                  <input type="file" accept=".pdf,image/png,image/jpeg,image/webp" onChange={(event) => void handleDocFileSelect(event)} />
+                </label>
+                <div className="seller-form-actions">
+                  <button type="button" className="seller-primary-action" disabled={docSubmitting || !docRef.trim() || !docFileBase64} onClick={() => void submitDocumentReference()}>
+                    {docSubmitting ? copy.submitting : copy.submitDoc}
+                  </button>
                 </div>
               </div>
 
-              <div className="seller-section" style={{ marginTop: "16px" }}>
-                <span className="eyebrow">Trust Constraints</span>
-                <h3>Verification Policy</h3>
-                <ul className="policy-list" style={{ paddingLeft: "16px", marginTop: "8px", fontSize: "12px", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {onboarding.policy.buyer_feed_blocked_until.map((item, i) => (
-                    <li key={i}>{labelize(item)}</li>
-                  ))}
-                </ul>
+              <div className="seller-draft-list">
+                <strong>{copy.drafts}</strong>
+                {onboarding.listing_drafts.length === 0 ? (
+                  <p>{copy.noDrafts}</p>
+                ) : (
+                  onboarding.listing_drafts.map((draft) => (
+                    <article key={draft.draft_id} className="seller-draft-row">
+                      <div>
+                        <strong>{draft.title}</strong>
+                        <span>Rs {draft.base_price} | {labelize(draft.readiness_status)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="seller-secondary-action"
+                        onClick={() => void handleDraftSubmit(draft.draft_id)}
+                        disabled={draft.status !== "draft" || draftSubmittingId === draft.draft_id}
+                      >
+                        {draftSubmittingId === draft.draft_id ? copy.submitting : labelize(draft.status === "draft" ? "submit" : draft.status)}
+                      </button>
+                    </article>
+                  ))
+                )}
               </div>
             </aside>
           </div>
         </section>
+      )}
+
+      {workbenchTab === "add_product" && !onboarding && (
+        <SellerEmptyState
+          title={copy.sellerSetupNotLoaded}
+          detail={copy.refreshSetupDetail}
+          action={copy.refresh}
+          onAction={() => void loadPanel(selectedClusterId)}
+        />
+      )}
+
+      {workbenchTab === "proofs_submitted" && (
+        <SellerProofLibraryPanel
+          tasks={proofTasks}
+          listings={sellerListings}
+          onOpenProofTask={openProofTask}
+        />
+      )}
+
+      {workbenchTab === "performance" && panel && (
+        <SellerPerformancePanel
+          panel={panel}
+          selectedClusterId={selectedClusterId}
+          onClusterChange={(clusterId) => {
+            setSelectedClusterId(clusterId);
+            void loadPanel(clusterId);
+          }}
+        />
+      )}
+        </>
       )}
 
       {/* Screen 2: Why Ranked Here Bottom Sheet */}
@@ -1476,8 +1385,8 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
           <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-primary">Why You're Ranked Here</span>
-                <h3 className="sheet-title">Factual Indicators</h3>
+                <span className="eyebrow sheet-eyebrow-primary">Product plan</span>
+                <h3 className="sheet-title">What to fix next</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setActiveWhyListing(null)}>
                 <X size={16} />
