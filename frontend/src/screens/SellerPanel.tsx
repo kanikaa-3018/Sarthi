@@ -764,29 +764,26 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
     }
   }
 
-  function handleAutoFillDoc(type: "gst_certificate" | "pan_card" | "address_proof" | "bank_proof") {
-    setDocType(type);
-    if (type === "gst_certificate") {
-      setDocRef("GSTIN27AAAC1234A1Z1");
-      setDocFileName("gst_certificate.pdf");
-      setDocFileBase64("JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iag==");
-    } else if (type === "pan_card") {
-      setDocRef("ABCDE1234F");
-      setDocFileName("pan_card.jpg");
-      setDocFileBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
-    } else if (type === "address_proof") {
-      setDocRef("UID123456789012");
-      setDocFileName("aadhaar_card.pdf");
-      setDocFileBase64("JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iag==");
-    } else if (type === "bank_proof") {
-      setDocRef("IFSCBKID0001234");
-      setDocFileName("cancelled_cheque.jpg");
-      setDocFileBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+  async function handleDocFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (!isAllowedUploadFile(file, ["application/pdf", "image/jpeg", "image/png", "image/webp"], 2_500_000)) {
+      setError("Document must be a PDF or image under 2.5 MB.");
+      event.currentTarget.value = "";
+      return;
     }
+    setError(null);
+    setDocFileName(file.name);
+    setDocMimeType(file.type || (file.name.endsWith(".pdf") ? "application/pdf" : "image/jpeg"));
+    setDocFileBase64(dataUrlToBase64(await readFileAsDataUrl(file)));
   }
 
   async function handleCreateDraft(e: React.FormEvent) {
     e.preventDefault();
+    if (draftHasBlockingIssue) {
+      setError(draftWarnings.find((warning) => warning.tone === "risk" && warning.key !== "seller-verification")?.detail ?? copy.readinessIncomplete);
+      return;
+    }
     setDraftCreating(true);
     setError(null);
     setDraftSuccess(null);
