@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, ShoppingBag, Store, ShieldCheck } from "lucide-react";
 import { login, signupBuyer, signupSeller } from "../api/client";
 import { SarthiMark } from "../components/SarthiMark";
 import { DEMO_ACCOUNTS, type AuthPortal } from "../demoAccounts";
@@ -21,7 +21,7 @@ const PORTAL_COPY: Record<AuthPortal, {
   description: string;
   lockText: string;
   action: string;
-  marker: string;
+  icon: React.ReactNode;
 }> = {
   buyer: {
     title: "Buyer workspace",
@@ -29,7 +29,7 @@ const PORTAL_COPY: Record<AuthPortal, {
     description: "Compare listings, check size and offer truth before checkout.",
     lockText: "Private fit memory",
     action: "Continue shopping",
-    marker: "B"
+    icon: <ShoppingBag size={18} />
   },
   seller: {
     title: "Seller portal",
@@ -37,7 +37,7 @@ const PORTAL_COPY: Record<AuthPortal, {
     description: "Submit proof, track drafts and improve listing readiness.",
     lockText: "Aggregate evidence only",
     action: "Open seller console",
-    marker: "S"
+    icon: <Store size={18} />
   },
   reviewer: {
     title: "Reviewer queue",
@@ -45,7 +45,7 @@ const PORTAL_COPY: Record<AuthPortal, {
     description: "Review seller applications, proof and listing approvals.",
     lockText: "Admin access only",
     action: "Open review desk",
-    marker: "R"
+    icon: <ShieldCheck size={18} />
   }
 };
 
@@ -205,7 +205,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
               active={portal === "buyer"}
               title={PORTAL_COPY.buyer.shortLabel}
               description={PORTAL_COPY.buyer.lockText}
-              marker={PORTAL_COPY.buyer.marker}
+              icon={PORTAL_COPY.buyer.icon}
               onClick={selectPortal}
             />
             <PortalButton
@@ -213,7 +213,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
               active={portal === "seller"}
               title={PORTAL_COPY.seller.shortLabel}
               description={PORTAL_COPY.seller.lockText}
-              marker={PORTAL_COPY.seller.marker}
+              icon={PORTAL_COPY.seller.icon}
               onClick={selectPortal}
             />
             <PortalButton
@@ -221,20 +221,9 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
               active={portal === "reviewer"}
               title={PORTAL_COPY.reviewer.shortLabel}
               description={PORTAL_COPY.reviewer.lockText}
-              marker={PORTAL_COPY.reviewer.marker}
+              icon={PORTAL_COPY.reviewer.icon}
               onClick={selectPortal}
             />
-          </div>
-
-          <div className="auth-portal-summary">
-            <div>
-              <span className="eyebrow">{activeCopy.title}</span>
-              <h2 className="auth-step-heading">
-                {flow === "signin" ? activeCopy.action : portal === "seller" ? "Submit for review" : "Set up buyer access"}
-              </h2>
-              <p className="auth-step-desc">{activeCopy.description}</p>
-            </div>
-            <span className="auth-portal-lock">{activeCopy.lockText}</span>
           </div>
 
           {success && (
@@ -416,7 +405,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             )}
 
             <button type="submit" className="auth-primary-btn" disabled={loading || !canSubmit}>
-              <span>{loading ? "Checking..." : flow === "signin" ? "Continue" : portal === "seller" ? "Apply" : "Create account"}</span>
+              <span>{loading ? "Checking..." : flow === "signin" ? "Continue" : portal === "seller" ? "Submit Application" : "Create Account"}</span>
               <ArrowRight size={16} />
             </button>
           </form>
@@ -441,14 +430,14 @@ function PortalButton({
   active,
   title,
   description,
-  marker,
+  icon,
   onClick
 }: {
   portal: AuthPortal;
   active: boolean;
   title: string;
   description: string;
-  marker: string;
+  icon: React.ReactNode;
   onClick: (portal: AuthPortal) => void;
 }) {
   return (
@@ -458,9 +447,11 @@ function PortalButton({
       onClick={() => onClick(portal)}
       aria-pressed={active}
     >
-      <span className="auth-portal-icon">{marker}</span>
-      <strong>{title}</strong>
-      <span>{description}</span>
+      <span className="auth-portal-icon">{icon}</span>
+      <div className="auth-portal-info">
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
     </button>
   );
 }
