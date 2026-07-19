@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { login, signupBuyer, signupSeller } from "../api/client";
 import { SarthiMark } from "../components/SarthiMark";
+import { DEMO_ACCOUNTS, type AuthPortal } from "../demoAccounts";
 import { LANGUAGE_OPTIONS, type LanguageCode } from "../i18n";
 import type { AuthAccount, AuthSession } from "../types/api";
 
@@ -11,27 +12,8 @@ type Props = {
   onAuthenticated: (session: AuthSession) => void;
 };
 
-type AuthPortal = "buyer" | "seller" | "reviewer";
 type AuthFlow = "signin" | "signup";
 type PortalRole = AuthAccount["role"];
-
-const DEMO_CREDENTIALS: Record<AuthPortal, { username: string; password: string; label: string }> = {
-  buyer: {
-    username: "asha.buyer",
-    password: "buyer-asha-pass",
-    label: "Buyer account"
-  },
-  seller: {
-    username: "seller.a",
-    password: "seller-a-pass",
-    label: "Verified seller account"
-  },
-  reviewer: {
-    username: "reviewer.admin",
-    password: "admin-reviewer-pass",
-    label: "Reviewer account"
-  }
-};
 
 const PORTAL_COPY: Record<AuthPortal, {
   title: string;
@@ -84,7 +66,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
   const [success, setSuccess] = useState<string | null>(null);
 
   const activeCopy = PORTAL_COPY[portal];
-  const demo = DEMO_CREDENTIALS[portal];
+  const demo = DEMO_ACCOUNTS[portal];
   const expectedRole = portalToRole(portal);
   const isSignupAvailable = portal !== "reviewer";
 

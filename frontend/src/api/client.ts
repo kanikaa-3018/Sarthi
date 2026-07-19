@@ -47,6 +47,7 @@ import type { LanguageCode } from "../i18n";
 
 const API_BASE = "/api";
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
+const LOGOUT_TIMEOUT_MS = 2_500;
 
 export function getStoredSession(): AuthSession | null {
   const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -70,7 +71,9 @@ export function clearStoredSession() {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const session = getStoredSession();
   const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
+  if (init?.body != null && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   if (session?.access_token) {
     headers.set("Authorization", `Bearer ${session.access_token}`);
   }
@@ -142,10 +145,20 @@ export function getMe() {
 }
 
 export async function logout() {
+  const session = getStoredSession();
+  clearStoredSession();
+  if (!session?.access_token) return;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), LOGOUT_TIMEOUT_MS);
   try {
-    await request<{ ok: boolean }>("/auth/logout", { method: "POST" });
+    await request<{ ok: boolean }>("/auth/logout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      signal: controller.signal
+    });
   } finally {
-    clearStoredSession();
+    window.clearTimeout(timeout);
   }
 }
 

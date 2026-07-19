@@ -94,33 +94,7 @@ The judging rubric shared for the prototype has four practical expectations. Sar
 ## Architecture
 
 The current active implementation is Node.js, Fastify, MongoDB, and React. Backend work lives in `apps/api`.
-
-```text
-React + Vite frontend
-  -> role-based app shell
-  -> buyer, seller, admin, trust, checkout, and audit screens
-  -> /api client
-
-Fastify API
-  -> auth and RBAC middleware
-  -> buyer routes
-  -> seller routes
-  -> admin review routes
-  -> decision and checkout routes
-  -> system readiness routes
-
-MongoDB / MongoDB Atlas
-  -> users, sessions, sellers, products, variants
-  -> seller applications and verification documents
-  -> proof assets and listing drafts
-  -> trust evidence, source health, outcomes, traces
-
-Optional intelligence layers
-  -> Gemini grounded answers and confidence assignment
-  -> Gemini embeddings for evidence retrieval
-  -> MongoDB Atlas Vector Search
-  -> Neo4j evidence graph projection
-```
+<img width="1686" height="644" alt="diagram-export-7-19-2026-10_52_29-PM" src="https://github.com/user-attachments/assets/f406eb03-28ee-471f-995a-b8ab5c1bd580" />
 
 ### Service Boundaries
 
