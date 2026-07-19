@@ -1652,6 +1652,906 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
   );
 }
 
+function SellerWorkbenchNav({
+  active,
+  counts,
+  panelAvailable,
+  onSelect,
+  copy
+}: {
+  active: SellerWorkbenchTab;
+  counts: { products: number; openProofTasks: number; drafts: number; submittedProofs: number; facts: number };
+  panelAvailable: boolean;
+  onSelect: (tab: SellerWorkbenchTab) => void;
+  copy: SellerCopy;
+}) {
+  const items: Array<{ key: SellerWorkbenchTab; label: string; detail: string; count?: number; disabled?: boolean }> = [
+    { key: "overview", label: copy.workbenchToday, detail: copy.workbenchTodayDetail },
+    { key: "products", label: copy.workbenchProducts, detail: copy.workbenchProductsDetail, count: counts.products, disabled: !panelAvailable },
+    { key: "proofs_submitted", label: copy.workbenchEvidence, detail: `${counts.openProofTasks} ${copy.workbenchEvidenceDetail}`, count: counts.submittedProofs },
+    { key: "add_product", label: copy.workbenchNewListing, detail: copy.workbenchNewListingDetail, count: counts.drafts },
+    { key: "performance", label: copy.workbenchMarket, detail: copy.workbenchMarketDetail, count: counts.facts, disabled: !panelAvailable }
+  ];
+
+  return (
+    <nav className="seller-workbench-nav" aria-label={SELLER_WORKBENCH_NAV_LABEL}>
+      {items.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          className={active === item.key ? "active" : ""}
+          onClick={() => onSelect(item.key)}
+          disabled={item.disabled}
+        >
+          <span>
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+          </span>
+          {typeof item.count === "number" && <em>{item.count}</em>}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function SellerMetricCard({
+  label,
+  value,
+  detail,
+  tone
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: "brand" | "good" | "watch" | "risk" | "neutral";
+}) {
+  return (
+    <article className={`seller-overview-metric ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </article>
+  );
+}
+
+function SellerTopFeaturePage({
+  feature,
+  listings,
+  tasks,
+  actionBoard,
+  topProofTask,
+  proofNav,
+  proofAssets,
+  draftReadiness,
+  draftWarnings,
+  ratingText,
+  ratingCount,
+  liveProductCount,
+  openRequestCount,
+  resolvedProofCount,
+  verificationStatus,
+  onOpenProofTask,
+  onOpenDetails,
+  onOpenFix,
+  onAddProduct,
+  onOpenConsole,
+  copy
+}: {
+  feature: Exclude<SellerTopFeature, "console">;
+  listings: SellerPanelListing[];
+  tasks: SellerEvidenceCoachTask[];
+  actionBoard: SellerActionBoard | null;
+  topProofTask: SellerEvidenceCoachTask | null;
+  proofNav: SellerProofNav | null;
+  proofAssets: SellerProofAsset[];
+  draftReadiness: ReturnType<typeof draftReadinessScore>;
+  draftWarnings: SellerUploadWarning[];
+  ratingText: string;
+  ratingCount: number;
+  liveProductCount: number;
+  openRequestCount: number;
+  resolvedProofCount: number;
+  verificationStatus: string;
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  onOpenDetails: (listing: SellerPanelListing) => void;
+  onOpenFix: (listing: SellerPanelListing) => void;
+  onAddProduct: () => void;
+  onOpenConsole: () => void;
+  copy: SellerCopy;
+}) {
+  if (feature === "proofs") {
+    return (
+      <SellerProofCenterPage
+        tasks={tasks}
+        proofAssets={proofAssets}
+        proofNav={proofNav}
+        resolvedCount={resolvedProofCount}
+        onOpenProofTask={onOpenProofTask}
+        copy={copy}
+      />
+    );
+  }
+
+  return (
+    <SellerTrustCoachPage
+      actionBoard={actionBoard}
+      listings={listings}
+      tasks={tasks}
+      topProofTask={topProofTask}
+      draftReadiness={draftReadiness}
+      draftWarnings={draftWarnings}
+      verificationStatus={verificationStatus}
+      ratingText={ratingText}
+      ratingCount={ratingCount}
+      liveProductCount={liveProductCount}
+      openRequestCount={openRequestCount}
+      proofNav={proofNav}
+      onOpenProofTask={onOpenProofTask}
+      onOpenDetails={onOpenDetails}
+      onOpenFix={onOpenFix}
+      onAddProduct={onAddProduct}
+      onOpenConsole={onOpenConsole}
+      copy={copy}
+    />
+  );
+}
+
+function SellerProofCenterPage({
+  tasks,
+  proofAssets,
+  proofNav,
+  resolvedCount,
+  onOpenProofTask,
+  copy
+}: {
+  tasks: SellerEvidenceCoachTask[];
+  proofAssets: SellerProofAsset[];
+  proofNav: SellerProofNav | null;
+  resolvedCount: number;
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  copy: SellerCopy;
+}) {
+  const rejected = proofAssets.filter((asset) => asset.status === "rejected").length;
+  const inReview = proofAssets.filter((asset) => asset.status === "submitted").length;
+  const approved = proofAssets.filter((asset) => asset.status === "verified").length;
+  const topTask = tasks[0] ?? null;
+
+  return (
+    <section className="seller-top-tool seller-top-proof-tool">
+      <div className="seller-top-tool-hero">
+        <div>
+          <span className="eyebrow">{copy.proofCenter}</span>
+          <h3>{copy.proofCenterTitle}</h3>
+          <p>{copy.proofCenterBody}</p>
+        </div>
+        {topTask && (
+          <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(topTask)}>
+            {copy.uploadNextProof}
+            <ChevronRight size={14} />
+          </button>
+        )}
+      </div>
+
+      <SellerProofLifecycle
+        openTasks={tasks.length}
+        submitted={proofAssets.length}
+        inReview={proofNav?.in_review_count ?? inReview}
+        approved={proofNav?.approved_count ?? approved}
+        rejected={proofNav?.rejected_count ?? rejected}
+        buyerVisible={resolvedCount}
+        copy={copy}
+      />
+
+      <div className="seller-top-metric-grid">
+        <SellerMetricCard label={copy.approved} value={String(proofNav?.approved_count ?? approved)} detail={`${resolvedCount} ${copy.buyerCanSeeProof}`} tone="good" />
+        <SellerMetricCard label={copy.adminChecking} value={String(proofNav?.in_review_count ?? inReview)} detail={copy.doNotUploadDuplicate} tone={inReview ? "watch" : "neutral"} />
+        <SellerMetricCard label={copy.needsRedo} value={String(proofNav?.rejected_count ?? rejected)} detail={copy.uploadClearerProof} tone={rejected ? "risk" : "good"} />
+        <SellerMetricCard label={copy.trustPoints} value={`+${proofNav?.trust_lift_points ?? 0}`} detail={proofNav?.rating_forecast ?? copy.approvedProofReducesDoubt} tone="brand" />
+      </div>
+
+      <SellerProofLedger proofAssets={proofAssets} tasks={tasks} onOpenProofTask={onOpenProofTask} />
+      <SellerProofSuggestionPanel proofNav={proofNav} tasks={tasks} proofAssets={proofAssets} onOpenProofTask={onOpenProofTask} />
+    </section>
+  );
+}
+
+function SellerProofLifecycle({
+  openTasks,
+  submitted,
+  inReview,
+  approved,
+  rejected,
+  buyerVisible,
+  copy
+}: {
+  openTasks: number;
+  submitted: number;
+  inReview: number;
+  approved: number;
+  rejected: number;
+  buyerVisible: number;
+  copy: SellerCopy;
+}) {
+  const steps: Array<{ key: string; label: string; value: string; detail: string; tone: "good" | "watch" | "risk" | "neutral" }> = [
+    {
+      key: "ask",
+      label: copy.buyerAsked,
+      value: String(openTasks),
+      detail: openTasks ? copy.buyerAskedDetail : copy.noBuyerAsk,
+      tone: openTasks ? "watch" : "good"
+    },
+    {
+      key: "upload",
+      label: copy.youUploaded,
+      value: String(submitted),
+      detail: submitted ? copy.proofSaved : copy.uploadRealProof,
+      tone: submitted ? "good" : "neutral"
+    },
+    {
+      key: "review",
+      label: copy.adminChecks,
+      value: String(inReview),
+      detail: inReview ? copy.adminCheckingDetail : copy.nothingWithAdmin,
+      tone: inReview ? "watch" : "neutral"
+    },
+    {
+      key: "approved",
+      label: copy.approved,
+      value: String(approved),
+      detail: approved ? copy.proofBuildsConfidence : copy.approvedProofAppears,
+      tone: approved ? "good" : "neutral"
+    },
+    {
+      key: "visible",
+      label: copy.buyerSees,
+      value: String(buyerVisible),
+      detail: buyerVisible ? copy.buyerVisible : copy.nothingBuyerVisible,
+      tone: buyerVisible ? "good" : "neutral"
+    }
+  ];
+
+  return (
+    <section className="seller-proof-lifecycle" aria-label="Proof review lifecycle">
+      <div className="seller-proof-lifecycle-head">
+        <div>
+          <span className="eyebrow">{copy.proofLifecycleEyebrow}</span>
+          <h3>{copy.proofLifecycleTitle}</h3>
+        </div>
+        {rejected > 0 && (
+          <span className="seller-status-pill risk">{rejected} {copy.needRedo}</span>
+        )}
+      </div>
+      <div className="seller-proof-lifecycle-steps">
+        {steps.map((step, index) => (
+          <article key={step.key} className={step.tone}>
+            <span>{index + 1}</span>
+            <div>
+              <strong>{step.label}</strong>
+              <em>{step.value}</em>
+              <p>{step.detail}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SellerTrustCoachPage({
+  actionBoard,
+  listings,
+  tasks,
+  topProofTask,
+  draftReadiness,
+  draftWarnings,
+  verificationStatus,
+  ratingText,
+  ratingCount,
+  liveProductCount,
+  openRequestCount,
+  proofNav,
+  onOpenProofTask,
+  onOpenDetails,
+  onOpenFix,
+  onAddProduct,
+  onOpenConsole,
+  copy
+}: {
+  actionBoard: SellerActionBoard | null;
+  listings: SellerPanelListing[];
+  tasks: SellerEvidenceCoachTask[];
+  topProofTask: SellerEvidenceCoachTask | null;
+  draftReadiness: ReturnType<typeof draftReadinessScore>;
+  draftWarnings: SellerUploadWarning[];
+  verificationStatus: string;
+  ratingText: string;
+  ratingCount: number;
+  liveProductCount: number;
+  openRequestCount: number;
+  proofNav: SellerProofNav | null;
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  onOpenDetails: (listing: SellerPanelListing) => void;
+  onOpenFix: (listing: SellerPanelListing) => void;
+  onAddProduct: () => void;
+  onOpenConsole: () => void;
+  copy: SellerCopy;
+}) {
+  const focusRows = buildListingLabRows(listings, tasks, actionBoard?.cards ?? []).slice(0, 3);
+  const forecast = ratingForecastLine(ratingText, proofNav?.trust_lift_points ?? 0, openRequestCount);
+  const manualWork = openRequestCount + (actionBoard?.cards.filter((card) => card.priority !== "low").length ?? 0) + draftWarnings.filter((warning) => warning.tone !== "good").length;
+  const blockerCount = verificationStatus === "verified" ? 0 : 1;
+  const topCard = actionBoard?.cards[0] ?? null;
+  const topCardListing = topCard ? listings.find((item) => item.product.product_id === topCard.product_id) ?? null : null;
+  const trustAction = buildTrustCoachAction({
+    verificationStatus,
+    topProofTask,
+    topCard,
+    topCardListing,
+    draftWarnings,
+    onOpenProofTask,
+    onOpenDetails,
+    onOpenFix,
+    onAddProduct,
+    onOpenConsole,
+    copy
+  });
+
+  return (
+    <section className="seller-top-tool seller-trust-coach">
+      <div className="seller-top-tool-hero seller-copilot-hero">
+        <div>
+          <span className="eyebrow">{copy.trustCoach}</span>
+          <h3>{copy.trustCoachTitle}</h3>
+          <p>{copy.trustCoachBody}</p>
+          <div className={`seller-trust-next-action ${trustAction.tone}`}>
+            <strong>{trustAction.title}</strong>
+            <span>{trustAction.detail}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="seller-primary-action"
+          onClick={trustAction.run}
+        >
+          {trustAction.label}
+          <ChevronRight size={14} />
+        </button>
+      </div>
+
+      <div className="seller-copilot-summary">
+        <article>
+          <ListChecks size={18} />
+          <span>{copy.thingsToFix}</span>
+          <strong>{manualWork}</strong>
+          <p>{copy.groupedWork}</p>
+        </article>
+        <article>
+          <ClipboardCheck size={18} />
+          <span>{copy.trustPoints}</span>
+          <strong>+{proofNav?.trust_lift_points ?? 0}</strong>
+          <p>{proofNav?.rating_forecast ?? copy.approvedProofReducesDoubt}</p>
+        </article>
+        <article>
+          <LineChart size={18} />
+          <span>{copy.ratingChance}</span>
+          <strong>{ratingText}</strong>
+          <p>{ratingCount ? `${ratingCount.toLocaleString("en-IN")} ${copy.ratings}. ${forecast.detail}` : forecast.detail}</p>
+        </article>
+        <article className={blockerCount ? "risk" : "good"}>
+          {blockerCount ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+          <span>{copy.accountReady}</span>
+          <strong>{blockerCount ? copy.review : copy.clear}</strong>
+          <p>{verificationStatus === "verified" ? `${liveProductCount} ${copy.productsTracked}` : copy.finishVerificationBeforeProof}</p>
+        </article>
+      </div>
+
+      <div className="seller-copilot-grid">
+        <article className={topProofTask ? topProofTask.priority : "good"}>
+          <span className="eyebrow">{copy.buyerDoubts}</span>
+          <h4>{topProofTask ? `${topProofTask.buyer_demand} buyer ask${topProofTask.buyer_demand === 1 ? "" : "s"} can be answered once` : copy.noBuyerProofAsk}</h4>
+          <p>{topProofTask ? `${shortProductTitle(topProofTask.product_title)} needs ${proofTypeLabel(topProofTask.recommended_proof_type)} for ${labelize(topProofTask.attribute)}.` : copy.proofCenterClear}</p>
+          <button type="button" className="seller-secondary-action" disabled={!topProofTask} onClick={() => topProofTask && onOpenProofTask(topProofTask)}>
+            {copy.uploadProof}
+          </button>
+        </article>
+        <article className={draftReadiness.tone}>
+          <span className="eyebrow">{copy.newProductCheck}</span>
+          <h4>{draftReadiness.score}/100 {copy.readyToSend}</h4>
+          <p>{draftWarnings.find((warning) => warning.tone !== "good")?.detail ?? draftReadiness.message}</p>
+          <button type="button" className="seller-secondary-action" onClick={onAddProduct}>
+            {copy.checkListing}
+          </button>
+        </article>
+        <article className={topCard?.priority ?? "good"}>
+          <span className="eyebrow">{copy.productLosingTrust}</span>
+          <h4>{topCard?.next_step || topCard?.action || copy.noUrgentProductFix}</h4>
+          <p>{topCard?.buyer_impact || topCard?.issue_summary || copy.productFixesAppear}</p>
+          <button
+            type="button"
+            className="seller-secondary-action"
+            onClick={() => {
+              if (topCardListing && shouldOpenSizeFix(topCardListing, topCard)) onOpenFix(topCardListing);
+              else if (topCardListing) onOpenDetails(topCardListing);
+              else onOpenConsole();
+            }}
+          >
+            {topCardListing && shouldOpenSizeFix(topCardListing, topCard) ? copy.fixSize : copy.viewReason}
+          </button>
+        </article>
+      </div>
+
+      {focusRows.length > 0 && (
+        <section className="seller-copilot-focus">
+          <div className="seller-section-heading compact">
+            <div>
+              <span className="eyebrow">{copy.fixFirst}</span>
+              <h3>{copy.productsLikelyAffectTrust}</h3>
+            </div>
+          </div>
+          {focusRows.map((row) => (
+            <article key={row.key} className={row.tone}>
+              <img
+                src={row.imageUrl || "/product-blue.svg"}
+                alt={row.title}
+                onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+              />
+              <div>
+                <strong>{shortProductTitle(row.title)}</strong>
+                <p>{row.suggestion}</p>
+              </div>
+              <div>
+                {row.task && (
+                  <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(row.task!)}>
+                    {copy.proof}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="seller-secondary-action"
+                  onClick={() => row.canFixSize ? onOpenFix(row.listing) : onOpenDetails(row.listing)}
+                >
+                  {row.canFixSize ? copy.fixSize : copy.plan}
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+    </section>
+  );
+}
+
+function SellerQuickActions({
+  topProofTask,
+  onOpenProofTask,
+  onShowProducts,
+  onAddProduct,
+  copy
+}: {
+  topProofTask: SellerEvidenceCoachTask | null;
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  onShowProducts: () => void;
+  onAddProduct: () => void;
+  copy: SellerCopy;
+}) {
+  return (
+    <div className="seller-quick-actions" aria-label="Seller quick actions">
+      <button
+        type="button"
+        className="seller-quick-action primary"
+        disabled={!topProofTask}
+        onClick={() => topProofTask && onOpenProofTask(topProofTask)}
+      >
+        <Camera size={15} />
+        <span>{topProofTask ? `${copy.prepareProof}: ${shortProductTitle(topProofTask.product_title)}` : copy.noProofTask}</span>
+      </button>
+      <button type="button" className="seller-quick-action" onClick={onShowProducts}>
+        <LineChart size={15} />
+        <span>{copy.viewProductIssues}</span>
+      </button>
+      <button type="button" className="seller-quick-action" onClick={onAddProduct}>
+        <Plus size={15} />
+        <span>{copy.addProduct}</span>
+      </button>
+    </div>
+  );
+}
+
+type SellerTrustOpsInsight = {
+  key: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "good" | "watch" | "risk" | "neutral";
+  action?: string;
+};
+
+function SellerTrustOpsStrip({
+  insights,
+  onOpenProofTask,
+  onShowProducts
+}: {
+  insights: SellerTrustOpsInsight[];
+  onOpenProofTask?: () => void;
+  onShowProducts: () => void;
+}) {
+  return (
+    <section className="seller-trust-ops-strip" aria-label="Seller trust operations">
+      {insights.map((item) => (
+        <article key={item.key} className={item.tone}>
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+          <p>{item.detail}</p>
+          {item.action && (
+            <button
+              type="button"
+              onClick={item.key === "proof_reuse" || item.key === "prepaid" ? onOpenProofTask : onShowProducts}
+              disabled={(item.key === "proof_reuse" || item.key === "prepaid") && !onOpenProofTask}
+            >
+              {item.action}
+            </button>
+          )}
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function SellerProofImpactPanel({
+  proofNav,
+  proofAssets,
+  tasks,
+  ratingText,
+  onOpenProofTask,
+  copy
+}: {
+  proofNav: SellerProofNav;
+  proofAssets: SellerProofAsset[];
+  tasks: SellerEvidenceCoachTask[];
+  ratingText: string;
+  onOpenProofTask?: () => void;
+  copy: SellerCopy;
+}) {
+  const forecast = ratingForecastLine(ratingText, proofNav.trust_lift_points, tasks.length);
+  const rejected = proofAssets.filter((asset) => asset.status === "rejected").length;
+  const inReview = proofAssets.filter((asset) => asset.status === "submitted").length;
+  return (
+    <section className="seller-proof-impact-panel" aria-label="Proof and rating forecast">
+      <div>
+        <span className="eyebrow">{copy.ratingChance}</span>
+        <strong>{forecast.title}</strong>
+        <p>{forecast.detail}</p>
+      </div>
+      <div className="seller-proof-impact-stats">
+        <span><b>{proofNav.approved_count}</b> {copy.approved}</span>
+        <span><b>{inReview}</b> {copy.adminChecking}</span>
+        <span><b>{rejected}</b> {copy.needsRedo}</span>
+        <span><b>+{proofNav.trust_lift_points}</b> {copy.trustPoints}</span>
+      </div>
+      {tasks.length > 0 && (
+        <button type="button" className="seller-primary-action" onClick={onOpenProofTask} disabled={!onOpenProofTask}>
+          {copy.uploadNextProof}
+          <ChevronRight size={14} />
+        </button>
+      )}
+    </section>
+  );
+}
+
+function SellerUploadWarningList({ title, warnings }: { title: string; warnings: SellerUploadWarning[] }) {
+  if (!warnings.length) return null;
+  return (
+    <section className="seller-upload-warning-list" aria-label={title}>
+      <strong>{title}</strong>
+      <div>
+        {warnings.map((warning) => (
+          <article key={warning.key} className={warning.tone}>
+            {warning.tone === "good" ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+            <span>
+              <b>{warning.title}</b>
+              <small>{warning.detail}</small>
+            </span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type ProofDraftQuality = {
+  score: number;
+  label: string;
+  checks: Array<{ label: string; passed: boolean }>;
+};
+
+function ProofDraftQualityPanel({ quality, reuseCount, copy }: { quality: ProofDraftQuality; reuseCount: number; copy: SellerCopy }) {
+  return (
+    <section className={`seller-proof-quality ${quality.score >= 75 ? "good" : quality.score >= 55 ? "watch" : "risk"}`}>
+      <div className="seller-proof-quality-head">
+        <div>
+          <span>{copy.proofQualityCheck}</span>
+          <strong>{quality.label}</strong>
+        </div>
+        <em>{quality.score}/100</em>
+      </div>
+      <div className="seller-proof-quality-checks">
+        {quality.checks.map((check) => (
+          <span key={check.label} className={check.passed ? "pass" : "wait"}>
+            {check.passed ? copy.ok : "!"} {check.label}
+          </span>
+        ))}
+      </div>
+      <p>
+        {reuseCount > 0
+          ? `${copy.afterApprovalCanSupport} ${reuseCount} ${reuseCount === 1 ? copy.similarListingWithSameProof : copy.similarListingsWithSameProof}`
+          : copy.proofCurrentListingOnly}
+      </p>
+    </section>
+  );
+}
+
+function SellerActionBoardPanel({
+  board,
+  listings,
+  tasks,
+  onOpenDetails,
+  onOpenFix,
+  onOpenProofTask,
+  copy
+}: {
+  board: SellerActionBoard;
+  listings: SellerPanelListing[];
+  tasks: SellerEvidenceCoachTask[];
+  onOpenDetails: (listing: SellerPanelListing) => void;
+  onOpenFix: (listing: SellerPanelListing) => void;
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  copy: SellerCopy;
+}) {
+  const topCards = board.cards.slice(0, 5);
+  const providerStatus = sellerCoachProviderStatus(board.agent.provider, copy);
+  return (
+    <section className="seller-action-board" aria-label="Product action board">
+      <div className="seller-action-board-head">
+        <div>
+          <span className="eyebrow">{copy.actionPlan}</span>
+          <h3>{copy.actionPlanTitle}</h3>
+          <p>{board.summary}</p>
+        </div>
+        <div className="seller-action-board-head-actions">
+          <span className={`seller-plan-chip ${providerStatus.tone}`}>{providerStatus.label}</span>
+          <span className="seller-plan-chip">{copy.autoPrioritized}</span>
+        </div>
+      </div>
+
+      <div className="seller-action-cards">
+        {topCards.map((card) => {
+          const listing = listings.find((item) => item.product.product_id === card.product_id) ?? null;
+          const task = tasks.find((item) => item.product_id === card.product_id) ?? null;
+          const canFixSize = Boolean(listing && (card.proof_type === "measurement_chart" || card.action.toLowerCase().includes("size")));
+          const actionLabel = card.next_step || card.action;
+          return (
+            <article key={card.product_id} className={`seller-action-product-card ${card.priority}`}>
+              <img
+                src={card.image_url || "/product-blue.svg"}
+                alt={card.product_title}
+                onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+              />
+              <div className="seller-action-product-main">
+                <div className="seller-action-product-top">
+                  <strong>{shortProductTitle(card.product_title)}</strong>
+                  <span>{card.metric}</span>
+                </div>
+                <p className="seller-coach-summary">{card.issue_summary || `${card.issue} is the main issue to fix.`}</p>
+                <div className="seller-action-meta-grid">
+                  <div>
+                    <span>{copy.buyerWorry}</span>
+                    <strong>{card.buyer_impact || card.why}</strong>
+                  </div>
+                  <div>
+                    <span>{copy.doNow}</span>
+                    <strong>{actionLabel}</strong>
+                  </div>
+                </div>
+                <ul className="seller-trust-steps" aria-label="Trust steps">
+                  {(card.trust_steps ?? []).slice(0, 3).map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="seller-action-product-side">
+                <span className={`seller-status-pill ${card.priority === "high" ? "risk" : card.priority === "medium" ? "watch" : "good"}`}>
+                  {card.priority}
+                </span>
+                <div className="seller-mini-score">
+                  <strong>{Math.round(card.score)}</strong>
+                  <span>{copy.trustScoreShort}</span>
+                </div>
+                {task ? (
+                  <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(task)}>
+                    {copy.addProof}
+                  </button>
+                ) : canFixSize && listing ? (
+                  <button type="button" className="seller-primary-action" onClick={() => onOpenFix(listing)}>
+                    {copy.fixSize}
+                  </button>
+                ) : listing ? (
+                  <button type="button" className="seller-secondary-action" onClick={() => onOpenDetails(listing)}>
+                    {copy.plan}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SellerRatingCoachPanel({ board, ratingText, copy }: { board: SellerActionBoard; ratingText: string; copy: SellerCopy }) {
+  const plan = board.rating_plan ?? {
+    title: "How to build buyer trust",
+    summary: "Fix the biggest proof gaps first. Trust signals improve when product promises match delivery.",
+    steps: ["Add proof for products with buyer asks", "Fix size charts where fit returns appear", "Keep fabric and daylight photos fresh"]
+  };
+  return (
+    <section className="seller-rating-coach" aria-label="How to gain buyer trust">
+      <div className="seller-rating-coach-main">
+        <div className="seller-rating-coach-icon">
+          <LineChart size={18} />
+        </div>
+        <div>
+          <span className="eyebrow">{copy.improveTrustSignals}</span>
+          <h3>{plan.title}</h3>
+          <p>{plan.summary}</p>
+        </div>
+      </div>
+      <div className="seller-rating-coach-score">
+        <span>{copy.current}</span>
+        <strong>{ratingText}</strong>
+      </div>
+      <div className="seller-rating-steps">
+        {plan.steps.slice(0, 4).map((step, index) => (
+          <article key={step}>
+            <span>{index + 1}</span>
+            <strong>{step}</strong>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SellerReviewLoopPanel({
+  onboarding,
+  proofAssets,
+  tasks,
+  copy,
+  onOpenProofTask,
+  onAddProduct
+}: {
+  onboarding: SellerOnboardingResponse | null;
+  proofAssets: SellerProofAsset[];
+  tasks: SellerEvidenceCoachTask[];
+  copy: SellerCopy;
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  onAddProduct: () => void;
+}) {
+  const documentsInReview = (onboarding?.documents ?? []).filter((doc) => doc.status === "submitted" || doc.status === "under_review").length;
+  const draftsInReview = (onboarding?.listing_drafts ?? []).filter((draft) => draft.status === "submitted").length;
+  const draftsNeedingRevision = (onboarding?.listing_drafts ?? []).filter((draft) => draft.status === "needs_revision").length;
+  const proofsInReview = proofAssets.filter((asset) => asset.status === "submitted").length;
+  const rejectedProofs = proofAssets.filter((asset) => asset.status === "rejected").length;
+  const approvedProofs = proofAssets.filter((asset) => asset.status === "verified").length;
+  const adminQueue = documentsInReview + draftsInReview + proofsInReview;
+  const sellerFixes = draftsNeedingRevision + rejectedProofs + tasks.length;
+  const topTask = tasks[0] ?? null;
+  const items = [
+    {
+      label: copy.adminQueue,
+      value: adminQueue,
+      detail: adminQueue ? copy.waitingForAdminDetail : copy.nothingWaitingAdminDetail,
+      tone: adminQueue ? "watch" : "good"
+    },
+    {
+      label: copy.needsSellerFix,
+      value: sellerFixes,
+      detail: sellerFixes ? copy.fixRejectedOrOpenDetail : copy.noSellerFixDetail,
+      tone: sellerFixes ? "risk" : "good"
+    },
+    {
+      label: copy.buyerVisibleProof,
+      value: approvedProofs,
+      detail: copy.approvedBuyerVisibleDetail,
+      tone: approvedProofs ? "good" : "neutral"
+    }
+  ];
+
+  return (
+    <section className="seller-review-loop-panel" aria-label={copy.reviewLoopTitle}>
+      <div className="seller-review-loop-head">
+        <div>
+          <span className="eyebrow">{copy.reviewLoop}</span>
+          <h3>{copy.reviewLoopTitle}</h3>
+          <p>{copy.reviewLoopBody}</p>
+        </div>
+        <button
+          type="button"
+          className="seller-secondary-action"
+          onClick={() => topTask ? onOpenProofTask(topTask) : onAddProduct()}
+        >
+          {topTask ? copy.uploadNextProof : copy.prepareReviewItem}
+        </button>
+      </div>
+      <div className="seller-review-loop-grid">
+        {items.map((item) => (
+          <article key={item.label} className={item.tone}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <p>{item.detail}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SellerProductHealthTable({
+  listings,
+  tasks,
+  actionCards,
+  onOpenDetails,
+  onOpenFix,
+  onOpenProofTask
+}: {
+  listings: SellerPanelListing[];
+  tasks: SellerEvidenceCoachTask[];
+  actionCards: SellerActionBoard["cards"];
+  onOpenDetails: (listing: SellerPanelListing) => void;
+  onOpenFix: (listing: SellerPanelListing) => void;
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+}) {
+  if (!listings.length) {
+    return (
+      <SellerEmptyState
+        title="No products in this seller account"
+        detail="Create a draft product and send it for review. Once live, product health appears here."
+      />
+    );
+  }
+
+  return (
+    <div className="seller-health-board">
+      {listings.map((listing) => {
+        const task = proofTaskForProduct(tasks, listing.product.product_id);
+        const coach = actionCards.find((card) => card.product_id === listing.product.product_id);
+        const tone = task || listing.decision_status === "needs_seller_action" ? "risk" : listing.decision_status === "eligible_for_recommendation" ? "good" : "watch";
+        return (
+          <article key={listing.variant.variant_id} className={`seller-health-card ${tone}`}>
+            <div className="seller-health-card-main">
+              <img
+                src={listing.product.image_url || "/product-blue.svg"}
+                alt={listing.product.title}
+                onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+              />
+              <div>
+                <div className="seller-health-title-row">
+                  <strong>{shortProductTitle(listing.product.title)}</strong>
+                  <span className={`seller-status-pill ${tone}`}>{decisionStatusLabel(listing.decision_status)}</span>
+                </div>
+                <p>{coach?.issue_summary || listingImpactText(listing, task)}</p>
+                <div className="seller-health-facts">
+                  <span>{qualityScoreLabel(listing)} trust</span>
+                  <span>{listing.metrics.delivered_orders_90d} orders</span>
+                  <span>{listing.metrics.return_rate === null ? "New" : `${Math.round(listing.metrics.return_rate * 100)}% returns`}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="seller-health-action-panel">
+              <div>
+                <span className="seller-health-label">Buyer issue</span>
+                <strong>{coach?.issue || productIssueLabel(listing, task)}</strong>
 function labelize(value: string) {
   return value.replace(/_/g, " ");
 }
