@@ -11,7 +11,8 @@ import {
   sellerPanel,
   submitListingDraft,
   submitSellerDocument,
-  submitSellerEvidence
+  submitSellerEvidence,
+  updateListingDraft
 } from "../services/sellerOperations.js";
 
 const proofAttributeSchema = z.enum(["transparency", "fabric", "color", "size", "packaging", "offer"]);
@@ -84,6 +85,20 @@ export async function registerSellerRoutes(app: FastifyInstance, db: Db) {
       image_url: z.string().min(1)
     }).parse(request.body);
     return createListingDraft(db, account.seller_id, body);
+  });
+
+  app.patch("/seller/me/listing-drafts/:draft_id", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "seller");
+    const body = z.object({
+      title: z.string().min(3).optional(),
+      category: z.string().min(2).optional(),
+      garment_type: z.string().min(2).optional(),
+      fabric: z.string().min(2).optional(),
+      color_family: z.string().min(2).optional(),
+      base_price: z.number().positive().optional(),
+      image_url: z.string().min(1).optional()
+    }).parse(request.body);
+    return updateListingDraft(db, account.seller_id, (request.params as any).draft_id, body);
   });
 
   app.post("/seller/me/listing-drafts/:draft_id/submit", async (request, reply) => {

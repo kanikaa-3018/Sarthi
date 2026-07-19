@@ -206,19 +206,22 @@ async function sellerEvidenceTasks(db: Db, sellerId: string) {
   const requests = await c.proofRequests.find({ seller_id: sellerId, status: "open" }).toArray();
   return Promise.all(requests.map(async (request: any) => {
     const product = await c.products.findOne({ product_id: request.product_id });
+    const rejected = Boolean(request.rejected_proof_id || request.rejection_notes);
     return {
       type: "missing_buyer_proof",
-      priority: request.request_count >= 3 ? "high" : "medium",
+      priority: rejected || request.request_count >= 3 ? "high" : "medium",
       product_id: request.product_id,
       product_title: product?.title ?? request.product_id,
       attribute: request.attribute,
-      title: `${label(request.attribute)} proof requested`,
-      rationale: `${request.request_count} buyer doubt(s) need aggregate proof before stronger trust.`,
+      title: rejected ? `Replace rejected ${label(request.attribute)} proof` : `${label(request.attribute)} proof requested`,
+      rationale: request.rejection_notes || `${request.request_count} buyer doubt(s) need aggregate proof before stronger trust.`,
       recommended_proof_type: recommendationForAttribute(request.attribute),
       buyer_demand: request.request_count,
       first_seen_at: request.created_at,
       last_seen_at: request.updated_at,
-      fact_ids: [request.fact_id]
+      fact_ids: [request.fact_id].filter(Boolean),
+      rejected_proof_id: request.rejected_proof_id ?? null,
+      rejection_note: request.rejection_notes ?? null
     };
   }));
 }
@@ -334,7 +337,7 @@ export async function generateSellerCoach(
         .filter((item) => knownProductIds.has(item.product_id))
       : [];
     return {
-      headline: cleanText(parsed.headline, fallback.headline),
+      headline: cleanSellerHeadline(parsed.headline, fallback.headline),
       summary: cleanText(parsed.summary, fallback.summary),
       reasons: cleanList(parsed.reasons, fallback.reasons, 4),
       cards: parsedCards.length ? parsedCards : fallback.cards,
@@ -421,6 +424,19 @@ function cleanText(value: unknown, fallback: string) {
   if (typeof value !== "string") return fallback;
   const text = value.replace(/\s+/g, " ").trim();
   return text ? text.slice(0, 180) : fallback;
+}
+
+function cleanSellerHeadline(value: unknown, fallback: string) {
+  const text = cleanText(value, fallback);
+  const normalized = text.toLowerCase();
+  const generic = [
+    "seller coaching",
+    "seller coach",
+    "meesho-style marketplace",
+    "marketplace coaching",
+    "sarthi seller"
+  ].some((phrase) => normalized.includes(phrase));
+  return generic ? fallback : text;
 }
 
 function safeCoachText(value: unknown, fallback: string, minLength = 4) {
@@ -576,6 +592,15 @@ export async function submitSellerEvidence(db: Db, sellerId: string, body: any) 
     throw error;
   }
   validateSellerEvidenceUpload(body);
+  const existingReview = await c.sellerEvidenceAssets.findOne({
+    seller_id: sellerId,
+    product_id: body.product_id,
+    attribute: body.attribute,
+    status: "submitted"
+  });
+  if (existingReview) {
+    throwBadRequest("This proof is already with the reviewer. Wait for a decision before uploading another replacement.");
+  }
   const proof_id = id("proof");
   const fact_id = id("fact_proof");
   await c.sellerEvidenceAssets.insertOne({
@@ -699,11 +724,60 @@ export async function createListingDraft(db: Db, sellerId: string, body: any) {
   return sellerOnboarding(db, sellerId);
 }
 
-export async function submitListingDraft(db: Db, sellerId: string, draftId: string) {
-  await collections(db).listingDrafts.updateOne(
-    { draft_id: draftId, seller_id: sellerId },
-    { $set: { status: "submitted", updated_at: nowIso(), submitted_at: nowIso() } }
+export async function updateListingDraft(db: Db, sellerId: string, draftId: string, body: any) {
+  const c = collections(db);
+  const draft = await c.listingDrafts.findOne({ draft_id: draftId, seller_id: sellerId });
+  if (!draft) {
+    throwNotFound("Listing draft not found");
+  }
+  if (!["draft", "needs_revision"].includes(draft.status)) {
+    throwBadRequest("Only draft or revision-needed listings can be edited.");
+  }
+  const patch = sanitizeListingDraftPatch(body);
+  if (patch.image_url && !isRecognizedProductImage(String(patch.image_url))) {
+    throwBadRequest("Listing image must be an uploaded image, https URL, seeded image, or seller asset reference.");
+  }
+  const updatedAt = nowIso();
+  const update = await c.listingDrafts.updateOne(
+    { draft_id: draftId, seller_id: sellerId, status: { $in: ["draft", "needs_revision"] } },
+    {
+      $set: {
+        ...patch,
+        target_cluster_id: await suggestCluster(db, { ...draft, ...patch }),
+        revision_acknowledged_at: draft.status === "needs_revision" ? updatedAt : draft.revision_acknowledged_at ?? null,
+        updated_at: updatedAt
+      }
+    }
   );
+  if (!update.matchedCount) {
+    throwBadRequest("Listing draft was already submitted or reviewed.");
+  }
+  return sellerOnboarding(db, sellerId);
+}
+
+export async function submitListingDraft(db: Db, sellerId: string, draftId: string) {
+  const c = collections(db);
+  const [draft, verification] = await Promise.all([
+    c.listingDrafts.findOne({ draft_id: draftId, seller_id: sellerId }),
+    sellerVerification(db, sellerId)
+  ]);
+  if (!draft) {
+    throwNotFound("Listing draft not found");
+  }
+  if (!["draft", "needs_revision"].includes(draft.status)) {
+    throwBadRequest("Only draft or revision-needed listings can be submitted for review.");
+  }
+  if (verification.verification_status !== "verified") {
+    throwBadRequest("Complete seller verification before submitting a buyer-facing listing.");
+  }
+  const submittedAt = nowIso();
+  const update = await c.listingDrafts.updateOne(
+    { draft_id: draftId, seller_id: sellerId, status: { $in: ["draft", "needs_revision"] } },
+    { $set: { status: "submitted", updated_at: submittedAt, submitted_at: submittedAt, review_notes: null } }
+  );
+  if (!update.matchedCount) {
+    throwBadRequest("Listing draft was already submitted or reviewed.");
+  }
   return sellerOnboarding(db, sellerId);
 }
 
@@ -726,7 +800,7 @@ export async function correctSellerMeasurement(db: Db, sellerId: string, product
       { product_id: productId, size: "L" },
       {
         $set: {
-          chest_inches: measurements.l_chest_inches,
+          pending_chest_inches: measurements.l_chest_inches,
           measurement_status: "pending_admin_review",
           measurement_updated_at: submittedAt,
           measurement_proof_id: proof_id
@@ -737,7 +811,7 @@ export async function correctSellerMeasurement(db: Db, sellerId: string, product
       { product_id: productId, size: "XL" },
       {
         $set: {
-          chest_inches: measurements.xl_chest_inches,
+          pending_chest_inches: measurements.xl_chest_inches,
           measurement_status: "pending_admin_review",
           measurement_updated_at: submittedAt,
           measurement_proof_id: proof_id
@@ -825,6 +899,29 @@ function validateSellerEvidenceUpload(body: any) {
   }
 }
 
+function sanitizeListingDraftPatch(body: any) {
+  const fields = ["title", "category", "garment_type", "fabric", "color_family", "base_price", "image_url"] as const;
+  const patch: Record<string, any> = {};
+  for (const field of fields) {
+    if (body[field] !== undefined) patch[field] = body[field];
+  }
+  if (patch.title !== undefined && String(patch.title).trim().length < 3) {
+    throwBadRequest("Use a specific product title.");
+  }
+  for (const field of ["category", "garment_type", "fabric", "color_family"] as const) {
+    if (patch[field] !== undefined && String(patch[field]).trim().length < 2) {
+      throwBadRequest(`${label(field)} is required.`);
+    }
+  }
+  if (patch.base_price !== undefined && !(Number(patch.base_price) > 0)) {
+    throwBadRequest("Enter a valid base price.");
+  }
+  for (const [key, value] of Object.entries(patch)) {
+    patch[key] = typeof value === "string" ? value.trim() : value;
+  }
+  return patch;
+}
+
 function isRecognizedProofAsset(value: string) {
   return value.startsWith("https://") ||
     value.startsWith("seller-asset://") ||
@@ -901,6 +998,12 @@ function isValidBase64Content(value: string) {
 function throwBadRequest(message: string): never {
   const error = new Error(message);
   (error as any).statusCode = 400;
+  throw error;
+}
+
+function throwNotFound(message: string): never {
+  const error = new Error(message);
+  (error as any).statusCode = 404;
   throw error;
 }
 

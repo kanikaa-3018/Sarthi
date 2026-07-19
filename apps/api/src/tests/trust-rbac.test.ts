@@ -6,7 +6,9 @@ import { assertBuyer, assertSeller, requireRole } from "../middleware/auth.js";
 import { aggregateConfidenceScore } from "../services/confidenceScoring.js";
 import { tokenHash } from "../services/crypto.js";
 import { trustState } from "../services/domain.js";
-import { assertSellerOwnsProduct, correctSellerMeasurement, createListingDraft, submitSellerDocument, submitSellerEvidence } from "../services/sellerOperations.js";
+import { approveListingDraft, approveSellerEvidenceAsset } from "../services/adminOperations.js";
+import { markCheckoutOrderDelivered, recordOrderOutcome } from "../services/buyerOperations.js";
+import { assertSellerOwnsProduct, correctSellerMeasurement, createListingDraft, submitListingDraft, submitSellerDocument, submitSellerEvidence, updateListingDraft } from "../services/sellerOperations.js";
 
 function dbWith(tables: Record<string, any[]>): Db {
   return {
@@ -36,6 +38,10 @@ function dbWith(tables: Record<string, any[]>): Db {
         insertOne(document: Record<string, unknown>) {
           rows.push(document);
           return Promise.resolve({ acknowledged: true, insertedId: document._id ?? document.document_id ?? document.proof_id ?? document.fact_id });
+        },
+        insertMany(documents: Array<Record<string, unknown>>) {
+          rows.push(...documents);
+          return Promise.resolve({ acknowledged: true, insertedCount: documents.length });
         },
         updateOne(query: Record<string, unknown>, update: Record<string, any>) {
           const row = rows.find((item) => matches(item, query));
@@ -317,6 +323,37 @@ describe("RBAC ownership checks", () => {
     );
   });
 
+  it("blocks duplicate proof submissions while a matching proof is under review", async () => {
+    const tables: Record<string, any[]> = {
+      products: [{ product_id: "product_a", seller_id: "seller_a" }],
+      seller_evidence_assets: [{
+        proof_id: "proof_existing",
+        seller_id: "seller_a",
+        product_id: "product_a",
+        attribute: "fabric",
+        proof_type: "fabric_closeup",
+        status: "submitted"
+      }],
+      proof_requests: [{ request_id: "proof_req_1", seller_id: "seller_a", product_id: "product_a", attribute: "fabric", status: "open" }],
+      fact_records: []
+    };
+
+    await assert.rejects(
+      () => submitSellerEvidence(dbWith(tables), "seller_a", {
+        product_id: "product_a",
+        attribute: "fabric",
+        proof_type: "fabric_closeup",
+        title: "Fabric close-up proof",
+        description: "This fabric proof has a long enough seller explanation for review.",
+        asset_url: "seeded://proofs/fabric-closeup.jpg"
+      }),
+      (error: any) => error.statusCode === 400 && /already with the reviewer/.test(error.message)
+    );
+
+    assert.equal(tables.seller_evidence_assets.length, 1);
+    assert.equal(tables.proof_requests[0].status, "open");
+  });
+
   it("rejects listing drafts without a real product image reference", async () => {
     await assert.rejects(
       () => createListingDraft(dbWith({}), "seller_a", {
@@ -398,8 +435,8 @@ describe("RBAC ownership checks", () => {
     const tables: Record<string, any[]> = {
       products: [{ product_id: "product_a", seller_id: "seller_a", title: "Blue cotton kurti" }],
       skus: [
-        { variant_id: "product_a_l", product_id: "product_a", size: "L" },
-        { variant_id: "product_a_xl", product_id: "product_a", size: "XL" }
+        { variant_id: "product_a_l", product_id: "product_a", size: "L", chest_inches: 36 },
+        { variant_id: "product_a_xl", product_id: "product_a", size: "XL", chest_inches: 39 }
       ],
       seller_evidence_assets: [],
       proof_requests: [{ request_id: "proof_req_1", seller_id: "seller_a", product_id: "product_a", attribute: "size", status: "open" }],
@@ -411,13 +448,21 @@ describe("RBAC ownership checks", () => {
 
     assert.equal(result.status, "pending_evidence_review");
     assert.equal(result.resolved_open_requests, 1);
-    assert.equal(tables.skus[0].chest_inches, 38);
-    assert.equal(tables.skus[1].chest_inches, 41);
+    assert.equal(tables.skus[0].chest_inches, 36);
+    assert.equal(tables.skus[1].chest_inches, 39);
+    assert.equal(tables.skus[0].pending_chest_inches, 38);
+    assert.equal(tables.skus[1].pending_chest_inches, 41);
     assert.equal(tables.skus[0].measurement_status, "pending_admin_review");
     assert.equal(tables.seller_evidence_assets[0].proof_type, "measurement_chart");
     assert.equal(tables.seller_evidence_assets[0].status, "submitted");
     assert.equal(tables.proof_requests[0].status, "submitted");
     assert.equal(tables.fact_records[0].source_type, "seller_measurement_correction");
+
+    await approveSellerEvidenceAsset(db, adminAccount(), tables.seller_evidence_assets[0].proof_id, "Measurement chart is readable");
+    assert.equal(tables.skus[0].chest_inches, 38);
+    assert.equal(tables.skus[1].chest_inches, 41);
+    assert.equal(tables.skus[0].pending_chest_inches, null);
+    assert.equal(tables.skus[1].measurement_status, "verified");
   });
 
   it("rejects invalid seller measurement corrections", async () => {
@@ -430,4 +475,313 @@ describe("RBAC ownership checks", () => {
       (error: any) => error.statusCode === 400 && /XL chest/.test(error.message)
     );
   });
+
+  it("blocks a buyer from completing another buyer's expectation contract", async () => {
+    const tables: Record<string, any[]> = {
+      expectation_contracts: [{
+        contract_id: "contract_a",
+        buyer_id: "buyer_a",
+        product_id: "product_a",
+        variant_id: "variant_a",
+        status: "active",
+        order_status: "delivered_needs_feedback",
+        outcome_order_id: null
+      }],
+      order_outcomes: [],
+      fact_records: []
+    };
+
+    await assert.rejects(
+      () => recordOrderOutcome(dbWith(tables), {
+        buyer_id: "buyer_b",
+        variant_id: "variant_a",
+        status: "returned",
+        return_reason: "too_small",
+        contract_id: "contract_a"
+      }),
+      (error: any) => error.statusCode === 400 && /does not belong/.test(error.message)
+    );
+
+    assert.equal(tables.expectation_contracts[0].status, "active");
+    assert.equal(tables.expectation_contracts[0].outcome_order_id, null);
+    assert.equal(tables.order_outcomes.length, 0);
+  });
+
+  it("allows contract feedback only after delivery", async () => {
+    const tables: Record<string, any[]> = {
+      expectation_contracts: [{
+        contract_id: "contract_a",
+        buyer_id: "buyer_a",
+        product_id: "product_a",
+        variant_id: "variant_a",
+        status: "active",
+        order_status: "placed",
+        checkout_order_id: "checkout_a",
+        outcome_order_id: null
+      }],
+      order_outcomes: [],
+      fact_records: []
+    };
+
+    await assert.rejects(
+      () => recordOrderOutcome(dbWith(tables), {
+        buyer_id: "buyer_a",
+        variant_id: "variant_a",
+        status: "delivered_kept",
+        contract_id: "contract_a"
+      }),
+      (error: any) => error.statusCode === 400 && /after delivery/.test(error.message)
+    );
+
+    assert.equal(tables.expectation_contracts[0].status, "active");
+    assert.equal(tables.order_outcomes.length, 0);
+  });
+
+  it("completes a delivered expectation contract once for the owning buyer", async () => {
+    const tables: Record<string, any[]> = {
+      buyers: [{ buyer_id: "buyer_a", joined_at: new Date(Date.now() - 60 * 86400000).toISOString(), fit_memory_enabled: false }],
+      buyer_review_profiles: [],
+      reviews: [],
+      fit_memory: [],
+      expectation_contracts: [{
+        contract_id: "contract_a",
+        buyer_id: "buyer_a",
+        product_id: "product_a",
+        variant_id: "variant_a",
+        status: "active",
+        order_status: "delivered_needs_feedback",
+        outcome_order_id: null,
+        fact_id: "fact_contract"
+      }],
+      order_outcomes: [],
+      fact_records: []
+    };
+
+    const result = await recordOrderOutcome(dbWith(tables), {
+      buyer_id: "buyer_a",
+      variant_id: "variant_a",
+      status: "delivered_kept",
+      contract_id: "contract_a"
+    });
+
+    assert.equal(result.expectation_contract.status, "kept");
+    assert.equal(result.expectation_contract.order_status, "feedback_submitted");
+    assert.equal(tables.expectation_contracts[0].status, "kept");
+    assert.equal(tables.order_outcomes.length, 1);
+
+    await assert.rejects(
+      () => recordOrderOutcome(dbWith(tables), {
+        buyer_id: "buyer_a",
+        variant_id: "variant_a",
+        status: "returned",
+        return_reason: "too_small",
+        contract_id: "contract_a"
+      }),
+      (error: any) => error.statusCode === 400 && /already been completed/.test(error.message)
+    );
+  });
+
+  it("moves placed checkout orders to delivered feedback before closing the contract", async () => {
+    const tables: Record<string, any[]> = {
+      buyers: [{ buyer_id: "buyer_a", joined_at: new Date(Date.now() - 60 * 86400000).toISOString(), fit_memory_enabled: false }],
+      buyer_review_profiles: [],
+      reviews: [],
+      fit_memory: [],
+      sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions" }],
+      products: [{ product_id: "product_a", seller_id: "seller_a", title: "Blue cotton kurti", color_family: "blue" }],
+      skus: [{ variant_id: "variant_a", product_id: "product_a", size: "XL", current_price: 459 }],
+      expectation_contracts: [{
+        contract_id: "contract_a",
+        buyer_id: "buyer_a",
+        product_id: "product_a",
+        variant_id: "variant_a",
+        status: "active",
+        order_status: "placed",
+        checkout_order_id: "checkout_a",
+        outcome_order_id: null,
+        placed_at: "2026-01-01T00:00:00.000Z",
+        fact_id: "fact_contract"
+      }],
+      order_outcomes: [],
+      fact_records: []
+    };
+    const db = dbWith(tables);
+
+    const delivered = await markCheckoutOrderDelivered(db, "buyer_a", "contract_a");
+    assert.equal(delivered.pending_feedback, 1);
+    const deliveredOrder = delivered.orders[0];
+    assert.ok(deliveredOrder);
+    assert.equal(deliveredOrder.status, "delivered_needs_feedback");
+    assert.equal(deliveredOrder.can_submit_outcome, true);
+
+    await assert.rejects(
+      () => markCheckoutOrderDelivered(db, "buyer_b", "contract_a"),
+      (error: any) => error.statusCode === 404 && /not found/.test(error.message)
+    );
+
+    await recordOrderOutcome(db, {
+      buyer_id: "buyer_a",
+      variant_id: "variant_a",
+      status: "delivered_kept",
+      contract_id: "contract_a"
+    });
+
+    const closed = await markCheckoutOrderDelivered(db, "buyer_a", "contract_a").catch((error) => error);
+    assert.equal(closed.statusCode, 400);
+    assert.equal(tables.expectation_contracts[0].order_status, "feedback_submitted");
+    assert.equal(tables.order_outcomes.length, 1);
+  });
+
+  it("does not publish listing drafts from unverified sellers", async () => {
+    const tables: Record<string, any[]> = listingReviewTables({
+      seller_profiles: [{ seller_id: "seller_a", verification_status: "pending" }]
+    });
+
+    await assert.rejects(
+      () => approveListingDraft(dbWith(tables), adminAccount(), "draft_a", "Looks okay"),
+      (error: any) => error.statusCode === 400 && /Seller verification/.test(error.message)
+    );
+
+    assert.equal(tables.products.length, 0);
+    assert.equal(tables.skus.length, 0);
+    assert.equal(tables.listing_drafts[0].status, "submitted");
+  });
+
+  it("publishes a submitted listing draft only for a verified seller", async () => {
+    const tables: Record<string, any[]> = listingReviewTables();
+
+    await approveListingDraft(dbWith(tables), adminAccount(), "draft_a", "Approved for catalog");
+
+    assert.equal(tables.products.length, 1);
+    assert.equal(tables.skus.length, 1);
+    assert.equal(tables.listing_drafts[0].status, "approved");
+    assert.equal(tables.listing_drafts[0].approved_product_id, tables.products[0].product_id);
+
+    await approveListingDraft(dbWith(tables), adminAccount(), "draft_a", "Approve again");
+    assert.equal(tables.products.length, 1);
+    assert.equal(tables.skus.length, 1);
+  });
+
+  it("allows seller listing submission only from draft or revision state after verification", async () => {
+    const verifiedTables: Record<string, any[]> = {
+      sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions" }],
+      seller_profiles: [{ seller_id: "seller_a", verification_status: "verified" }],
+      seller_applications: [],
+      seller_verification_documents: [],
+      listing_drafts: [{ draft_id: "draft_a", seller_id: "seller_a", status: "draft", updated_at: "2026-01-01T00:00:00.000Z" }]
+    };
+
+    await submitListingDraft(dbWith(verifiedTables), "seller_a", "draft_a");
+    assert.equal(verifiedTables.listing_drafts[0].status, "submitted");
+
+    await assert.rejects(
+      () => submitListingDraft(dbWith(verifiedTables), "seller_a", "draft_a"),
+      (error: any) => error.statusCode === 400 && /Only draft/.test(error.message)
+    );
+
+    const pendingTables: Record<string, any[]> = {
+      sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions" }],
+      seller_profiles: [{ seller_id: "seller_a", verification_status: "pending" }],
+      seller_applications: [],
+      seller_verification_documents: [],
+      listing_drafts: [{ draft_id: "draft_b", seller_id: "seller_a", status: "draft", updated_at: "2026-01-01T00:00:00.000Z" }]
+    };
+
+    await assert.rejects(
+      () => submitListingDraft(dbWith(pendingTables), "seller_a", "draft_b"),
+      (error: any) => error.statusCode === 400 && /Complete seller verification/.test(error.message)
+    );
+    assert.equal(pendingTables.listing_drafts[0].status, "draft");
+  });
+
+  it("lets sellers edit reviewer-returned drafts before resubmitting", async () => {
+    const tables: Record<string, any[]> = {
+      sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions" }],
+      seller_profiles: [{ seller_id: "seller_a", verification_status: "verified" }],
+      seller_applications: [],
+      seller_verification_documents: [],
+      product_clusters: [],
+      products: [],
+      listing_drafts: [{
+        draft_id: "draft_revision",
+        seller_id: "seller_a",
+        status: "needs_revision",
+        title: "Blue kurti",
+        category: "women_kurtis",
+        garment_type: "kurti",
+        fabric: "cotton",
+        color_family: "blue",
+        base_price: 459,
+        image_url: "seeded://products/blue-kurti.jpg",
+        target_cluster_id: "cluster_old",
+        readiness_status: "catalog_only",
+        review_notes: "Title is too generic. Add fabric and fit detail.",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        submitted_at: "2026-01-01T00:00:00.000Z"
+      }]
+    };
+    const db = dbWith(tables);
+
+    await updateListingDraft(db, "seller_a", "draft_revision", {
+      title: "Blue cotton straight-fit kurti",
+      base_price: 479,
+      image_url: "seeded://products/blue-cotton-kurti.jpg"
+    });
+
+    assert.equal(tables.listing_drafts[0].title, "Blue cotton straight-fit kurti");
+    assert.equal(tables.listing_drafts[0].base_price, 479);
+    assert.equal(tables.listing_drafts[0].status, "needs_revision");
+    assert.ok(tables.listing_drafts[0].revision_acknowledged_at);
+
+    await submitListingDraft(db, "seller_a", "draft_revision");
+    assert.equal(tables.listing_drafts[0].status, "submitted");
+    assert.equal(tables.listing_drafts[0].review_notes, null);
+
+    await assert.rejects(
+      () => updateListingDraft(db, "seller_a", "draft_revision", { title: "Late edit" }),
+      (error: any) => error.statusCode === 400 && /Only draft/.test(error.message)
+    );
+  });
 });
+
+function adminAccount() {
+  return {
+    account_id: "admin_1",
+    username: "reviewer.admin",
+    role: "admin",
+    display_name: "Reviewer"
+  };
+}
+
+function listingReviewTables(overrides: Record<string, any[]> = {}) {
+  return {
+    sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions" }],
+    seller_profiles: [{ seller_id: "seller_a", verification_status: "verified", gst_status: "verified", kyc_status: "verified" }],
+    seller_applications: [],
+    seller_verification_documents: [],
+    seller_evidence_assets: [],
+    listing_drafts: [{
+      draft_id: "draft_a",
+      seller_id: "seller_a",
+      status: "submitted",
+      title: "Blue cotton kurti",
+      category: "women_kurtis",
+      garment_type: "kurti",
+      fabric: "cotton",
+      color_family: "blue",
+      base_price: 459,
+      image_url: "seed://products/blue-kurti.jpg",
+      target_cluster_id: "cluster_a",
+      updated_at: "2026-01-01T00:00:00.000Z"
+    }],
+    product_clusters: [],
+    products: [],
+    skus: [],
+    fact_records: [],
+    price_events: [],
+    inventory_snapshots: [],
+    admin_audit_events: [],
+    data_sources: [],
+    ...overrides
+  };
+}
