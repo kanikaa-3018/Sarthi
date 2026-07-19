@@ -47,8 +47,8 @@ const ENGLISH_SELLER_COPY = {
   workbenchTodayDetail: "Priority queue",
   workbenchProducts: "Product fixes",
   workbenchProductsDetail: "Listing issues",
-  workbenchEvidence: "Evidence queue",
-  workbenchEvidenceDetail: "open asks",
+  workbenchEvidence: "Buyer asks",
+  workbenchEvidenceDetail: "proof requests",
   workbenchNewListing: "New listing",
   workbenchNewListingDetail: "Draft & submit",
   workbenchMarket: "Market compare",
@@ -214,6 +214,25 @@ const ENGLISH_SELLER_COPY = {
   proofFileMissingTitle: "Proof file missing",
   proofReferenceWrongTitle: "Proof reference looks wrong",
   proofReferenceWrongDetail: "Use the file upload button or paste a real https URL that admin can inspect.",
+  buyerProofRequests: "Buyer proof requests",
+  proofRequestsTitle: "Answer the doubts stopping buyers",
+  proofRequestsBody: "These are real proof requests from buyer doubts. Upload one clear file, admin checks it, then approved proof can become buyer-visible.",
+  totalBuyerAsks: "Total buyer asks",
+  urgentRequests: "Urgent requests",
+  productsAffected: "Products affected",
+  nextProofNeeded: "Next proof needed",
+  startHere: "Start here",
+  proofNeeded: "Proof needed",
+  buyerAskedFor: "buyer asks",
+  whyThisMatters: "Why this matters",
+  proofReviewPath: "Proof review path",
+  uploadClearProof: "Upload clear proof",
+  adminVerifiesProof: "Admin verifies match",
+  buyerSeesApproved: "Buyer sees approved proof",
+  allCaughtUp: "All caught up",
+  noProofRequestsDetail: "No buyer proof request is open. Keep product photos, fabric proof, and size chart fresh for new listings.",
+  highPriority: "High priority",
+  normalPriority: "Normal priority",
   actionPlan: "Action plan",
   actionPlanTitle: "Fix the products buyers are unsure about",
   autoPrioritized: "Auto-prioritized",
@@ -279,7 +298,8 @@ const SELLER_COPY_BY_LANGUAGE: Record<LanguageCode, SellerCopy> = {
     proofSubmitted: "प्रूफ admin को भेज दिया गया। स्टेटस Proof center में देखें।",
     workbenchToday: "आज",
     workbenchProducts: "प्रोडक्ट सुधार",
-    workbenchEvidence: "प्रूफ कतार",
+    workbenchEvidence: "Buyer asks",
+    workbenchEvidenceDetail: "proof requests",
     workbenchNewListing: "नई लिस्टिंग",
     workbenchMarket: "मार्केट तुलना",
     currentRating: "मौजूदा रेटिंग",
@@ -373,6 +393,25 @@ const SELLER_COPY_BY_LANGUAGE: Record<LanguageCode, SellerCopy> = {
     uploadReadyTitle: "Upload ready लग रहा है",
     proofFileMissingTitle: "Proof file missing है",
     proofReferenceWrongTitle: "Proof reference गलत लग रहा है",
+    buyerProofRequests: "Buyer proof requests",
+    proofRequestsTitle: "Buyer के शक पहले दूर करें",
+    proofRequestsBody: "ये buyer doubts से आए proof requests हैं. साफ proof upload करें, admin check करेगा, फिर approved proof buyer को दिख सकता है.",
+    totalBuyerAsks: "Total buyer asks",
+    urgentRequests: "Urgent requests",
+    productsAffected: "Products affected",
+    nextProofNeeded: "Next proof needed",
+    startHere: "यहां से शुरू करें",
+    proofNeeded: "Proof चाहिए",
+    buyerAskedFor: "buyer asks",
+    whyThisMatters: "क्यों जरूरी है",
+    proofReviewPath: "Proof review path",
+    uploadClearProof: "Clear proof upload करें",
+    adminVerifiesProof: "Admin match check करता है",
+    buyerSeesApproved: "Approved proof buyer देखता है",
+    allCaughtUp: "सब clear है",
+    noProofRequestsDetail: "अभी कोई buyer proof request open नहीं है. Product photos, fabric proof और size chart fresh रखें.",
+    highPriority: "High priority",
+    normalPriority: "Normal priority",
     actionPlan: "कार्रवाई प्लान",
     actionPlanTitle: "जिन products पर buyer को शक है, उन्हें पहले ठीक करें",
     autoPrioritized: "अपने आप priority",
@@ -430,7 +469,8 @@ const SELLER_COPY_BY_LANGUAGE: Record<LanguageCode, SellerCopy> = {
     proofSubmitted: "Proof admin ko submit ho gaya. Approval status Proof center me track karo.",
     workbenchToday: "Aaj",
     workbenchProducts: "Product fixes",
-    workbenchEvidence: "Evidence queue",
+    workbenchEvidence: "Buyer asks",
+    workbenchEvidenceDetail: "proof requests",
     workbenchNewListing: "New listing",
     workbenchMarket: "Market compare",
     currentRating: "Current rating",
@@ -513,6 +553,25 @@ const SELLER_COPY_BY_LANGUAGE: Record<LanguageCode, SellerCopy> = {
     uploadReadyTitle: "Upload ready lag raha hai",
     proofFileMissingTitle: "Proof file missing hai",
     proofReferenceWrongTitle: "Proof reference wrong lag raha hai",
+    buyerProofRequests: "Buyer proof requests",
+    proofRequestsTitle: "Buyer ke doubts pehle clear karo",
+    proofRequestsBody: "Ye buyer doubts se aaye proof requests hain. Clear proof upload karo, admin check karega, phir approved proof buyer ko dikh sakta hai.",
+    totalBuyerAsks: "Total buyer asks",
+    urgentRequests: "Urgent requests",
+    productsAffected: "Products affected",
+    nextProofNeeded: "Next proof needed",
+    startHere: "Yahan se start karo",
+    proofNeeded: "Proof needed",
+    buyerAskedFor: "buyer asks",
+    whyThisMatters: "Kyun important hai",
+    proofReviewPath: "Proof review path",
+    uploadClearProof: "Clear proof upload karo",
+    adminVerifiesProof: "Admin match check karta hai",
+    buyerSeesApproved: "Approved proof buyer dekhta hai",
+    allCaughtUp: "Sab clear hai",
+    noProofRequestsDetail: "Abhi koi buyer proof request open nahi hai. Product photos, fabric proof aur size chart fresh rakho.",
+    highPriority: "High priority",
+    normalPriority: "Normal priority",
     actionPlan: "Action plan",
     actionPlanTitle: "Jin products par buyer unsure hai, unhe pehle fix karo",
     autoPrioritized: "Auto-prioritized",
@@ -648,8 +707,7 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
         setPanel(payload);
         setEvidenceCoach(coach);
         setSelectedClusterId(payload.cluster.cluster_id);
-      } catch (e) {
-        console.warn("Seller performance details not available:", e);
+      } catch {
         setPanel(null);
         setEvidenceCoach(null);
       }
@@ -1363,6 +1421,7 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
           tasks={proofTasks}
           listings={sellerListings}
           onOpenProofTask={openProofTask}
+          copy={copy}
         />
       )}
 
@@ -2583,56 +2642,110 @@ function SellerProductHealthTable({
 function SellerProofLibraryPanel({
   tasks,
   listings,
-  onOpenProofTask
+  onOpenProofTask,
+  copy
 }: {
   tasks: SellerEvidenceCoachTask[];
   listings: SellerPanelListing[];
   onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  copy: SellerCopy;
 }) {
-  const proofTypes = [
-    { title: "Daylight colour", detail: "Real colour, no filter.", icon: Camera },
-    { title: "Fabric close-up", detail: "Shows thickness and texture.", icon: ShieldCheck },
-    { title: "Size proof", detail: "Chest and length visible.", icon: LineChart },
-    { title: "Dispatch proof", detail: "Builds prepaid trust.", icon: CheckCircle2 }
+  const totalBuyerAsks = tasks.reduce((sum, task) => sum + task.buyer_demand, 0);
+  const urgentRequests = tasks.filter((task) => task.priority === "high").length;
+  const productsAffected = new Set(tasks.map((task) => task.product_id)).size;
+  const topTask = tasks[0] ?? null;
+  const topListing = topTask ? listings.find((item) => item.product.product_id === topTask.product_id) ?? null : null;
+  const guideItems = [
+    { icon: Camera, title: copy.uploadClearProof, detail: "Use the exact product photo, fabric close-up, size chart, or packaging proof." },
+    { icon: ShieldCheck, title: copy.adminVerifiesProof, detail: "Admin checks that the file matches the product claim before it affects trust." },
+    { icon: CheckCircle2, title: copy.buyerSeesApproved, detail: "Only approved proof becomes buyer-facing. Rejected proof stays internal." }
   ];
 
   return (
-    <section className="seller-workbench-panel">
-      <div className="seller-section-heading clean">
+    <section className="seller-workbench-panel seller-proof-requests-panel">
+      <div className="seller-proof-request-hero">
         <div>
-          <span className="eyebrow">Evidence queue</span>
-          <h3>Open proof work from buyer doubts</h3>
-          <p>Prepare the exact proof needed for buyer trust. Submitted proof status lives in the top Proof center.</p>
+          <span className="eyebrow">{copy.buyerProofRequests}</span>
+          <h3>{copy.proofRequestsTitle}</h3>
+          <p>{copy.proofRequestsBody}</p>
         </div>
-        <span className="seller-status-pill watch">{tasks.length} open</span>
+        {topTask ? (
+          <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(topTask)}>
+            {copy.uploadProof}
+            <ChevronRight size={14} />
+          </button>
+        ) : (
+          <span className="seller-status-pill good">{copy.allCaughtUp}</span>
+        )}
       </div>
 
-      <div className="seller-proof-type-grid">
-        {proofTypes.map((item) => {
+      <div className="seller-proof-request-stats">
+        <article className={totalBuyerAsks ? "watch" : "good"}>
+          <span>{copy.totalBuyerAsks}</span>
+          <strong>{totalBuyerAsks}</strong>
+          <p>{totalBuyerAsks ? copy.fixBeforeTrust : copy.noOpenBuyerDoubts}</p>
+        </article>
+        <article className={urgentRequests ? "risk" : "good"}>
+          <span>{copy.urgentRequests}</span>
+          <strong>{urgentRequests}</strong>
+          <p>{urgentRequests ? copy.fixFirst : copy.clear}</p>
+        </article>
+        <article>
+          <span>{copy.productsAffected}</span>
+          <strong>{productsAffected}</strong>
+          <p>{productsAffected ? copy.productsLikelyAffectTrust : copy.proofCenterClear}</p>
+        </article>
+        <article>
+          <span>{copy.nextProofNeeded}</span>
+          <strong>{topTask ? proofTypeLabel(topTask.recommended_proof_type) : copy.clear}</strong>
+          <p>{topTask ? shortProductTitle(topTask.product_title) : copy.noProofTask}</p>
+        </article>
+      </div>
+
+      {topTask && (
+        <article className={`seller-proof-priority-card ${topTask.priority}`}>
+          <img
+            src={topListing?.product.image_url || "/product-blue.svg"}
+            alt={topTask.product_title}
+            onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+          />
+          <div>
+            <span className="eyebrow">{copy.startHere}</span>
+            <h3>{shortProductTitle(topTask.product_title)}</h3>
+            <div className="seller-proof-request-meta">
+              <span>{topTask.buyer_demand} {copy.buyerAskedFor}</span>
+              <span>{copy.proofNeeded}: {proofTypeLabel(topTask.recommended_proof_type)}</span>
+              <span>{labelize(topTask.attribute)}</span>
+            </div>
+            <p>{sellerFriendlyProofReason(topTask)}</p>
+          </div>
+          <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(topTask)}>
+            {copy.uploadProof}
+          </button>
+        </article>
+      )}
+
+      <div className="seller-proof-guide-strip" aria-label={copy.proofReviewPath}>
+        {guideItems.map((item) => {
           const Icon = item.icon;
           return (
-          <article key={item.title}>
-            <Icon size={18} />
-            <strong>{item.title}</strong>
-            <p>{item.detail}</p>
-          </article>
+            <article key={item.title}>
+              <Icon size={17} />
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.detail}</p>
+              </div>
+            </article>
           );
         })}
       </div>
 
-      <div className="seller-section-heading compact">
-        <div>
-          <span className="eyebrow">Still needed</span>
-          <h3>{tasks.length ? `${tasks.length} proof task${tasks.length === 1 ? "" : "s"} from buyer asks` : "No proof task"}</h3>
-        </div>
-      </div>
-
       {tasks.length ? (
-        <div className="seller-proof-work-list">
+        <div className="seller-proof-work-list seller-proof-work-list-modern">
           {tasks.map((task) => {
             const listing = listings.find((item) => item.product.product_id === task.product_id);
             return (
-            <article key={proofTaskId(task)} className={`seller-proof-work-row ${task.priority}`}>
+            <article key={proofTaskId(task)} className={`seller-proof-work-row seller-proof-request-row ${task.priority}`}>
               <img
                 src={listing?.product.image_url || "/product-blue.svg"}
                 alt={task.product_title}
@@ -2641,15 +2754,21 @@ function SellerProofLibraryPanel({
               <div className="seller-proof-work-main">
                 <div className="seller-proof-work-title">
                   <strong>{shortProductTitle(task.product_title)}</strong>
-                  <span>{task.buyer_demand} asks</span>
+                  <span>{task.buyer_demand} {copy.buyerAskedFor}</span>
                 </div>
-                  <p><b>{labelize(task.attribute)} doubt</b> | {proofTypeLabel(task.recommended_proof_type)}</p>
-                <small>{sellerFriendlyProofReason(task)}</small>
+                <div className="seller-proof-request-meta">
+                  <span>{copy.proofNeeded}: {proofTypeLabel(task.recommended_proof_type)}</span>
+                  <span>{labelize(task.attribute)}</span>
+                  <span>{task.priority === "high" ? copy.highPriority : copy.normalPriority}</span>
+                </div>
+                <small><b>{copy.whyThisMatters}:</b> {sellerFriendlyProofReason(task)}</small>
               </div>
               <div className="seller-proof-work-action">
-                <span className={`seller-status-pill ${task.priority === "high" ? "risk" : "watch"}`}>{task.priority}</span>
+                <span className={`seller-status-pill ${task.priority === "high" ? "risk" : "watch"}`}>
+                  {task.priority === "high" ? copy.highPriority : copy.normalPriority}
+                </span>
                 <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(task)}>
-                  Prepare
+                  {copy.uploadProof}
                 </button>
               </div>
             </article>
@@ -2657,7 +2776,7 @@ function SellerProofLibraryPanel({
           })}
         </div>
       ) : (
-        <SellerEmptyState title="Proof queue is clear" detail="Keep product photos fresh. New buyer doubts will appear here automatically." />
+        <SellerEmptyState title={copy.allCaughtUp} detail={copy.noProofRequestsDetail} />
       )}
     </section>
   );

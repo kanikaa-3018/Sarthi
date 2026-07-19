@@ -580,28 +580,6 @@
   font-weight: 800;
 }
 
-.measurement-input-wrapper {
-  align-items: center;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  overflow: hidden;
-}
-
-.measurement-input-wrapper input {
-  border: 0;
-  border-radius: 0;
-  min-width: 0;
-}
-
-.measurement-input-wrapper strong {
-  color: var(--text-secondary);
-  font-size: 12px;
-  padding: 0 10px;
-}
-
 .seller-action-stack {
   display: flex;
   flex-direction: column;
@@ -648,45 +626,60 @@
 }
 
 .seller-table-wrap {
-  border: 1px solid var(--border-beige);
-  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px;
   overflow-x: auto;
 }
 
-.seller-table {
+.seller-table,
+.seller-health-table {
   width: 100%;
   border-collapse: collapse;
   min-width: 640px;
+  font-family: 'Courier Prime', monospace;
 }
 
 .seller-table th,
-.seller-table td {
-  border-bottom: 1px solid var(--border-beige);
-  padding: 12px;
+.seller-table td,
+.seller-health-table th,
+.seller-health-table td {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 10px 12px;
   text-align: left;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
-.seller-table th {
-  background: var(--bg-sand);
-  color: var(--forest-green);
+.seller-table th,
+.seller-health-table th {
+  background: color-mix(in srgb, var(--bg-canvas) 50%, var(--bg-surface));
+  color: var(--text-primary);
   text-transform: uppercase;
-  font-weight: 800;
-}
-
-.seller-table td:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.seller-table td span {
-  color: var(--text-muted);
+  font-weight: 900;
+  font-family: 'Outfit', sans-serif;
   font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
-.seller-table tr:last-child td {
+.seller-table td:first-child,
+.seller-health-table td:first-child {
+  font-family: 'Noto Sans', sans-serif;
+  font-weight: bold;
+}
+
+.seller-table td span,
+.seller-health-table td span {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.seller-table tr:last-child td,
+.seller-health-table tr:last-child td {
   border-bottom: none;
+}
+
+.seller-table tr:nth-child(even),
+.seller-health-table tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--bg-canvas) 20%, var(--bg-surface));
 }
 
 .policy-section,
@@ -751,6 +744,28 @@
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 700;
+}
+
+.measurement-input-wrapper {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.measurement-input-wrapper input {
+  border: 0;
+  border-radius: 0;
+  min-width: 0;
+}
+
+.measurement-input-wrapper strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 0 10px;
 }
 
 .fact-chip-cloud {

@@ -1,14 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react";
-import {
-  ArrowRight,
-  CheckCircle2,
-  ClipboardCheck,
-  LockKeyhole,
-  ShieldCheck,
-  Store,
-  UserRound
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { login, signupBuyer, signupSeller } from "../api/client";
+import { SarthiMark } from "../components/SarthiMark";
 import { LANGUAGE_OPTIONS, type LanguageCode } from "../i18n";
 import type { AuthAccount, AuthSession } from "../types/api";
 
@@ -45,24 +38,32 @@ const PORTAL_COPY: Record<AuthPortal, {
   shortLabel: string;
   description: string;
   lockText: string;
+  action: string;
+  marker: string;
 }> = {
   buyer: {
-    title: "Buyer app",
+    title: "Buyer workspace",
     shortLabel: "Buyer",
-    description: "Check before paying.",
-    lockText: "Your size memory stays private."
+    description: "Compare listings, check size and offer truth before checkout.",
+    lockText: "Private fit memory",
+    action: "Continue shopping",
+    marker: "B"
   },
   seller: {
     title: "Seller portal",
     shortLabel: "Seller",
-    description: "Add proof. Fix listings.",
-    lockText: "Only store data is shown."
+    description: "Submit proof, track drafts and improve listing readiness.",
+    lockText: "Aggregate evidence only",
+    action: "Open seller console",
+    marker: "S"
   },
   reviewer: {
     title: "Reviewer queue",
     shortLabel: "Reviewer",
-    description: "Review sellers.",
-    lockText: "Admin access only."
+    description: "Review seller applications, proof and listing approvals.",
+    lockText: "Admin access only",
+    action: "Open review desk",
+    marker: "R"
   }
 };
 
@@ -183,232 +184,250 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
 
   return (
     <div className="mobile-auth-container auth-entry-shell">
-      <div className="mobile-auth-card auth-entry-card">
-        <div className="auth-brand-lockup">
-          <div className="brand-logo-badge">S</div>
-          <div>
-            <h1 className="brand-logo-text">Sarthi</h1>
-            <span className="brand-logo-sub">Check before you buy</span>
+      <div className="auth-entry-layout">
+        <aside className="auth-story-panel" aria-label="Sarthi product summary">
+          <div className="auth-story-brand">
+            <div className="brand-logo-badge auth-logo-mark">
+              <SarthiMark />
+            </div>
+            <div>
+              <strong>Sarthi</strong>
+              <span>Commerce trust OS</span>
+            </div>
           </div>
-        </div>
-
-        <div className="auth-portal-grid" aria-label="Choose Sarthi portal">
-          <PortalButton
-            portal="buyer"
-            active={portal === "buyer"}
-            title={PORTAL_COPY.buyer.shortLabel}
-            description="Shop"
-            icon={<UserRound size={18} />}
-            onClick={selectPortal}
-          />
-          <PortalButton
-            portal="seller"
-            active={portal === "seller"}
-            title={PORTAL_COPY.seller.shortLabel}
-            description="Store"
-            icon={<Store size={18} />}
-            onClick={selectPortal}
-          />
-          <PortalButton
-            portal="reviewer"
-            active={portal === "reviewer"}
-            title={PORTAL_COPY.reviewer.shortLabel}
-            description="Admin"
-            icon={<ClipboardCheck size={18} />}
-            onClick={selectPortal}
-          />
-        </div>
-
-        <div className="auth-portal-summary">
-          <div>
-            <span className="eyebrow">{activeCopy.shortLabel} access</span>
-            <h2 className="auth-step-heading">{flow === "signin" ? `Welcome ${activeCopy.shortLabel}` : `Create ${activeCopy.shortLabel}`}</h2>
-            <p className="auth-step-desc">{activeCopy.description}</p>
+          <h2>One login. Three clean workspaces.</h2>
+          <p>
+            Buyers get proof before checkout, sellers get evidence tasks and reviewers keep seller claims under control.
+          </p>
+          <div className="auth-story-checks" aria-label="Trust workflow">
+            <span><span className="auth-story-dot" aria-hidden="true" /> Buyer decisions stay evidence-backed</span>
+            <span><span className="auth-story-dot" aria-hidden="true" /> Seller proof never exposes private memory</span>
+            <span><span className="auth-story-dot" aria-hidden="true" /> Reviewer approval gates public trust</span>
           </div>
-          <div className="auth-portal-lock">
-            <LockKeyhole size={14} />
-            <span>{activeCopy.lockText}</span>
-          </div>
-        </div>
+        </aside>
 
-        {success && (
-          <div className="auth-success-banner">
-            <CheckCircle2 size={16} />
-            <span>{success}</span>
+        <div className="mobile-auth-card auth-entry-card">
+          <div className="auth-brand-lockup auth-card-heading">
+            <div>
+              <span className="eyebrow">Secure entry</span>
+              <h1 className="brand-logo-text">{flow === "signin" ? "Sign in" : portal === "seller" ? "Seller application" : "Create buyer account"}</h1>
+              <span className="brand-logo-sub">{activeCopy.description}</span>
+            </div>
           </div>
-        )}
-        {error && <div className="auth-error-banner">{error}</div>}
 
-        <div className="auth-tab-group">
-          <button
-            className={`auth-tab-btn ${flow === "signin" ? "active" : ""}`}
-            onClick={() => {
-              setFlow("signin");
-              setError(null);
-              setSuccess(null);
-            }}
-          >
-            Sign in
-          </button>
-          {isSignupAvailable && (
+          <div className="auth-portal-grid" aria-label="Choose Sarthi portal">
+            <PortalButton
+              portal="buyer"
+              active={portal === "buyer"}
+              title={PORTAL_COPY.buyer.shortLabel}
+              description={PORTAL_COPY.buyer.lockText}
+              marker={PORTAL_COPY.buyer.marker}
+              onClick={selectPortal}
+            />
+            <PortalButton
+              portal="seller"
+              active={portal === "seller"}
+              title={PORTAL_COPY.seller.shortLabel}
+              description={PORTAL_COPY.seller.lockText}
+              marker={PORTAL_COPY.seller.marker}
+              onClick={selectPortal}
+            />
+            <PortalButton
+              portal="reviewer"
+              active={portal === "reviewer"}
+              title={PORTAL_COPY.reviewer.shortLabel}
+              description={PORTAL_COPY.reviewer.lockText}
+              marker={PORTAL_COPY.reviewer.marker}
+              onClick={selectPortal}
+            />
+          </div>
+
+          <div className="auth-portal-summary">
+            <div>
+              <span className="eyebrow">{activeCopy.title}</span>
+              <h2 className="auth-step-heading">
+                {flow === "signin" ? activeCopy.action : portal === "seller" ? "Submit for review" : "Set up buyer access"}
+              </h2>
+              <p className="auth-step-desc">{activeCopy.description}</p>
+            </div>
+            <span className="auth-portal-lock">{activeCopy.lockText}</span>
+          </div>
+
+          {success && (
+            <div className="auth-success-banner">
+              <CheckCircle2 size={16} />
+              <span>{success}</span>
+            </div>
+          )}
+          {error && <div className="auth-error-banner">{error}</div>}
+
+          <div className={`auth-tab-group ${isSignupAvailable ? "" : "single"}`}>
             <button
-              className={`auth-tab-btn ${flow === "signup" ? "active" : ""}`}
+              type="button"
+              className={`auth-tab-btn ${flow === "signin" ? "active" : ""}`}
               onClick={() => {
-                setFlow("signup");
+                setFlow("signin");
                 setError(null);
                 setSuccess(null);
               }}
             >
-              {portal === "seller" ? "Apply" : "Create"}
+              Sign in
             </button>
-          )}
-        </div>
-
-        <form onSubmit={flow === "signin" ? handleSignin : handleSignup} className="auth-form-step">
-          <div className="auth-security-note">
-            <ShieldCheck size={15} />
-            <span>Password is protected before it leaves this device.</span>
-          </div>
-
-          {flow === "signin" && (
-            <div className="demo-credential-box">
-              <div>
-                <strong>{demo.label}</strong>
-                <span>{demo.username}</span>
-              </div>
-              <button type="button" onClick={useDemoCredentials}>
-                Use demo
+            {isSignupAvailable && (
+              <button
+                type="button"
+                className={`auth-tab-btn ${flow === "signup" ? "active" : ""}`}
+                onClick={() => {
+                  setFlow("signup");
+                  setError(null);
+                  setSuccess(null);
+                }}
+              >
+                {portal === "seller" ? "Apply" : "Create"}
               </button>
+            )}
+          </div>
+
+          <form onSubmit={flow === "signin" ? handleSignin : handleSignup} className="auth-form-step">
+            {flow === "signin" && (
+              <div className="demo-credential-box">
+                <div>
+                  <strong>{demo.label}</strong>
+                  <span>{demo.username}</span>
+                </div>
+                <button type="button" onClick={useDemoCredentials}>
+                  Use demo
+                </button>
+              </div>
+            )}
+
+            <div className="auth-input-group">
+              <label>{portal === "buyer" ? "Mobile or username" : "Username"}</label>
+              <input
+                type="text"
+                placeholder={flow === "signin" ? demo.username : "Create a unique username"}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                disabled={loading}
+                required
+              />
             </div>
-          )}
 
-          <div className="auth-input-group">
-            <label>{portal === "buyer" ? "Mobile or username" : "Username"}</label>
-            <input
-              type="text"
-              placeholder={flow === "signin" ? demo.username : "Create a unique username"}
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-              disabled={loading}
-              required
-            />
+            <div className="auth-input-group">
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder={flow === "signin" ? "Enter password" : "Minimum 8 characters"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={flow === "signin" ? "current-password" : "new-password"}
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {flow === "signup" && portal === "buyer" && (
+              <>
+                <div className="auth-input-group">
+                  <label>Full name</label>
+                  <input
+                    type="text"
+                    placeholder="Name shown in your account"
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <div className="auth-input-group">
+                  <label>Preferred language</label>
+                  <select
+                    value={buyerLang}
+                    onChange={(event) => setBuyerLang(event.target.value as LanguageCode)}
+                    disabled={loading}
+                  >
+                    {LANGUAGE_OPTIONS.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {flow === "signup" && portal === "seller" && (
+              <>
+                <div className="auth-input-group">
+                  <label>Business or store name</label>
+                  <input
+                    type="text"
+                    placeholder="Legal or marketplace store name"
+                    value={businessName}
+                    onChange={(event) => setBusinessName(event.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <div className="auth-input-group">
+                  <label>GSTIN</label>
+                  <input
+                    type="text"
+                    placeholder="GST number for review"
+                    value={gstNumber}
+                    onChange={(event) => setGstNumber(event.target.value.toUpperCase())}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <div className="auth-input-group">
+                  <label>Pickup pincode</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="6 digit pincode"
+                    value={pickupPincode}
+                    onChange={(event) => setPickupPincode(event.target.value.replace(/\D/g, ""))}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+
+                <div className="auth-input-group">
+                  <label>Support contact</label>
+                  <input
+                    type="text"
+                    placeholder="Phone or email for verification"
+                    value={supportContact}
+                    onChange={(event) => setSupportContact(event.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {portal === "reviewer" && (
+              <p className="auth-helper-text">
+                Reviewer accounts are provisioned by the platform. There is no public signup for this workspace.
+              </p>
+            )}
+
+            <button type="submit" className="auth-primary-btn" disabled={loading || !canSubmit}>
+              <span>{loading ? "Checking..." : flow === "signin" ? "Continue" : portal === "seller" ? "Apply" : "Create account"}</span>
+              <ArrowRight size={16} />
+            </button>
+          </form>
+
+          <div className="auth-bottom-banner">
+            <span>Buyer, seller and reviewer data stay separated by role.</span>
           </div>
-
-          <div className="auth-input-group">
-            <label>Password</label>
-            <input
-              type="password"
-              placeholder={flow === "signin" ? "Enter password" : "Minimum 8 characters"}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={flow === "signin" ? "current-password" : "new-password"}
-              disabled={loading}
-              required
-            />
-          </div>
-
-          {flow === "signup" && portal === "buyer" && (
-            <>
-              <div className="auth-input-group">
-                <label>Full name</label>
-                <input
-                  type="text"
-                  placeholder="Name shown in your account"
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <label>Preferred language</label>
-                <select
-                  value={buyerLang}
-                  onChange={(event) => setBuyerLang(event.target.value as LanguageCode)}
-                  disabled={loading}
-                >
-                  {LANGUAGE_OPTIONS.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-
-          {flow === "signup" && portal === "seller" && (
-            <>
-              <div className="auth-input-group">
-                <label>Business or store name</label>
-                <input
-                  type="text"
-                  placeholder="Legal or marketplace store name"
-                  value={businessName}
-                  onChange={(event) => setBusinessName(event.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <label>GSTIN</label>
-                <input
-                  type="text"
-                  placeholder="GST number for review"
-                  value={gstNumber}
-                  onChange={(event) => setGstNumber(event.target.value.toUpperCase())}
-                  disabled={loading}
-                  required
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <label>Pickup pincode</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="6 digit pincode"
-                  value={pickupPincode}
-                  onChange={(event) => setPickupPincode(event.target.value.replace(/\D/g, ""))}
-                  disabled={loading}
-                  required
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <label>Support contact</label>
-                <input
-                  type="text"
-                  placeholder="Phone or email for verification"
-                  value={supportContact}
-                  onChange={(event) => setSupportContact(event.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-            </>
-          )}
-
-          {portal === "reviewer" && (
-            <p className="auth-helper-text">
-              Reviewer accounts are provisioned by the platform. There is no public signup for this workspace.
-            </p>
-          )}
-
-          <button type="submit" className="auth-primary-btn" disabled={loading || !canSubmit}>
-            <span>{loading ? "Checking..." : flow === "signin" ? "Continue" : portal === "seller" ? "Apply" : "Create account"}</span>
-            <ArrowRight size={16} />
-          </button>
-        </form>
-      </div>
-
-      <div className="auth-bottom-banner">
-        <ShieldCheck size={14} />
-        <span>Buyer, seller, and reviewer data stay separate.</span>
+        </div>
       </div>
     </div>
   );
@@ -425,14 +444,14 @@ function PortalButton({
   active,
   title,
   description,
-  icon,
+  marker,
   onClick
 }: {
   portal: AuthPortal;
   active: boolean;
   title: string;
   description: string;
-  icon: ReactNode;
+  marker: string;
   onClick: (portal: AuthPortal) => void;
 }) {
   return (
@@ -442,7 +461,7 @@ function PortalButton({
       onClick={() => onClick(portal)}
       aria-pressed={active}
     >
-      <span className="auth-portal-icon">{icon}</span>
+      <span className="auth-portal-icon">{marker}</span>
       <strong>{title}</strong>
       <span>{description}</span>
     </button>

@@ -400,7 +400,7 @@ function TrustSnapshotBar({
       </div>
       <div>
         <PackageCheck size={15} />
-        <span>Your fit journey</span>
+        <span>Size memory</span>
         <strong>{dashboard.activity.kept_orders} kept</strong>
       </div>
       {dashboard.activity.returned_orders > 0 && (
@@ -546,13 +546,13 @@ function FitJourneyPreview({
   return (
     <article className="fit-journey-preview">
       <div>
-        <span className="eyebrow">Your fit journey</span>
-        <h3>{memoryCount} size signal{memoryCount === 1 ? "" : "s"} saved</h3>
-        <p>{latestOrder ? payoffLine(latestOrder) : "Your kept and returned orders will make future size advice clearer."}</p>
+        <span className="eyebrow">Size memory</span>
+        <h3>{memoryCount} useful signal{memoryCount === 1 ? "" : "s"} saved</h3>
+        <p>{latestOrder ? payoffLine(latestOrder) : "Kept and returned orders will make future size advice clearer."}</p>
       </div>
       {latestOrder && (
         <button type="button" className="btn-secondary" onClick={() => onOpenOrder(latestOrder.order_id)}>
-          View latest
+          Check latest
         </button>
       )}
     </article>
@@ -678,54 +678,73 @@ function FitJourneyTimeline({
   onSubmitCorrection: (order: BuyerOrderItem) => void;
 }) {
   const recentOrders = orders.slice(0, 6);
+  const keptCount = recentOrders.filter((order) => order.status === "delivered_kept").length;
+  const returnCount = recentOrders.filter((order) => order.status === "returned" || order.status === "exchanged").length;
+  const excludedCount = recentOrders.filter((order) => order.buying_for_someone_else || order.fit_memory_excluded).length;
   return (
     <section className="trust-card fit-journey-card">
       <div className="trust-card-header">
         <div>
-          <span className="eyebrow">Your fit journey</span>
-          <h3>{recentOrders.length ? "What Sarthi learnt from orders" : "No order learning yet"}</h3>
-          <p>Tap an order to see or correct what Sarthi learnt from it.</p>
+          <span className="eyebrow">Size memory</span>
+          <h3>{recentOrders.length ? "What Sarthi remembers for you" : "No size memory yet"}</h3>
+          <p>Sarthi uses kept and returned orders to suggest safer sizes. Open a row only if the reason is wrong.</p>
         </div>
       </div>
       {recentOrders.length ? (
-        <div className="fit-journey-list">
-          {recentOrders.map((order) => {
-            const expanded = expandedOrderId === order.order_id;
-            return (
-              <article key={order.order_id} className={`fit-journey-item ${order.status}`}>
-                <button
-                  type="button"
-                  className="fit-journey-summary"
-                  onClick={() => onExpandedOrderChange(expanded ? null : order.order_id)}
-                  aria-expanded={expanded}
-                >
-                  <span className={`journey-status-dot ${orderTone(order)}`} />
-                  <div>
-                    <strong>{order.product.title}</strong>
-                    <p>{payoffLine(order)}</p>
-                  </div>
-                  <small>{labelize(order.status)}</small>
-                </button>
-                {expanded && (
-                  <OrderCorrectionPanel
-                    order={order}
-                    selectedReason={correctionReasonByOrder[order.order_id] ?? order.return_reason ?? ""}
-                    busy={busy}
-                    onReasonChange={(reason) => onCorrectionChange(order.order_id, reason)}
-                    onSubmit={() => onSubmitCorrection(order)}
-                  />
-                )}
-              </article>
-            );
-          })}
-        </div>
+        <>
+          <div className="fit-journey-meter" aria-label="Size memory summary">
+            <span className="safe"><strong>{keptCount}</strong> Kept sizes</span>
+            <span className="watch"><strong>{returnCount}</strong> Returns fixed</span>
+            <span><strong>{excludedCount}</strong> Not used for your fit</span>
+          </div>
+          <div className="fit-journey-list">
+            {recentOrders.map((order) => {
+              const expanded = expandedOrderId === order.order_id;
+              const tone = orderTone(order);
+              return (
+                <article key={order.order_id} className={`fit-journey-item ${order.status} ${expanded ? "expanded" : ""}`}>
+                  <button
+                    type="button"
+                    className="fit-journey-summary"
+                    onClick={() => onExpandedOrderChange(expanded ? null : order.order_id)}
+                    aria-expanded={expanded}
+                  >
+                    <span className={`journey-result-icon ${tone}`} aria-hidden="true">
+                      {tone === "safe" ? <CheckCircle2 size={18} /> : tone === "watch" ? <RotateCcw size={18} /> : <PackageCheck size={18} />}
+                    </span>
+                    <span className="fit-journey-copy">
+                      <span className="fit-journey-product">{order.product.title}</span>
+                      <strong>{orderLearningTitle(order)}</strong>
+                      <span className="fit-journey-payoff">{payoffLine(order)}</span>
+                      <span className="fit-journey-tags">
+                        <span>Size {order.variant.size}</span>
+                        <span>{order.product.seller_name ?? "Seller checked"}</span>
+                      </span>
+                    </span>
+                    <span className={`journey-status-pill ${tone}`}>{orderStatusLabel(order)}</span>
+                  </button>
+                  {expanded && (
+                    <OrderCorrectionPanel
+                      order={order}
+                      selectedReason={correctionReasonByOrder[order.order_id] ?? order.return_reason ?? ""}
+                      busy={busy}
+                      onReasonChange={(reason) => onCorrectionChange(order.order_id, reason)}
+                      onSubmit={() => onSubmitCorrection(order)}
+                    />
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </>
       ) : (
         <div className="empty-memory-state">
-          Kept or returned orders will appear here after delivery.
+          Kept or returned orders will appear here after delivery. Until then, Sarthi asks for more seller proof before giving strong advice.
         </div>
       )}
       {memories.length > 0 && (
-        <div className="fit-memory-mini-list">
+        <div className="fit-memory-mini-list" aria-label="Saved size facts">
+          <strong>Sarthi will remember</strong>
           {memories.slice(0, 3).map((memory) => (
             <span key={memory.memory_id}>
               {labelize(memory.category)}: size {memory.retained_size}
@@ -753,19 +772,22 @@ function OrderCorrectionPanel({
   const canCorrect = ["returned", "exchanged"].includes(order.status);
   return (
     <div className="order-correction-panel">
-      <div className="logged-reason-line">
-        <span>Logged reason</span>
-        <strong>{order.return_reason ? labelize(order.corrected_return_reason ?? order.return_reason) : "No return reason"}</strong>
+      <div className="correction-panel-head">
+        <div>
+          <span>Saved reason</span>
+          <strong>{order.return_reason ? labelize(order.corrected_return_reason ?? order.return_reason) : "No return reason saved"}</strong>
+        </div>
+        <span className={`correction-confidence ${orderTone(order)}`}>{canCorrect ? "Can correct" : "No action needed"}</span>
       </div>
       {order.buying_for_someone_else && (
         <div className="order-exclusion-line">
           <Users size={14} />
-          <span>This order is excluded from your personal fit memory.</span>
+          <span>This order was for someone else, so it will not change your personal size advice.</span>
         </div>
       )}
       {canCorrect ? (
         <>
-          <p>Wrong reason? Correct it so future fit advice does not learn the wrong thing.</p>
+          <p className="correction-help-text">If this reason is wrong, choose the correct one. Sarthi will use it next time before suggesting a size.</p>
           <div className="correction-chip-grid">
             {CORRECTION_REASONS.map((reason) => (
               <button
@@ -779,11 +801,11 @@ function OrderCorrectionPanel({
             ))}
           </div>
           <button type="button" className="btn-primary correction-save-button" onClick={onSubmit} disabled={busy || !selectedReason}>
-            Save correction
+            Save reason
           </button>
         </>
       ) : (
-        <p>{order.fit_memory_excluded ? "Sarthi kept this out of your personal fit memory." : "This kept order can improve future size advice."}</p>
+        <p className="correction-help-text">{order.fit_memory_excluded ? "Sarthi kept this out of your personal fit memory." : "This kept order can improve future size advice."}</p>
       )}
     </div>
   );
@@ -981,19 +1003,43 @@ function orderTone(order: BuyerOrderItem): Tone {
   return "neutral";
 }
 
+function orderStatusLabel(order: BuyerOrderItem) {
+  if (order.buying_for_someone_else || order.fit_memory_excluded) return "Not used";
+  if (order.status === "delivered_kept") return "Kept";
+  if (order.status === "returned") return "Returned";
+  if (order.status === "exchanged") return "Exchanged";
+  return labelize(order.status);
+}
+
+function orderLearningTitle(order: BuyerOrderItem) {
+  if (order.buying_for_someone_else || order.fit_memory_excluded) {
+    return "Not added to your size memory";
+  }
+  if (order.status === "delivered_kept") {
+    return `Size ${order.variant.size} worked for you`;
+  }
+  if (order.status === "returned") {
+    return `${labelize(order.corrected_return_reason ?? order.return_reason ?? "Return")} noted`;
+  }
+  if (order.status === "exchanged") {
+    return "Exchange reason saved";
+  }
+  return "Waiting for delivery feedback";
+}
+
 function payoffLine(order: BuyerOrderItem) {
   const sellerName = order.product.seller_name ?? "this seller";
   if (order.buying_for_someone_else) {
-    return `Marked for someone else, so Sarthi kept it out of your personal fit memory.`;
+    return "Sarthi will not use this order for your personal size advice.";
   }
   if (order.status === "delivered_kept") {
-    return `Because you kept size ${order.variant.size} from ${sellerName}, Sarthi can trust this stitching more for you.`;
+    return `Similar fits from ${sellerName} can be trusted more for you.`;
   }
   if (order.status === "exchanged") {
-    return `Exchange reason helps Sarthi spot avoidable fit doubt before payment.`;
+    return "This helps Sarthi warn you before the same fit issue repeats.";
   }
   if (order.status === "returned") {
-    return `${order.return_reason ? labelize(order.return_reason) : "Return"} reason can prevent the same mistake later.`;
+    return `${labelize(order.corrected_return_reason ?? order.return_reason ?? "Return")} can prevent the same mistake later.`;
   }
   return "This order can improve future checks after feedback.";
 }
