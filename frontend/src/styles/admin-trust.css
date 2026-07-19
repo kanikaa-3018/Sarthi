@@ -7365,4 +7365,624 @@
 }
 
 .admin-plan-panel {
+  position: sticky !important;
+  top: 92px !important;
+}
+
+.admin-plan-list {
+  border-left: 1px solid var(--border-subtle) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  margin-top: 12px !important;
+  padding-left: 14px !important;
+}
+
+.admin-plan-step {
+  align-items: flex-start !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 9px !important;
+  grid-template-columns: 26px minmax(0, 1fr) !important;
+  padding: 11px 0 !important;
+}
+
+.admin-plan-step:last-child {
+  border-bottom: 0 !important;
+}
+
+.admin-plan-step > span {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+  font-size: 11px !important;
+  height: 26px !important;
+  width: 26px !important;
+}
+
+.admin-plan-step p {
+  color: var(--text-secondary) !important;
+  font-size: 12.5px !important;
+  font-weight: 650 !important;
+  line-height: 1.4 !important;
+  margin: 2px 0 0 !important;
+}
+
+.admin-plan-action {
+  justify-self: start !important;
+  margin-top: 14px !important;
+  width: auto !important;
+}
+
+.admin-policy-gate-row,
+.admin-source-row {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 13px 14px !important;
+}
+
+.admin-policy-gate-row:last-child,
+.admin-source-row:last-child {
+  border-bottom: 0 !important;
+}
+
+.admin-policy-gate-row strong,
+.admin-source-row strong {
+  font-size: 13px !important;
+  font-weight: 850 !important;
+}
+
+.admin-policy-gate-row span,
+.admin-source-row span,
+.admin-source-row small {
+  color: var(--text-secondary) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+}
+
+.admin-impact-bars {
+  padding: 3px 14px !important;
+}
+
+.admin-impact-bar-row {
+  border-bottom: 1px solid var(--border-subtle) !important;
+  gap: 8px !important;
+  padding: 12px 0 !important;
+}
+
+.admin-impact-bar-row:last-child {
+  border-bottom: 0 !important;
+}
+
+.admin-impact-bar-row strong {
+  font-size: 13px !important;
+  font-weight: 850 !important;
+}
+
+.admin-impact-bar-row em {
+  height: 6px !important;
+}
+
+.admin-impact-guardrails {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.admin-impact-guardrails .seller-detail-tile {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+  padding: 14px !important;
+}
+
+.admin-impact-guardrails .seller-detail-tile:nth-child(2n) {
+  border-right: 0 !important;
+}
+
+.admin-impact-guardrails .seller-detail-tile:nth-last-child(-n + 2) {
+  border-bottom: 0 !important;
+}
+
+.seller-report-list-panel {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.seller-report-list {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 12px !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+.seller-report-button {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.seller-report-button:last-child {
+  border-bottom: 0 !important;
+}
+
+.seller-report-button:hover,
+.seller-report-button.selected {
+  background: var(--bg-surface-muted) !important;
+}
+
+.seller-report-button.selected {
+  border-left-color: var(--accent-primary) !important;
+}
+
+.seller-packet-list-panel {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.seller-packet-row-list {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 12px !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+.seller-packet-row {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.seller-packet-row:last-child {
+  border-bottom: 0 !important;
+}
+
+.seller-packet-row:hover,
+.seller-packet-row.selected {
+  background: var(--bg-surface-muted) !important;
+}
+
+.seller-packet-row.selected {
+  border-left-color: var(--accent-primary) !important;
+}
+
+@media (max-width: 1180px) {
+  .admin-policy-metrics,
+  .admin-impact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .admin-policy-metric,
+  .admin-impact-card {
+    border-bottom: 1px solid var(--border-subtle) !important;
+  }
+
+  .admin-policy-metric:nth-child(2n),
+  .admin-impact-card:nth-child(2n) {
+    border-right: 0 !important;
+  }
+
+  .admin-policy-metric:nth-last-child(-n + 2),
+  .admin-impact-card:nth-last-child(-n + 2) {
+    border-bottom: 0 !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .admin-mode-split {
+    grid-template-columns: 1fr !important;
+  }
+
+  .admin-plan-panel {
+    position: static !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-mode-hero,
+  .admin-priority-card,
+  .admin-source-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .admin-agent-lanes,
+  .admin-policy-metrics,
+  .admin-impact-grid,
+  .admin-impact-guardrails {
+    grid-template-columns: 1fr !important;
+  }
+
+  .admin-agent-lane,
+  .admin-policy-metric,
+  .admin-impact-card,
+  .admin-impact-guardrails .seller-detail-tile {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+  }
+
+  .admin-agent-lane:last-child,
+  .admin-policy-metric:last-child,
+  .admin-impact-card:last-child,
+  .admin-impact-guardrails .seller-detail-tile:last-child {
+    border-bottom: 0 !important;
+  }
+
+  .admin-priority-meta {
+    justify-content: flex-start !important;
+  }
+
+  .admin-priority-card .seller-upload-review-button,
+  .admin-plan-action {
+    justify-self: stretch !important;
+    width: 100% !important;
+  }
+}
+
+/* Admin detail pass: keep the work clear without card-inside-card nesting. */
+.seller-packet-review-panel {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.seller-packet-selected-head {
+  margin-bottom: 0 !important;
+}
+
+.seller-decision-brief {
+  background: transparent !important;
+  border: 0 !important;
+  border-left: 3px solid var(--accent-primary) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  gap: 12px !important;
+  margin-top: 12px !important;
+  padding: 12px 0 12px 14px !important;
+}
+
+.seller-decision-brief.fast {
+  border-left-color: var(--success) !important;
+}
+
+.seller-decision-brief.hold {
+  border-left-color: var(--warning) !important;
+}
+
+.seller-decision-brief-grid {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+.seller-decision-brief-grid div {
+  background: transparent !important;
+  border: 0 !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  padding: 10px 11px !important;
+}
+
+.seller-decision-brief-grid div:last-child {
+  border-right: 0 !important;
+}
+
+.seller-decision-brief-note {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  padding: 10px 0 0 !important;
+}
+
+.seller-review-card {
+  background: transparent !important;
+  border: 0 !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 14px 0 !important;
+}
+
+.seller-packet-review-panel > .seller-review-card:first-of-type,
+.seller-draft-accordion-body .seller-review-card {
+  border-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.seller-detail-grid {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+.seller-detail-grid .seller-detail-tile {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  padding: 10px 12px !important;
+}
+
+.seller-detail-grid .seller-detail-tile:nth-child(3n) {
+  border-right: 0 !important;
+}
+
+.seller-detail-grid .seller-detail-tile:nth-last-child(-n + 3) {
+  border-bottom: 0 !important;
+}
+
+.seller-review-foldout {
+  background: transparent !important;
+  border: 0 !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.seller-review-foldout.open {
+  background: transparent !important;
+}
+
+.seller-review-foldout-toggle {
+  background: transparent !important;
+  min-height: 44px !important;
+  padding: 10px 0 !important;
+}
+
+.seller-review-foldout-body {
+  background: transparent !important;
+  padding: 10px 0 0 !important;
+}
+
+.seller-prescreen-box {
+  background: transparent !important;
+  border: 0 !important;
+  border-left: 3px solid var(--accent-primary) !important;
+  border-radius: 0 !important;
+  padding: 10px 0 10px 12px !important;
+}
+
+.seller-check-list {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+.seller-check-row {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+}
+
+.seller-check-row:last-child {
+  border-bottom: 0 !important;
+}
+
+.seller-note-editor {
+  background: var(--surface) !important;
+  border-radius: 10px !important;
+}
+
+.seller-report-section .seller-draft-accordion {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.seller-report-section .seller-draft-accordion:last-child {
+  border-bottom: 0 !important;
+}
+
+.seller-draft-accordion-toggle {
+  background: transparent !important;
+}
+
+.seller-audit-list {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 12px !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+.seller-audit-row {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.seller-audit-row:last-child {
+  border-bottom: 0 !important;
+}
+
+@media (max-width: 760px) {
+  .seller-decision-brief-grid div,
+  .seller-detail-grid .seller-detail-tile {
+    border-right: 0 !important;
+  }
+
+  .seller-decision-brief-grid div:not(:last-child) {
+    border-bottom: 1px solid var(--border-subtle) !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .seller-detail-grid .seller-detail-tile {
+    border-right: 0 !important;
+  }
+
+  .seller-detail-grid .seller-detail-tile:nth-last-child(-n + 3) {
+    border-bottom: 1px solid var(--border-subtle) !important;
+  }
+
+  .seller-detail-grid .seller-detail-tile:last-child {
+    border-bottom: 0 !important;
+  }
+}
+
+/* Admin badge polish: crisp status chips instead of bubble pills. */
+.admin-app-route .review-status-pill,
+.admin-app-route .review-risk-pill,
+.admin-app-route .review-sla-pill,
+.admin-app-route .review-provider-pill,
+.admin-app-route .admin-status-badge,
+.admin-app-route .seller-upload-check {
+  align-items: center !important;
+  border-left-width: 3px !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  font-size: 11px !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.05 !important;
+  min-height: 26px !important;
+  padding: 6px 9px !important;
+  text-transform: none !important;
+}
+
+.admin-app-route .seller-selected-summary-meta .review-status-pill,
+.admin-app-route .seller-selected-summary-meta .review-risk-pill {
+  min-height: 31px !important;
+  padding-inline: 11px !important;
+}
+
+.admin-app-route .review-status-pill.good,
+.admin-app-route .review-risk-pill.low,
+.admin-app-route .review-provider-pill.gemini,
+.admin-app-route .admin-status-badge.good,
+.admin-app-route .seller-upload-check.good,
+.admin-app-route .seller-upload-check.pass {
+  border-left-color: var(--success) !important;
+}
+
+.admin-app-route .review-status-pill.attention,
+.admin-app-route .review-risk-pill.medium,
+.admin-app-route .review-sla-pill.due_today,
+.admin-app-route .admin-status-badge.attention,
+.admin-app-route .seller-upload-check.warn {
+  border-left-color: var(--warning) !important;
+}
+
+.admin-app-route .review-status-pill.bad,
+.admin-app-route .review-risk-pill.high,
+.admin-app-route .review-sla-pill.breached,
+.admin-app-route .admin-status-badge.bad,
+.admin-app-route .seller-upload-check.fail {
+  border-left-color: var(--error) !important;
+}
+
+.admin-app-route .review-status-pill.neutral,
+.admin-app-route .review-sla-pill.ok,
+.admin-app-route .review-provider-pill,
+.admin-app-route .admin-status-badge.neutral {
+  border-left-color: color-mix(in srgb, var(--text-secondary) 28%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .seller-report-tabs em,
+.admin-app-route .seller-lane-list em,
+.admin-app-route .admin-mode-panel-head > span,
+.admin-app-route .seller-packet-head > span,
+.admin-app-route .seller-section-header > span,
+.admin-app-route .seller-uploads-head > span {
+  align-items: center !important;
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 6px !important;
+  color: var(--text-primary) !important;
+  display: inline-flex !important;
+  font-size: 11px !important;
+  font-style: normal !important;
+  font-weight: 850 !important;
+  height: 22px !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  min-width: 24px !important;
+  padding: 0 7px !important;
+}
+
+.admin-app-route .seller-selected-summary-counts span,
+.admin-app-route .seller-report-button-metrics span,
+.admin-app-route .seller-card-badges span,
+.admin-app-route .seller-draft-row-meta span,
+.admin-app-route .seller-packet-row-meta span {
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  min-height: 22px !important;
+  padding: 5px 7px !important;
+}
+
+.admin-app-route .seller-report-tabs button,
+.admin-app-route .seller-lane-list button {
+  border-radius: 8px !important;
+}
+
+.admin-app-route .seller-report-tabs button.active em,
+.admin-app-route .seller-lane-list button.active em {
+  background: var(--surface) !important;
+  border-color: color-mix(in srgb, var(--accent-primary) 32%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .admin-agent-strip {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
+.admin-app-route .admin-agent-strip .review-provider-pill {
+  display: none !important;
+}
+
+.admin-app-route .admin-agent-strip .admin-agent-action {
+  justify-self: end !important;
+  width: auto !important;
+}
+
+@media (max-width: 760px) {
+  .admin-app-route .review-status-pill,
+  .admin-app-route .review-risk-pill,
+  .admin-app-route .review-sla-pill,
+  .admin-app-route .review-provider-pill {
+    min-height: 25px !important;
+    padding: 6px 8px !important;
+  }
+}
+
 
