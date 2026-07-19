@@ -1,13 +1,12 @@
 import type { Db } from "mongodb";
-import { env } from "../config/env.js";
 import { collections } from "../db/mongo.js";
+import { aiCacheFingerprint } from "./ai.js";
 import { sha256 } from "./crypto.js";
 import { nowIso } from "./time.js";
 
 export function llmCacheKey(scope: string, payload: Record<string, unknown>) {
   return `${scope}:${sha256(JSON.stringify(stableCachePayload({
-    provider: env.llmProvider,
-    model: env.llmModel,
+    ai: aiCacheFingerprint(),
     ...payload
   })))}`;
 }

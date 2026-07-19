@@ -214,6 +214,7 @@ New configuration:
 | Variable | Default or local value | Purpose |
 | --- | --- | --- |
 | `AI_PROVIDER_ORDER` | `bedrock,gemini` | Ordered eligible providers |
+| `BEDROCK_ENABLED` | `false` by default; setup writes `true` | Explicit cost-safety gate for live AWS calls |
 | `AWS_REGION` | `ap-south-1` | Bedrock Runtime source region |
 | `AWS_PROFILE` | `agent-toolkit` locally only | Local credential-chain profile |
 | `BEDROCK_TEXT_MODELS` | `apac.amazon.nova-micro-v1:0,apac.amazon.nova-lite-v1:0` | Ordered text candidates |

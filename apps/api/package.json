@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "seed": "node ./node_modules/tsx/dist/cli.mjs src/scripts/seed.ts",
     "gemini:smoke": "node ./node_modules/tsx/dist/cli.mjs src/scripts/geminiSmoke.ts",
+    "ai:smoke": "node ./node_modules/tsx/dist/cli.mjs src/scripts/aiSmoke.ts",
     "vector:index": "node ./node_modules/tsx/dist/cli.mjs src/scripts/createVectorIndex.ts",
     "test": "node ./node_modules/tsx/dist/cli.mjs --test src/tests/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"

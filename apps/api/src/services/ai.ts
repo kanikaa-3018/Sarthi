@@ -128,9 +128,12 @@ export function isGeneratedProvider(value: unknown): value is AiProvider {
 }
 
 export function bedrockRuntimeStatus() {
+  const enabled = env.bedrockEnabled && env.providerOrder.includes("bedrock");
+  const status = bedrockProvider.status();
   return {
-    ...bedrockProvider.status(),
-    enabled: env.bedrockEnabled && env.providerOrder.includes("bedrock")
+    ...status,
+    enabled,
+    status: enabled ? status.status : "disabled"
   };
 }
 
@@ -141,6 +144,25 @@ export function aiRuntimeStatus() {
     configured: aiConfigured(),
     bedrock: bedrockRuntimeStatus(),
     gemini: geminiRuntimeStatus()
+  };
+}
+
+export function aiCacheFingerprint() {
+  return {
+    provider_order: env.providerOrder,
+    bedrock: {
+      enabled: env.bedrockEnabled,
+      text_models: env.bedrockTextModels,
+      vision_models: env.bedrockVisionModels,
+      embedding_model: env.bedrockEmbeddingModel,
+      embedding_dimensions: env.bedrockEmbeddingDimensions
+    },
+    gemini: {
+      enabled: geminiConfigured(),
+      text_model: env.geminiModel,
+      embedding_model: env.geminiEmbeddingModel,
+      embedding_dimensions: env.geminiEmbeddingDimensions
+    }
   };
 }
 

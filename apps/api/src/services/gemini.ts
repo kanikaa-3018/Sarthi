@@ -35,8 +35,8 @@ export function geminiRuntimeStatus() {
   const configured = geminiConfigured();
   return {
     enabled: configured,
-    provider: env.llmProvider,
-    model: env.llmModel,
+    provider: "gemini",
+    model: env.geminiModel,
     active_model: lastGenerateModel,
     embedding_model: env.embeddingModel,
     active_embedding_model: lastEmbeddingModel,
