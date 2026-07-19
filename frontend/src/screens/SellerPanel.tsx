@@ -692,6 +692,7 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
     const task = activeProofTask;
     setProofSubmittingId(proofTaskId(task));
     setError(null);
+    setProofSuccess(null);
     try {
       await submitSellerEvidenceAsset({
         product_id: task.product_id,
