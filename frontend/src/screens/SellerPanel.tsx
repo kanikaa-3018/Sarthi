@@ -640,13 +640,6 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
       const onboardingPayload = await getSellerOnboarding();
       setOnboarding(onboardingPayload);
 
-      // Auto toggle to onboarding if not approved yet
-      if (onboardingPayload?.seller_verification.verification_status !== "verified") {
-        setActiveTab("onboarding");
-      } else {
-        setActiveTab("performance");
-      }
-
       try {
         const [payload, coach] = await Promise.all([
           getSellerPanel(clusterId),
