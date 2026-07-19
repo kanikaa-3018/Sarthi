@@ -3452,6 +3452,252 @@ function buildSellerTrustOps(
       action: topTask ? copy.addProof : undefined
     },
     {
+      key: "approved_loop",
+      label: copy.approvedLoop,
+      value: board?.cards.some((card) => card.score >= 70) ? "Visible" : "Building",
+      detail: "Approved proof becomes buyer-facing evidence, not just an admin file.",
+      tone: board?.cards.some((card) => card.score >= 70) ? "good" : "watch"
+    }
+  ];
+}
+
+function proofDraftQuality(task: SellerEvidenceCoachTask, draft: { title: string; description: string; assetUrl: string }, copy: SellerCopy): ProofDraftQuality {
+  const asset = draft.assetUrl.trim();
+  const title = draft.title.trim();
+  const description = draft.description.trim();
+  const isReference = isRecognizedAssetReference(asset);
+  const mentionsProduct = description.toLowerCase().includes(shortProductTitle(task.product_title).toLowerCase().split(" ")[0] ?? "");
+  const checks = [
+    { label: copy.proofFileAdded, passed: isReference },
+    { label: copy.clearTitle, passed: title.length >= 8 },
+    { label: copy.explainsBuyerAsked, passed: description.length >= 30 },
+    { label: copy.matchesProduct, passed: mentionsProduct || asset.includes(task.product_id) },
+    { label: proofTypeLabel(task.recommended_proof_type), passed: Boolean(task.recommended_proof_type) }
+  ];
+  const baseScore = Math.min(100,
+    (isReference ? 40 : 0) +
+    (title.length >= 8 ? 15 : 0) +
+    (description.length >= 30 ? 20 : 0) +
+    (mentionsProduct || asset.includes(task.product_id) ? 15 : 0) +
+    (task.recommended_proof_type ? 10 : 0)
+  );
+  const score = isReference ? baseScore : Math.min(50, baseScore);
+  return {
+    score,
+    label: !isReference ? copy.addProofFile : score >= 80 ? copy.readyForReview : score >= 55 ? copy.almostReady : copy.improveBeforeSubmit,
+    checks
+  };
+}
+
+function proofReuseCandidates(task: SellerEvidenceCoachTask, listings: SellerPanelListing[]) {
+  const current = listings.find((listing) => listing.product.product_id === task.product_id);
+  return listings.filter((listing) =>
+    listing.product.product_id !== task.product_id &&
+    listing.product.cluster_id === current?.product.cluster_id &&
+    (
+      listing.product.fabric === current?.product.fabric ||
+      listing.product.color_family === current?.product.color_family ||
+      task.attribute === "size"
+    )
+  );
+}
+
+function suggestedProofTitle(task: SellerEvidenceCoachTask) {
+  if (task.recommended_proof_type === "daylight_photo") return `${labelize(task.attribute)} daylight proof`;
+  if (task.recommended_proof_type === "fabric_closeup") return "Fabric close-up proof";
+  if (task.recommended_proof_type === "measurement_chart") return "Size measurement proof";
+  if (task.recommended_proof_type === "packaging_photo") return "Packaging proof";
+  return `${labelize(task.attribute)} proof`;
+}
+
+function suggestedProofDescription(task: SellerEvidenceCoachTask) {
+  const productName = shortProductTitle(task.product_title);
+  if (task.recommended_proof_type === "measurement_chart") {
+    return `${productName}: chest and length measurements are shown clearly for ${labelize(task.attribute)} questions.`;
+  }
+  if (task.recommended_proof_type === "fabric_closeup") {
+    return `${productName}: close fabric photo shows texture, thickness, and transparency clearly.`;
+  }
+  if (task.recommended_proof_type === "daylight_photo") {
+    return `${productName}: daylight photo shows real colour without filters.`;
+  }
+  return `${productName}: seller proof answers the buyer doubt about ${labelize(task.attribute)}.`;
+}
+
+function suggestedProofDraft(task: SellerEvidenceCoachTask, listing?: SellerPanelListing | null) {
+  return {
+    title: suggestedProofTitle(task),
+    description: suggestedProofDescription(task),
+    assetUrl: suggestedProofAssetReference(task, listing),
+    assetHint: suggestedProofAssetHint(task)
+  };
+}
+
+function suggestedProofAssetReference(task: SellerEvidenceCoachTask, listing?: SellerPanelListing | null) {
+  if (listing?.product.image_url && task.recommended_proof_type === "daylight_photo" && listing.product.image_url.startsWith("data:image/")) {
+    return listing.product.image_url;
+  }
+  return "";
+}
+
+function suggestedProofAssetHint(task: SellerEvidenceCoachTask) {
+  if (task.recommended_proof_type === "measurement_chart") {
+    return "Upload a size chart or measurement photo where chest/length values are readable.";
+  }
+  if (task.recommended_proof_type === "fabric_closeup") {
+    return "Upload a close fabric photo showing texture, thickness, and transparency.";
+  }
+  if (task.recommended_proof_type === "daylight_photo") {
+    return "Upload a daylight product photo or paste the real image URL admin should inspect.";
+  }
+  if (task.recommended_proof_type === "packaging_photo") {
+    return "Upload packaging proof that shows how the shipped product is protected.";
+  }
+  return "Upload the actual proof file or paste a real URL admin can inspect.";
+}
+
+function sellerFriendlyProofReason(task: SellerEvidenceCoachTask) {
+  if (task.buyer_demand >= 5) return "High buyer demand. Submit this first to protect trust on this listing.";
+  if (task.attribute === "size") return "Fit doubts can become returns. Clear measurements help genuine sellers.";
+  if (task.attribute === "fabric" || task.attribute === "transparency") return "Fabric clarity reduces avoidable returns and rating drops.";
+  if (task.attribute === "color") return "Daylight proof helps buyers trust the real shade.";
+  return "This proof can answer repeated buyer doubts before checkout.";
+}
+
+function listingImpactText(listing: SellerPanelListing, task: SellerEvidenceCoachTask | null) {
+  if (task) {
+    return `${task.buyer_demand} shopper doubt(s) can block stronger trust until proof is added.`;
+  }
+  if (listing.top_issue) {
+    return `${listing.top_issue.count} return issue(s) can reduce buyer confidence and ranking.`;
+  }
+  if (listing.quality_score !== null && listing.quality_score < 60) {
+    return "Trust score is low. Improve product facts before pushing prepaid.";
+  }
+  if (listing.metrics.evidence_strength === "weak" || listing.metrics.evidence_strength === "unknown") {
+    return "Evidence is still thin. More kept orders and proof will stabilize the score.";
+  }
+  return "Stable listing. Keep photos, size chart, and dispatch proof current.";
+}
+
+function statusTone(listing: SellerPanelListing) {
+  if (listing.decision_status === "eligible_for_recommendation") return "good";
+  if (listing.decision_status === "needs_seller_action") return "risk";
+  return "watch";
+}
+
+function decisionStatusLabel(status: SellerPanelListing["decision_status"]) {
+  if (status === "eligible_for_recommendation") return "Ready";
+  if (status === "needs_seller_action") return "Fix needed";
+  return "Building";
+}
+
+function proofTypeLabel(value: string) {
+  if (value === "daylight_photo") return "Daylight photo";
+  if (value === "fabric_closeup") return "Fabric close-up";
+  if (value === "measurement_chart") return "Measurement chart";
+  if (value === "measurement_photo") return "Measurement photo";
+  if (value === "dispatch_screenshot") return "Dispatch proof";
+  if (value === "packaging_photo") return "Packaging photo";
+  return labelize(value);
+}
+
+function proofStatusTone(status: SellerProofAsset["status"]) {
+  if (status === "verified") return "good";
+  if (status === "rejected") return "risk";
+  return "watch";
+}
+
+function proofStatusLabel(status: SellerProofAsset["status"]) {
+  if (status === "verified") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Admin review";
+}
+
+function recommendedProofTypeForAttribute(attribute: string) {
+  if (attribute === "size") return "measurement_chart";
+  if (attribute === "fabric") return "fabric_closeup";
+  if (attribute === "packaging") return "packaging_photo";
+  if (attribute === "offer") return "seller_note";
+  return "daylight_photo";
+}
+
+function proofTypeMatchesAttribute(attribute: string, proofType: string) {
+  return recommendedProofTypeForAttribute(attribute) === proofType;
+}
+
+function sellerCoachProviderStatus(provider: SellerActionBoard["agent"]["provider"], copy: SellerCopy) {
+  if (provider === "gemini") {
+    return { label: copy.aiCoachLive, tone: "good" as const };
+  }
+  if (provider === "fallback_after_llm_error") {
+    return { label: copy.aiFallbackActive, tone: "watch" as const };
+  }
+  return { label: copy.evidenceRulesActive, tone: "neutral" as const };
+}
+
+function isRecognizedAssetReference(value: string) {
+  return value.startsWith("https://") ||
+    value.startsWith("seller-asset://") ||
+    value.startsWith("seeded://") ||
+    value.startsWith("uploaded://") ||
+    value.startsWith("data:image/") ||
+    value.startsWith("data:application/pdf");
+}
+
+function isAllowedUploadFile(file: File, acceptedTypes: string[], maxBytes: number) {
+  return acceptedTypes.includes(file.type) && file.size <= maxBytes;
+}
+
+function proofTypeAcceptsFile(proofType: string, file: File) {
+  if (proofType === "seller_note") return file.type === "application/pdf" || file.type.startsWith("image/");
+  return file.type.startsWith("image/") || file.type === "application/pdf";
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function dataUrlToBase64(value: string) {
+  const marker = ";base64,";
+  const index = value.indexOf(marker);
+  return index >= 0 ? value.slice(index + marker.length) : value;
+}
+
+function priorityRank(priority: SellerEvidenceCoachTask["priority"]) {
+  if (priority === "high") return 0;
+  if (priority === "medium") return 1;
+  return 2;
+}
+
+function parseSellerTopFeature(pathname: string): SellerTopFeature {
+  const normalized = pathname.replace(/\/$/, "") || "/seller";
+  if (normalized === "/seller/proofs" || normalized.startsWith("/seller/proofs/")) return "proofs";
+  if (normalized === "/seller/trust-coach" || normalized.startsWith("/seller/trust-coach/")) return "trust_coach";
+  if (normalized === "/seller/copilot" || normalized.startsWith("/seller/copilot/")) return "trust_coach";
+  if (normalized === "/seller/autopilot" || normalized.startsWith("/seller/autopilot/")) return "trust_coach";
+  if (normalized === "/seller/listing-lab" || normalized.startsWith("/seller/listing-lab/")) return "trust_coach";
+  if (normalized === "/seller/rating-forecast" || normalized.startsWith("/seller/rating-forecast/")) return "trust_coach";
+  return "console";
+}
+
+function parseSellerWorkbenchTab(value: string | null): SellerWorkbenchTab | null {
+  if (value === "requests" || value === "proof_library") return "proofs_submitted";
+  if (value === "overview" ||
+    value === "products" ||
+    value === "proofs_submitted" ||
+    value === "add_product" ||
+    value === "performance") {
+    return value;
+  }
+  return null;
+}
+
 function labelize(value: string) {
   return value.replace(/_/g, " ");
 }
