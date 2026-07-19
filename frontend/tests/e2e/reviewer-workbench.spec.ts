@@ -22,10 +22,16 @@ test("mobile reviewer navigation and upload actions remain complete", async ({ p
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/admin/uploads");
 
-  await expectFullyInsideViewport(page, page.getByRole("button", { name: "Work Saved" }));
+  for (const label of ["Review Desk", "AI Triage", "Risk & Policy", "Work Saved"]) {
+    await expectFullyInsideViewport(page, page.getByRole("button", { name: label }));
+  }
   const cards = page.getByTestId("reviewer-upload-cards");
   await expect(cards).toBeVisible();
-  await expect(cards.getByRole("button", { name: "Review" }).first()).toBeVisible();
+  await cards.getByRole("button", { name: "Review" }).first().click();
+  await expect(page.getByText("Selected upload", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Approve (document|proof)/ })).toBeVisible();
+  await page.getByRole("button", { name: "Back to uploads" }).click();
+  await expect(cards).toBeVisible();
   await expect(cards.getByText("Submitted", { exact: true }).first()).toBeVisible();
   await expect(cards.getByText("Checks", { exact: true }).first()).toBeVisible();
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);

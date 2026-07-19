@@ -648,6 +648,10 @@
 }
 
 @media (max-width: 760px) {
+  .admin-app-route .reviewer-workbench .seller-uploads-layout.has-selection > .seller-uploads-table-panel {
+    display: none !important;
+  }
+
   .admin-app-route .web-header {
     padding: 10px 12px !important;
   }
