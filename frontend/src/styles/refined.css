@@ -299,35 +299,11 @@ input:focus {
 
 /* Buyer catalog */
 .marketplace-home {
-  gap: 18px;
+  gap: 14px;
 }
 
-.buyer-shop-hero {
-  align-items: end;
-  padding: 18px 4px 4px;
-}
-
-.buyer-shop-copy h2 {
-  font-size: 64px;
-  font-weight: 950;
-  line-height: 0.95;
-  max-width: 780px;
-  text-transform: uppercase;
-}
-
-.buyer-shop-copy p {
-  font-size: 15px;
-  max-width: 520px;
-}
-
-.shop-trust-row span {
-  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
-  border-color: var(--border-subtle);
-  color: var(--text-primary);
-}
-
-.shop-search-card,
-.sarthi-nudge-strip,
+.marketplace-toolbar,
+.marketplace-trust-strip,
 .trust-radar-card,
 .cart-confidence-card,
 .sarthi-lens-panel,
