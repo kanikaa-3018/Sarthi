@@ -1,10 +1,8 @@
-﻿/* -------------------------------------------------------------
+/* -------------------------------------------------------------
    ADMIN REVIEW WORKSPACE
 ------------------------------------------------------------- */
 .admin-review-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -50,7 +48,7 @@
 
 .admin-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
@@ -78,7 +76,7 @@
 
 .admin-stat-card strong {
   color: var(--forest-green);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-sans);
   font-size: 24px;
   line-height: 1;
 }
@@ -570,9 +568,9 @@
    TRUST CENTER
 ------------------------------------------------------------- */
 .trust-center-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -590,6 +588,45 @@
   gap: 20px;
   box-shadow: var(--shadow-sm);
 }
+.admin-proof-preview {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-beige);
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  margin: 12px 0;
+  padding: 10px;
+}
+
+.admin-proof-preview img {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  object-fit: cover;
+  width: 64px;
+}
+
+.admin-proof-preview strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 14px;
+}
+
+.admin-proof-preview p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 3px 0;
+}
+
+.admin-proof-preview small {
+  color: var(--text-muted);
+  display: block;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 
 .trust-hero-simple p {
   color: var(--text-secondary);
