@@ -191,6 +191,12 @@ export function SarthiSavedWorkspacePanel({
         </div>
       </header>
 
+      <nav className="buyer-check-steps" aria-label="Trust check steps">
+        <span className="complete"><b>1.</b> Saved item</span>
+        <span className={sourceCount > 0 ? "complete" : "active"}><b>2.</b> Evidence checked</span>
+        <span className={result ? "active" : ""}><b>3.</b> Choose safely</span>
+      </nav>
+
       <main className="buyer-simple-main">
         <section className="buyer-simple-decision-card">
           <div className="buyer-simple-decision-copy">
@@ -246,17 +252,22 @@ export function SarthiSavedWorkspacePanel({
 
         <form
           className="buyer-simple-question"
+          aria-label="Ask from verified facts"
           onSubmit={(event) => {
             event.preventDefault();
             onAskDecision(decisionQuestion || entryCopy.defaultQuestion, savedProduct);
           }}
         >
           <MessageCircle size={18} />
-          <input
-            value={decisionQuestion}
-            onChange={(event) => onDecisionQuestionChange(event.target.value)}
-            placeholder={entryCopy.questionPlaceholder}
-          />
+          <div className="buyer-simple-question-copy">
+            <strong>Ask from verified facts</strong>
+            <span>Answers use verified product, seller, return, and proof records only.</span>
+            <input
+              value={decisionQuestion}
+              onChange={(event) => onDecisionQuestionChange(event.target.value)}
+              placeholder={entryCopy.questionPlaceholder}
+            />
+          </div>
           <button type="submit" disabled={decisionLoading}>
             {decisionLoading ? t(language, "checkingEllipsis") : t(language, "check")}
           </button>

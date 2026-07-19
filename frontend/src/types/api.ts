@@ -10,6 +10,7 @@ export type Product = {
   color_family: string;
   base_price: number;
   image_url: string;
+  image_urls?: string[];
   rating: number;
   rating_count: number;
   commerce_badge: string;

@@ -7,12 +7,13 @@ export type { DemoRole };
 export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
 
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
-const E2E_DATABASE_NAME = "sarthi_codex_auth_e2e";
+const E2E_DATABASE_NAME = process.env.MONGODB_DB ?? "sarthi_codex_auth_e2e";
 
 export async function resetSeed(request: APIRequestContext) {
   const health = await request.get(`${API_BASE}/health`);
   expect(health.ok(), await health.text()).toBeTruthy();
   const environment = await health.json() as { db?: string };
+  expect(E2E_DATABASE_NAME, "Refusing to reset a database without an e2e marker").toMatch(/(?:^|_)e2e(?:_|$)/);
   expect(environment.db, "Refusing to reset a non-E2E database").toBe(E2E_DATABASE_NAME);
 
   const response = await request.post(`${API_BASE}/seed/reset`);

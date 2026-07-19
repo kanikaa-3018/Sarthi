@@ -29,7 +29,7 @@ export default defineConfig({
         ...inheritedEnv,
         NODE_ENV: "test",
         PORT: String(apiPort),
-        MONGODB_DB: "sarthi_codex_auth_e2e",
+        MONGODB_DB: process.env.MONGODB_DB ?? "sarthi_codex_auth_e2e",
         DEMO_CONTROLS_ENABLED: "true"
       }
     },
