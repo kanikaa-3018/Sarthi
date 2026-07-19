@@ -1,5 +1,5 @@
-import { ArrowLeft, ArrowRight, Check, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, ImageOff, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { ListingDraft, SellerOnboardingResponse } from "../../types/api";
 import { SellerVerificationPanel, type SellerVerificationSubmission } from "./SellerVerificationPanel";
 
@@ -122,7 +122,7 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
         <p className="seller-step-count">Step {stage} of 3</p>
         {stage === 1 && (
           <div className="seller-form-grid">
-            <div className="seller-field seller-field-wide">
+            <div className="seller-field seller-field-wide seller-field-title">
               <label htmlFor="seller-title">Product title</label>
               <input id="seller-title" name="title" value={draft.title} onChange={(event) => update("title", event.target.value)} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? "seller-title-error" : undefined} />
               {errors.title && <span id="seller-title-error" className="seller-field-error">{errors.title}</span>}
@@ -131,7 +131,7 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
             <SellerTextField label="Garment type" name="garment_type" value={draft.garment_type} error={errors.garment_type} onChange={(value) => update("garment_type", value)} />
             <SellerTextField label="Fabric" name="fabric" value={draft.fabric} error={errors.fabric} onChange={(value) => update("fabric", value)} />
             <SellerTextField label="Colour family" name="color_family" value={draft.color_family} error={errors.color_family} onChange={(value) => update("color_family", value)} />
-            <div className="seller-field seller-field-wide">
+            <div className="seller-field seller-field-wide seller-field-price">
               <label htmlFor="seller-base-price">Base price</label>
               <div className="seller-money-input"><span>₹</span><input id="seller-base-price" name="base_price" type="number" min="1" value={draft.base_price} onChange={(event) => update("base_price", event.target.value)} aria-invalid={Boolean(errors.base_price)} aria-describedby={errors.base_price ? "seller-base-price-error" : undefined} /></div>
               {errors.base_price && <span id="seller-base-price-error" className="seller-field-error">{errors.base_price}</span>}
@@ -142,7 +142,7 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
         {stage === 2 && (
           <div className="seller-image-stage">
             <div className="seller-image-preview">
-              {draft.image_url ? <img src={draft.image_url} alt="Selected listing preview" /> : <div><Upload size={24} aria-hidden="true" /><strong>Add the actual product image</strong><p>Use a clear front view. Avoid promotional banners or unrelated catalog art.</p></div>}
+              {draft.image_url ? <SellerListingImage src={draft.image_url} title={draft.title || "Selected listing"} /> : <div><Upload size={24} aria-hidden="true" /><strong>Add the actual product image</strong><p>Use a clear front view. Avoid promotional banners or unrelated catalog art.</p></div>}
             </div>
             <div className="seller-image-controls">
               <label className="seller-upload-control">
@@ -162,7 +162,7 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
 
         {stage === 3 && (
           <div className="seller-review-layout">
-            <img src={draft.image_url} alt="" />
+            <SellerListingImage src={draft.image_url} title={draft.title} />
             <dl>
               <div><dt>Title</dt><dd>{draft.title}</dd></div>
               <div><dt>Category</dt><dd>{draft.category}</dd></div>
@@ -196,6 +196,32 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
       </section>
     </div>
   );
+}
+
+function SellerListingImage({ src, title }: { src: string; title: string }) {
+  const [failed, setFailed] = useState(!isBrowserPreviewableImage(src));
+
+  useEffect(() => {
+    setFailed(!isBrowserPreviewableImage(src));
+  }, [src]);
+
+  return (
+    <div className="seller-listing-image-frame">
+      {failed ? (
+        <div className="seller-listing-image-fallback" role="img" aria-label={`${title} image preview unavailable`}>
+          <ImageOff size={22} aria-hidden="true" />
+          <strong>Preview unavailable</strong>
+          <span>Check the image link before sending this listing.</span>
+        </div>
+      ) : (
+        <img src={src} alt="" onError={() => setFailed(true)} />
+      )}
+    </div>
+  );
+}
+
+function isBrowserPreviewableImage(value: string): boolean {
+  return value.startsWith("https://") || /^data:image\/(jpeg|png|webp);base64,/i.test(value);
 }
 
 function SellerTextField({ label, name, value, error, onChange }: { label: string; name: keyof DraftState; value: string; error?: string; onChange: (value: string) => void }) {

@@ -6,8 +6,18 @@ test.beforeEach(async ({ request }) => {
 });
 
 test("seller demo account signs in through the visible login flow", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto("/login");
   await page.getByRole("button", { name: /Seller.*Aggregate evidence only/i }).click();
+  const authViewport = await page.evaluate(() => ({
+    horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    verticalOverflow: document.documentElement.scrollHeight - window.innerHeight
+  }));
+  expect(authViewport.horizontalOverflow).toBeLessThanOrEqual(0);
+  expect(authViewport.verticalOverflow).toBeLessThanOrEqual(0);
+  const usernameWidth = (await page.getByLabel("Username").boundingBox())?.width ?? 0;
+  const passwordWidth = (await page.getByLabel("Password", { exact: true }).boundingBox())?.width ?? 0;
+  expect(Math.abs(usernameWidth - passwordWidth)).toBeLessThanOrEqual(1);
   await page.getByRole("button", { name: "Use demo" }).click();
   await expect(page.getByLabel("Username")).toHaveValue("seller.a");
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
@@ -45,10 +55,14 @@ test("seller routes expose focused workspaces", async ({ page, request }) => {
 });
 
 test("new listing keeps seller input while moving through guided steps", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
   await loginAs(page, request, "seller");
   await page.goto("/seller/new");
 
   await expect(page.getByText("Step 1 of 3").first()).toBeVisible();
+  const continueButton = await page.getByRole("button", { name: "Continue to image" }).boundingBox();
+  expect(continueButton).not.toBeNull();
+  expect((continueButton?.y ?? 0) + (continueButton?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
   await page.getByLabel("Product title").fill("Blue cotton kurti");
   await page.getByLabel("Category").fill("women_kurtis");
   await page.getByLabel("Garment type").fill("kurti");
@@ -60,6 +74,11 @@ test("new listing keeps seller input while moving through guided steps", async (
   await expect(page.getByText("Step 2 of 3").first()).toBeVisible();
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByLabel("Product title")).toHaveValue("Blue cotton kurti");
+  await page.getByRole("button", { name: "Continue to image" }).click();
+  await page.getByLabel("Or use a secure image link").fill("seeded://products/e2e/listing.jpg");
+  await page.getByRole("button", { name: "Review listing" }).click();
+  await expect(page.getByRole("img", { name: "Blue cotton kurti image preview unavailable" })).toBeVisible();
+  await expect.poll(() => page.locator(".seller-review-layout img").evaluateAll((images) => images.filter((image) => image.complete && image.naturalWidth === 0).length)).toBe(0);
 });
 
 test("verification documents appear only when verification blocks listing visibility", async ({ page, request }) => {
@@ -110,6 +129,7 @@ test("verification documents appear only when verification blocks listing visibi
 });
 
 test("Market Compare explains evidence and one best improvement", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
   await loginAs(page, request, "seller");
   await page.goto("/seller/market");
 
@@ -119,6 +139,9 @@ test("Market Compare explains evidence and one best improvement", async ({ page,
   await expect(page.getByRole("row", { name: /Fit feedback/i })).toBeVisible();
   await expect(page.getByText("Why this position")).toBeVisible();
   await expect(page.getByText("Best next improvement")).toBeVisible();
+  const recommendationBox = await page.locator(".seller-market-recommendation").boundingBox();
+  expect(recommendationBox).not.toBeNull();
+  expect((recommendationBox?.y ?? 0) + (recommendationBox?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
   await expect(page.getByText("Other useful improvements")).toHaveCount(0);
   await expect(page.getByText(/percentile|AI score/i)).toHaveCount(0);
   await expect(page.getByText(/Stronger evidence than 0 of/i)).toHaveCount(0);
@@ -210,6 +233,30 @@ test("seller mobile routes keep their focused hierarchy without horizontal overf
       .filter((item) => item.left < -2 || item.right > window.innerWidth + 2)
       .slice(0, 8)) : [];
     expect(overflow, `${path} horizontal overflow: ${JSON.stringify(overflowSources)}`).toBeLessThanOrEqual(2);
+
+    if (path === "/seller/products") {
+      const clippedFilters = await page.getByLabel("Product status filters").getByRole("button").evaluateAll((buttons) => buttons.filter((button) => {
+        const box = button.getBoundingClientRect();
+        return box.left < -1 || box.right > window.innerWidth + 1;
+      }).length);
+      expect(clippedFilters).toBe(0);
+    }
+
+    if (path === "/seller/new") {
+      const clippedSteps = await page.getByRole("list", { name: "Listing progress" }).getByRole("listitem").evaluateAll((items) => items.filter((item) => {
+        const box = item.getBoundingClientRect();
+        return box.left < -1 || box.right > window.innerWidth + 1;
+      }).length);
+      expect(clippedSteps).toBe(0);
+    }
+
+    if (path === "/seller/market") {
+      const recommendation = await page.locator(".seller-market-recommendation").boundingBox();
+      const selectedProduct = await page.locator(".seller-market-product").boundingBox();
+      expect(recommendation).not.toBeNull();
+      expect(selectedProduct).not.toBeNull();
+      expect(recommendation?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(selectedProduct?.y ?? 0);
+    }
 
     if (path === "/seller/proofs") {
       const clippedTabs = await page.getByRole("tab").evaluateAll((tabs) => tabs.filter((tab) => {
