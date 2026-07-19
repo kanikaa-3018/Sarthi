@@ -575,6 +575,7 @@ function AgentRoomView({
             </button>
           )}
         </aside>
+      </div>
     </section>
   );
 }
@@ -595,7 +596,6 @@ function AgentLane({
       <span>{title}</span>
       <strong>{count}</strong>
       <p>{detail}</p>
-      </div>
     </article>
   );
 }
@@ -616,6 +616,7 @@ function AgentQueueCard({
         <strong>{title}</strong>
         <span>{subtitle}</span>
         <small>{item.primary_action}</small>
+      </div>
       <div className="admin-priority-meta">
         <RiskPill level={item.risk_level} score={item.risk_score} />
         <SlaPill value={item.sla_state} ageHours={item.age_hours} />
@@ -627,7 +628,6 @@ function AgentQueueCard({
     </article>
   );
 }
-      </div>
 
 function PolicyBrainView({ queue }: { queue: AdminReviewQueue }) {
   const prescreens = collectPrescreens(queue);
