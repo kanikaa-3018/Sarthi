@@ -704,6 +704,8 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
       });
       closeProofTask();
       await loadPanel(selectedClusterId);
+      setProofSuccess(copy.proofSubmitted);
+      navigate("/seller/proofs");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit proof");
     } finally {
