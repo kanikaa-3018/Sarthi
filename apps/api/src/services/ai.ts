@@ -1,5 +1,6 @@
 import type {
   AiProvider,
+  EmbeddedText,
   GeneratedJson,
   StructuredGenerationInput
 } from "./aiTypes.js";
@@ -9,6 +10,7 @@ import { createBedrockProvider } from "./bedrock.js";
 import {
   geminiConfigured,
   geminiRuntimeStatus,
+  embedText as embedGeminiText,
   generateGeminiJson,
   parseJsonObject,
   type GeminiUserPart
@@ -147,4 +149,60 @@ export function embedWithBedrock(
   taskType: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT"
 ) {
   return bedrockProvider.embedText(text, taskType);
+}
+
+type EmbeddingAdapter = {
+  provider: AiProvider;
+  configured(): boolean;
+  embedText(
+    text: string,
+    taskType: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT",
+    title?: string
+  ): Promise<EmbeddedText>;
+};
+
+const embeddingAdapters: Record<AiProvider, EmbeddingAdapter> = {
+  bedrock: {
+    provider: "bedrock",
+    configured: () => env.bedrockEnabled
+      && env.providerOrder.includes("bedrock")
+      && Boolean(env.bedrockEmbeddingModel),
+    embedText: (text, taskType) => bedrockProvider.embedText(text, taskType)
+  },
+  gemini: {
+    provider: "gemini",
+    configured: geminiConfigured,
+    async embedText(text, taskType, title) {
+      const values = await embedGeminiText(text, taskType, title);
+      if (!values || values.length !== env.geminiEmbeddingDimensions) {
+        throw new AiProviderError(
+          "invalid_output",
+          `Gemini embedding must contain exactly ${env.geminiEmbeddingDimensions} dimensions`
+        );
+      }
+      return {
+        values,
+        provider: "gemini",
+        model: env.geminiEmbeddingModel,
+        dimensions: env.geminiEmbeddingDimensions
+      };
+    }
+  }
+};
+
+export function configuredEmbeddingProviders() {
+  return env.providerOrder.filter((provider) => embeddingAdapters[provider].configured());
+}
+
+export function embedTextWithProvider(
+  provider: AiProvider,
+  text: string,
+  taskType: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT",
+  title?: string
+) {
+  const adapter = embeddingAdapters[provider];
+  if (!adapter.configured()) {
+    throw new AiProviderError("availability", `${provider} embeddings are not configured`);
+  }
+  return adapter.embedText(text, taskType, title);
 }

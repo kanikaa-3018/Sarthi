@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { env } from "../config/env.js";
-import { embedText, geminiConfigured } from "./gemini.js";
+import { configuredEmbeddingProviders, embedTextWithProvider } from "./ai.js";
+import type { AiProvider, EmbeddedText } from "./aiTypes.js";
 
 export type SemanticEvidenceResult = {
   source:
@@ -8,7 +9,9 @@ export type SemanticEvidenceResult = {
     | "local_embedding_fallback"
     | "lexical_fallback"
     | "lexical_fallback_after_vector_error"
+    | "disabled_no_ai_provider"
     | "disabled_no_gemini_key";
+  embedding_provider?: AiProvider;
   query: string;
   results: Array<{
     doc_id: string;
@@ -34,110 +37,159 @@ type EvidenceDoc = {
 
 const MAX_EMBEDDING_DOCS_PER_QUERY = 16;
 
+type VectorNamespace = {
+  provider: AiProvider;
+  collection: string;
+  index: string;
+  model: string;
+  dimensions: number;
+};
+
+export function vectorNamespaceForProvider(provider: AiProvider): VectorNamespace {
+  if (provider === "bedrock") {
+    return {
+      provider,
+      collection: env.bedrockVectorSearchCollection,
+      index: env.bedrockVectorSearchIndex,
+      model: env.bedrockEmbeddingModel,
+      dimensions: env.bedrockEmbeddingDimensions
+    };
+  }
+  return {
+    provider,
+    collection: env.vectorSearchCollection,
+    index: env.vectorSearchIndex,
+    model: env.embeddingModel,
+    dimensions: env.embeddingDimensions
+  };
+}
+
 export async function semanticEvidenceSearch(db: Db, graph: any, query: string, limit = 5): Promise<SemanticEvidenceResult> {
   const docs = graphEvidenceDocuments(graph);
   if (!env.vectorSearchEnabled) {
     return lexicalSearch(query, docs, "lexical_fallback", limit);
   }
-  if (!geminiConfigured()) {
-    return lexicalSearch(query, docs, "disabled_no_gemini_key", limit);
+  const providers = configuredEmbeddingProviders();
+  if (!providers.length) {
+    return lexicalSearch(query, docs, "disabled_no_ai_provider", limit);
   }
 
-  try {
-    const queryVector = await embedText(query, "RETRIEVAL_QUERY");
-    if (!queryVector?.length) {
-      return lexicalSearch(query, docs, "disabled_no_gemini_key", limit);
-    }
-    await ensureGraphEmbeddings(db, docs);
-    const searchIndex = await searchIndexHealth(db);
-    if (searchIndex.status !== "ready_for_queries") {
-      const localFallback = await localEmbeddingSearch(db, docs, queryVector, query, limit);
-      if (localFallback.results.length) {
-        return localFallback;
+  const errors: string[] = [];
+  for (const provider of providers) {
+    const namespace = vectorNamespaceForProvider(provider);
+    try {
+      const queryEmbedding = await embedTextWithProvider(provider, query, "RETRIEVAL_QUERY");
+      await ensureGraphEmbeddings(db, docs, namespace);
+      const searchIndex = await searchIndexHealth(db, namespace);
+      if (searchIndex.status !== "ready_for_queries") {
+        const localFallback = await localEmbeddingSearch(db, docs, queryEmbedding, namespace, query, limit);
+        if (localFallback.results.length) {
+          return localFallback;
+        }
+        errors.push(searchIndex.error ?? `${provider} vector search index status: ${searchIndex.status}`);
+        continue;
       }
+      const collection = db.collection(namespace.collection);
+      const rows = await collection.aggregate([
+        {
+          $vectorSearch: {
+            index: namespace.index,
+            path: "embedding",
+            queryVector: queryEmbedding.values,
+            numCandidates: Math.max(40, limit * 20),
+            limit,
+            filter: { cluster_id: graph.cluster.cluster_id }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            doc_id: 1,
+            node_id: 1,
+            type: 1,
+            title: 1,
+            text: 1,
+            fact_ids: 1,
+            score: { $meta: "vectorSearchScore" }
+          }
+        }
+      ]).toArray();
       return {
-        ...lexicalSearch(query, docs, "lexical_fallback_after_vector_error", limit),
-        error: searchIndex.error ?? `Vector search index status: ${searchIndex.status}`
+        source: "atlas_vector_search",
+        embedding_provider: provider,
+        query,
+        results: rows.map((row: any) => ({
+          doc_id: row.doc_id,
+          node_id: row.node_id,
+          type: row.type,
+          title: row.title,
+          text: row.text,
+          fact_ids: row.fact_ids ?? [],
+          score: Number((row.score ?? 0).toFixed(3))
+        }))
       };
+    } catch (error) {
+      errors.push(`${provider}: ${publicError(error)}`);
     }
-    const collection = db.collection(env.vectorSearchCollection);
-    const rows = await collection.aggregate([
-      {
-        $vectorSearch: {
-          index: env.vectorSearchIndex,
-          path: "embedding",
-          queryVector,
-          numCandidates: Math.max(40, limit * 20),
-          limit,
-          filter: { cluster_id: graph.cluster.cluster_id }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          doc_id: 1,
-          node_id: 1,
-          type: 1,
-          title: 1,
-          text: 1,
-          fact_ids: 1,
-          score: { $meta: "vectorSearchScore" }
-        }
-      }
-    ]).toArray();
-    return {
-      source: "atlas_vector_search",
-      query,
-      results: rows.map((row: any) => ({
-        doc_id: row.doc_id,
-        node_id: row.node_id,
-        type: row.type,
-        title: row.title,
-        text: row.text,
-        fact_ids: row.fact_ids ?? [],
-        score: Number((row.score ?? 0).toFixed(3))
-      }))
-    };
-  } catch (error) {
-    return {
-      ...lexicalSearch(query, docs, "lexical_fallback_after_vector_error", limit),
-      error: publicError(error)
-    };
   }
-}
 
-export async function ensureVectorSearchIndexes(db: Db) {
-  const collection = db.collection(env.vectorSearchCollection);
-  await Promise.all([
-    collection.createIndex({ doc_id: 1, embedding_model: 1, embedding_dimensions: 1 }, { unique: true }),
-    collection.createIndex({ cluster_id: 1, node_id: 1 }),
-    collection.createIndex({ updated_at: -1 })
-  ]);
-}
-
-export async function vectorSearchHealth(db: Db) {
-  const count = await db.collection(env.vectorSearchCollection).estimatedDocumentCount().catch(() => 0);
-  const searchIndex = env.vectorSearchEnabled && geminiConfigured()
-    ? await searchIndexHealth(db)
-    : { status: null as null, error: null as string | null, index_exists: false };
-  const status = vectorRuntimeStatus(searchIndex.status);
   return {
-    enabled: env.vectorSearchEnabled,
-    status,
-    atlas_status: searchIndex.status,
-    collection: env.vectorSearchCollection,
-    index: env.vectorSearchIndex,
-    index_exists: searchIndex.index_exists,
-    embedding_model: env.embeddingModel,
-    embedding_dimensions: env.embeddingDimensions,
-    embedded_documents: count,
-    error: status === "local_embedding_fallback" ? null : searchIndex.error
+    ...lexicalSearch(query, docs, "lexical_fallback_after_vector_error", limit),
+    error: errors.join("; ").slice(0, 360)
   };
 }
 
-function vectorRuntimeStatus(status: string | null) {
+export async function ensureVectorSearchIndexes(db: Db) {
+  await Promise.all(configuredEmbeddingProviders().map(async (provider) => {
+    const namespace = vectorNamespaceForProvider(provider);
+    const collection = db.collection(namespace.collection);
+    await Promise.all([
+      collection.createIndex({ doc_id: 1, embedding_model: 1, embedding_dimensions: 1 }, { unique: true }),
+      collection.createIndex({ cluster_id: 1, node_id: 1 }),
+      collection.createIndex({ updated_at: -1 })
+    ]);
+  }));
+}
+
+export async function vectorSearchHealth(db: Db) {
+  const configuredProviders = configuredEmbeddingProviders();
+  const providers = await Promise.all(configuredProviders.map(async (provider) => {
+    const namespace = vectorNamespaceForProvider(provider);
+    const [count, searchIndex] = await Promise.all([
+      db.collection(namespace.collection).estimatedDocumentCount().catch(() => 0),
+      env.vectorSearchEnabled
+        ? searchIndexHealth(db, namespace)
+        : Promise.resolve({ status: null as null, error: null as string | null, index_exists: false })
+    ]);
+    return {
+      ...namespace,
+      atlas_status: searchIndex.status,
+      index_exists: searchIndex.index_exists,
+      embedded_documents: count,
+      error: searchIndex.error
+    };
+  }));
+  const primaryNamespace = providers[0] ?? vectorNamespaceForProvider(env.providerOrder[0] ?? "bedrock");
+  const status = vectorRuntimeStatus(primaryNamespace.atlas_status ?? null, configuredProviders.length);
+  return {
+    enabled: env.vectorSearchEnabled,
+    status,
+    atlas_status: primaryNamespace.atlas_status ?? null,
+    collection: primaryNamespace.collection,
+    index: primaryNamespace.index,
+    index_exists: primaryNamespace.index_exists ?? false,
+    embedding_model: primaryNamespace.model,
+    embedding_dimensions: primaryNamespace.dimensions,
+    embedded_documents: primaryNamespace.embedded_documents ?? 0,
+    embedding_provider: primaryNamespace.provider,
+    providers,
+    error: status === "local_embedding_fallback" ? null : primaryNamespace.error ?? null
+  };
+}
+
+function vectorRuntimeStatus(status: string | null, configuredProviderCount: number) {
   if (!env.vectorSearchEnabled) return "disabled";
-  if (!geminiConfigured()) return "waiting_for_gemini_key";
+  if (!configuredProviderCount) return "waiting_for_ai_provider";
   return status === "ready_for_queries" ? "ready_for_queries" : "local_embedding_fallback";
 }
 
@@ -147,9 +199,9 @@ export function isAtlasSearchUnsupported(error: unknown) {
   return code === 59 || /createSearchIndexes|listSearchIndexes|no such command|CommandNotFound/i.test(message);
 }
 
-async function searchIndexHealth(db: Db) {
+async function searchIndexHealth(db: Db, namespace: VectorNamespace) {
   try {
-    const indexes = await db.collection(env.vectorSearchCollection).listSearchIndexes(env.vectorSearchIndex).toArray();
+    const indexes = await db.collection(namespace.collection).listSearchIndexes(namespace.index).toArray();
     return {
       status: indexes.length ? "ready_for_queries" : "index_missing",
       error: null,
@@ -159,7 +211,7 @@ async function searchIndexHealth(db: Db) {
     if (isAtlasSearchUnsupported(error)) {
       return {
         status: "unsupported_mongodb",
-        error: "Current MongoDB server does not support Atlas Search indexes. Using local Gemini embedding similarity until MongoDB Atlas is configured.",
+        error: `Current MongoDB server does not support Atlas Search indexes. Using local ${namespace.provider} embedding similarity until MongoDB Atlas is configured.`,
         index_exists: false
       };
     }
@@ -213,25 +265,25 @@ function graphEvidenceDocuments(graph: any): EvidenceDoc[] {
   return [...nodeDocs, ...edgeDocs];
 }
 
-async function ensureGraphEmbeddings(db: Db, docs: EvidenceDoc[]) {
-  const collection = db.collection(env.vectorSearchCollection);
+async function ensureGraphEmbeddings(db: Db, docs: EvidenceDoc[], namespace: VectorNamespace) {
+  const collection = db.collection(namespace.collection);
   for (const doc of docs.slice(0, MAX_EMBEDDING_DOCS_PER_QUERY)) {
     const existing = await collection.findOne({
       doc_id: doc.doc_id,
-      embedding_model: env.embeddingModel,
-      embedding_dimensions: env.embeddingDimensions
+      embedding_model: namespace.model,
+      embedding_dimensions: namespace.dimensions
     }, { projection: { _id: 1 } });
     if (existing) continue;
-    const embedding = await embedText(doc.text, "RETRIEVAL_DOCUMENT", doc.title);
-    if (!embedding?.length) continue;
+    const embedded = await embedTextWithProvider(namespace.provider, doc.text, "RETRIEVAL_DOCUMENT", doc.title);
     await collection.updateOne(
-      { doc_id: doc.doc_id, embedding_model: env.embeddingModel, embedding_dimensions: env.embeddingDimensions },
+      { doc_id: doc.doc_id, embedding_model: namespace.model, embedding_dimensions: namespace.dimensions },
       {
         $set: {
           ...doc,
-          embedding,
-          embedding_model: env.embeddingModel,
-          embedding_dimensions: env.embeddingDimensions,
+          embedding: embedded.values,
+          embedding_provider: namespace.provider,
+          embedding_model: namespace.model,
+          embedding_dimensions: namespace.dimensions,
           updated_at: new Date().toISOString()
         }
       },
@@ -240,12 +292,19 @@ async function ensureGraphEmbeddings(db: Db, docs: EvidenceDoc[]) {
   }
 }
 
-async function localEmbeddingSearch(db: Db, docs: EvidenceDoc[], queryVector: number[], query: string, limit: number): Promise<SemanticEvidenceResult> {
+async function localEmbeddingSearch(
+  db: Db,
+  docs: EvidenceDoc[],
+  queryEmbedding: EmbeddedText,
+  namespace: VectorNamespace,
+  query: string,
+  limit: number
+): Promise<SemanticEvidenceResult> {
   const docIds = docs.map((doc) => doc.doc_id);
-  const rows = await db.collection(env.vectorSearchCollection).find({
+  const rows = await db.collection(namespace.collection).find({
     doc_id: { $in: docIds },
-    embedding_model: env.embeddingModel,
-    embedding_dimensions: env.embeddingDimensions
+    embedding_model: namespace.model,
+    embedding_dimensions: namespace.dimensions
   }, {
     projection: {
       _id: 0,
@@ -272,14 +331,19 @@ async function localEmbeddingSearch(db: Db, docs: EvidenceDoc[], queryVector: nu
         title: row.title ?? graphDoc.title,
         text: row.text ?? graphDoc.text,
         fact_ids: row.fact_ids ?? graphDoc.fact_ids,
-        score: Number(Math.max(0, cosineSimilarity(queryVector, embedding)).toFixed(3))
+        score: Number(Math.max(0, cosineSimilarity(queryEmbedding.values, embedding)).toFixed(3))
       };
     })
     .filter(Boolean)
     .sort((left: any, right: any) => right.score - left.score)
     .slice(0, limit);
 
-  return { source: "local_embedding_fallback", query, results: results as SemanticEvidenceResult["results"] };
+  return {
+    source: "local_embedding_fallback",
+    embedding_provider: namespace.provider,
+    query,
+    results: results as SemanticEvidenceResult["results"]
+  };
 }
 
 function cosineSimilarity(left: number[], right: number[]) {
