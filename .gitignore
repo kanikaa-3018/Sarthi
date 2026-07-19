@@ -18,6 +18,8 @@ dist/
 coverage/
 playwright-report/
 test-results/
+.worktrees/
+.playwright-cli/
 .runtime/
 .chrome-*/
 .admin*.png

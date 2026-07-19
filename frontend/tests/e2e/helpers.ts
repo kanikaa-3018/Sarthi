@@ -1,19 +1,20 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import crypto from "node:crypto";
+import { getDemoAccountForRole, type DemoRole } from "../../src/demoAccounts";
 
-export const API_BASE = "http://127.0.0.1:8000";
+export type { DemoRole };
+
+export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
 
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
-
-const accounts = {
-  buyer: { username: "asha.buyer", password: "buyer-asha-pass" },
-  seller: { username: "seller.a", password: "seller-a-pass" },
-  admin: { username: "reviewer.admin", password: "admin-reviewer-pass" }
-};
-
-export type DemoRole = keyof typeof accounts;
+const E2E_DATABASE_NAME = "sarthi_codex_auth_e2e";
 
 export async function resetSeed(request: APIRequestContext) {
+  const health = await request.get(`${API_BASE}/health`);
+  expect(health.ok(), await health.text()).toBeTruthy();
+  const environment = await health.json() as { db?: string };
+  expect(environment.db, "Refusing to reset a non-E2E database").toBe(E2E_DATABASE_NAME);
+
   const response = await request.post(`${API_BASE}/seed/reset`);
   expect(response.ok(), await response.text()).toBeTruthy();
 }
@@ -28,7 +29,7 @@ export async function loginAs(page: Page, request: APIRequestContext, role: Demo
 }
 
 export async function apiLogin(request: APIRequestContext, role: DemoRole) {
-  const account = accounts[role];
+  const account = getDemoAccountForRole(role);
   const response = await request.post(`${API_BASE}/auth/login`, {
     data: {
       username: account.username,

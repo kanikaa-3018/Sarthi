@@ -1,6 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const apiTarget = process.env.SARTHI_API_TARGET ?? "http://127.0.0.1:8000";
+const frontendPort = Number(process.env.SARTHI_FRONTEND_PORT ?? 5173);
+
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -21,11 +24,11 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5173,
+    port: frontendPort,
     allowedHosts: [".trycloudflare.com"],
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: apiTarget,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, "")
       }
