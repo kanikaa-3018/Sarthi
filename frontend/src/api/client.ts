@@ -70,7 +70,9 @@ export function clearStoredSession() {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const session = getStoredSession();
   const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
+  if (init?.body != null && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   if (session?.access_token) {
     headers.set("Authorization", `Bearer ${session.access_token}`);
   }

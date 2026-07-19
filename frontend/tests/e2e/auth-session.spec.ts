@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DEMO_ACCOUNTS, type AuthPortal } from "../../src/demoAccounts";
-import { resetSeed } from "./helpers";
+import { API_BASE, resetSeed } from "./helpers";
 
 const portalButtons: Record<AuthPortal, RegExp> = {
   buyer: /Buyer.*Private fit memory/i,
@@ -21,6 +21,29 @@ for (const portal of Object.keys(DEMO_ACCOUNTS) as AuthPortal[]) {
     await expect(page.getByText(account.displayName, { exact: true }).first()).toBeVisible();
   });
 }
+
+test("logout clears the browser session and revokes the API token", async ({ page, request }) => {
+  await loginThroughDemo(page, "buyer");
+  await expect(page).toHaveURL(DEMO_ACCOUNTS.buyer.defaultPath);
+  const stored = await page.evaluate(() => localStorage.getItem("sarthi.auth.session"));
+  expect(stored).not.toBeNull();
+  const token = (JSON.parse(stored!) as { access_token: string }).access_token;
+  const logoutResponse = page.waitForResponse((response) =>
+    response.url().endsWith("/api/auth/logout") && response.request().method() === "POST"
+  );
+
+  await page.getByTitle("Logout").click();
+  expect((await logoutResponse).status()).toBe(200);
+  await expect(page).toHaveURL("/login");
+  expect(await page.evaluate(() => localStorage.getItem("sarthi.auth.session"))).toBeNull();
+  await page.goto("/shop");
+  await expect(page).toHaveURL("/login");
+
+  const me = await request.get(`${API_BASE}/auth/me`, {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  expect(me.status()).toBe(401);
+});
 
 async function loginThroughDemo(page: Page, portal: AuthPortal) {
   const account = DEMO_ACCOUNTS[portal];
