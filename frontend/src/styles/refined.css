@@ -150,15 +150,13 @@ input:focus {
 }
 
 .ui-badge,
-.product-badge,
+.product-trust-badge,
 .radar-context-row span,
 .radar-chip-row span,
 .cart-confidence-chips span,
 .lens-evidence-chips span,
 .lens-guard-row span,
-.quick-search-row button,
-.category-chip-row button,
-.shop-trust-row span,
+.marketplace-category-row button,
 .trust-chip-list span {
   border-radius: 999px;
 }
