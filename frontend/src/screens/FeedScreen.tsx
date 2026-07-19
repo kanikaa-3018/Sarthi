@@ -596,10 +596,834 @@ function compareFromDecision(decision: RegretDecisionResponse): CompareResponse 
   };
 }
 
-function shopRouteMode(pathname: string): "feed" | "detail" | "saved" {
+function shopRouteMode(pathname: string): BuyerShopStep {
+  if (pathname.includes("/shop/wishlist")) return "wishlist";
+  if (pathname.includes("/shop/orders")) return "orders";
+  if (pathname.includes("/shop/proofs")) return "proofs";
   if (pathname.includes("/shop/product/")) return "detail";
   if (pathname.includes("/shop/saved/")) return "saved";
   return "feed";
+}
+
+function WishlistWorkspace({
+  buyerId,
+  products,
+  language,
+  onBack,
+  onViewProduct,
+  onCheckTrust,
+  onOpenProof
+}: {
+  buyerId: string;
+  products: Product[];
+  language: LanguageCode;
+  onBack: () => void;
+  onViewProduct: (product: Product) => void;
+  onCheckTrust: (product: Product) => void;
+  onOpenProof: (product: Product) => void;
+}) {
+  const [items, setItems] = useState<BuyerWishlistItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    getBuyerWishlist(buyerId)
+      .then((payload) => {
+        if (active) setItems(payload.items);
+      })
+      .catch((err: Error) => {
+        if (active) setError(err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [buyerId]);
+
+  return (
+    <section className="buyer-workspace-shell">
+      <div className="buyer-workspace-header">
+        <button type="button" onClick={onBack}>
+          {t(language, "shop")}
+        </button>
+        <div>
+          <span className="eyebrow">{t(language, "wishlist")}</span>
+          <h2>{items.length ? `${items.length} ${t(language, "saved")}` : t(language, "wishlist")}</h2>
+        </div>
+      </div>
+
+      {error && <div className="notice error">{error}</div>}
+      {loading ? (
+        <div className="workspace-empty-state">{t(language, "checkingEllipsis")}</div>
+      ) : items.length === 0 ? (
+        <div className="workspace-empty-state">
+          <Heart size={28} />
+          <strong>{t(language, "noWishlistYet")}</strong>
+          <button type="button" onClick={onBack}>{t(language, "shopNow")}</button>
+        </div>
+      ) : (
+        <div className="wishlist-card-grid">
+          {items.map((item) => {
+            const event = item.radar;
+            const savedProduct = item.product
+              ?? event?.candidates.find((candidate) => candidate.is_saved_product)?.product
+              ?? products.find((product) => product.product_id === event?.selected_product_id)
+              ?? event?.candidates[0]?.product;
+            const recommended = event?.candidates.find((candidate) => candidate.is_recommended) ?? event?.candidates[0];
+            if (!savedProduct) return null;
+            const actionProduct = recommended?.product ?? savedProduct;
+            const needsTrustCheck = !event || event.status === "needs_one_check";
+            return (
+              <article key={item.intent.intent_id} className="wishlist-product-card">
+                <div className="wishlist-product-top">
+                  <img
+                    src={productImageSource(savedProduct)}
+                    alt={savedProduct.title}
+                    onError={(e) => { e.currentTarget.src = fallbackProductImage(savedProduct.color_family); }}
+                  />
+                  <div>
+                    <span>{savedProduct.seller_name}</span>
+                    <strong>{savedProduct.title.split("-")[0].trim()}</strong>
+                    <small>Rs {savedProduct.base_price}</small>
+                  </div>
+                  <div className="wishlist-score-pill">
+                    <strong>{event ? Math.floor(event.recommended_score * 100) : "--"}</strong>
+                    <span>/100</span>
+                  </div>
+                </div>
+
+                <div className={`wishlist-status-line ${event?.status ?? "needs_one_check"}`}>
+                  <ShieldCheck size={15} />
+                  <strong>{event?.headline ?? t(language, "trustCheckReady")}</strong>
+                </div>
+
+                {recommended && (
+                  <div className="wishlist-recommendation-mini">
+                    <img
+                      src={productImageSource(recommended.product)}
+                      alt={recommended.product.title}
+                      onError={(e) => { e.currentTarget.src = fallbackProductImage(recommended.product.color_family); }}
+                    />
+                    <div>
+                      <span>{t(language, "bestMatchForYou")}</span>
+                      <strong>{recommended.product.seller_name}</strong>
+                    </div>
+                  </div>
+                )}
+
+                <div className="wishlist-actions">
+                  <button type="button" className="primary" onClick={() => onViewProduct(actionProduct)}>
+                    <Eye size={14} />
+                    {t(language, "viewItem")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => needsTrustCheck ? onCheckTrust(savedProduct) : onOpenProof(savedProduct)}
+                  >
+                    {needsTrustCheck ? <ShieldCheck size={14} /> : <FileCheck2 size={14} />}
+                    {needsTrustCheck ? t(language, "checkTrust") : t(language, "proof")}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OrdersWorkspace({
+  buyerId,
+  language,
+  onBack,
+  onViewProduct
+}: {
+  buyerId: string;
+  language: LanguageCode;
+  onBack: () => void;
+  onViewProduct: (product: Product) => void;
+}) {
+  const [orders, setOrders] = useState<BuyerOrderItem[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [feedbackOrderId, setFeedbackOrderId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const copy = ordersLearningCopy(language);
+  const placedCount = orders.filter(isPlacedOrder).length;
+  const learntCount = orders.filter(isLearntOrder).length;
+
+  useEffect(() => {
+    void loadOrders();
+  }, [buyerId]);
+
+  async function loadOrders() {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await getBuyerOrders(buyerId);
+      setOrders(payload.orders);
+      setPendingCount(payload.pending_feedback);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load orders");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="buyer-workspace-shell">
+      <div className="buyer-workspace-header">
+        <button type="button" onClick={onBack}>
+          {t(language, "shop")}
+        </button>
+        <div>
+          <span className="eyebrow">{t(language, "myOrders")}</span>
+          <h2>{pendingCount ? `${pendingCount} ${t(language, "feedbackPending")}` : t(language, "orders")}</h2>
+        </div>
+      </div>
+
+      {error && <div className="notice error">{error}</div>}
+      {loading ? (
+        <div className="workspace-empty-state">{t(language, "checkingEllipsis")}</div>
+      ) : orders.length === 0 ? (
+        <div className="workspace-empty-state">
+          <PackageCheck size={28} />
+          <strong>{t(language, "noOrdersYet")}</strong>
+          <button type="button" onClick={onBack}>{t(language, "shopNow")}</button>
+        </div>
+      ) : (
+        <>
+          <div className="orders-learning-strip" aria-label={copy.learningStatus}>
+            <span>
+              <PackageCheck size={15} />
+              <b>{placedCount}</b>
+              {copy.placed}
+            </span>
+            <span className={pendingCount > 0 ? "pending" : ""}>
+              <AlertTriangle size={15} />
+              <b>{pendingCount}</b>
+              {copy.feedback}
+            </span>
+            <span className="learnt">
+              <ShieldCheck size={15} />
+              <b>{learntCount}</b>
+              {copy.learnt}
+            </span>
+          </div>
+
+          <div className="orders-card-list">
+            {orders.map((order) => (
+              <article key={order.order_id} className={`order-product-card ${order.can_submit_outcome ? "pending" : ""}`}>
+                <div className="order-product-main">
+                  <img
+                    src={productImageSource(order.product)}
+                    alt={order.product.title}
+                    onError={(e) => { e.currentTarget.src = fallbackProductImage(order.product.color_family); }}
+                  />
+                  <div>
+                    <span>{new Date(order.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                    <strong>{order.product.title.split("-")[0].trim()}</strong>
+                    <small>{order.product.seller_name} | Size {order.variant.size} | Rs {order.variant.current_price}</small>
+                  </div>
+                  <div className={`order-status-pill ${orderStatusTone(order)}`}>
+                    {order.can_submit_outcome ? <PackageCheck size={14} /> : order.status === "returned" ? <RotateCcw size={14} /> : <ShieldCheck size={14} />}
+                    <span>{orderStatusLabel(order, language)}</span>
+                  </div>
+                </div>
+
+                {order.return_reason && (
+                  <div className="order-return-reason">
+                    <AlertTriangle size={14} />
+                    <span>{labelize(order.return_reason)}</span>
+                  </div>
+                )}
+
+                {order.payment_mode && (
+                  <div className={`order-payment-reward ${order.payment_mode}`}>
+                    {order.payment_mode === "prepaid" ? <Gift size={14} /> : <ShieldCheck size={14} />}
+                    <span>{orderPaymentRewardLine(order, language)}</span>
+                  </div>
+                )}
+
+                {isPlacedOrder(order) && (
+                  <div className="order-next-step-line">
+                    <PackageCheck size={14} />
+                    <span>{copy.feedbackAfterDelivery}</span>
+                  </div>
+                )}
+
+                {feedbackOrderId === order.order_id ? (
+                  <div className="order-feedback-panel">
+                    <OutcomeScreen
+                      buyerId={buyerId}
+                      variantId={order.variant_id}
+                      contractId={order.contract_id}
+                      language={language}
+                      buyingForSomeoneElse={Boolean(order.buying_for_someone_else)}
+                      wearerLabel={order.wearer_label ?? undefined}
+                      onClose={() => {
+                        setFeedbackOrderId(null);
+                        void loadOrders();
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="order-actions">
+                    <button type="button" onClick={() => onViewProduct(order.product)}>
+                      <Eye size={14} />
+                      {t(language, "viewItem")}
+                    </button>
+                    {order.can_submit_outcome && (
+                      <button type="button" className="primary" onClick={() => setFeedbackOrderId(order.order_id)}>
+                        <PackageCheck size={14} />
+                        {t(language, "giveFeedback")}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function isPlacedOrder(order: BuyerOrderItem) {
+  return order.status === "placed" || order.status === "placed_pending_feedback";
+}
+
+function isLearntOrder(order: BuyerOrderItem) {
+  return order.status === "delivered_kept" || order.status === "returned" || order.status === "exchanged" || order.status === "rto";
+}
+
+function ordersLearningCopy(language: LanguageCode) {
+  if (language === "hindi" || language === "hinglish") {
+    return {
+      learningStatus: "Order learning status",
+      placed: "placed",
+      feedback: "feedback due",
+      learnt: "learnt",
+      feedbackAfterDelivery: "Delivery ke baad feedback open hoga. Sarthi return aur fit learning tab update karega."
+    };
+  }
+  return {
+    learningStatus: "Order learning status",
+    placed: "placed",
+    feedback: "feedback due",
+    learnt: "learnt",
+    feedbackAfterDelivery: "Feedback opens after delivery. Sarthi updates return and fit learning then."
+  };
+}
+
+function orderPaymentRewardLine(order: BuyerOrderItem, language: LanguageCode) {
+  const points = order.payment_reward_points ?? 0;
+  const value = order.payment_reward_value_rupees ?? 0;
+  const savings = order.payment_offer_savings_rupees ?? 0;
+  if (order.payment_mode === "prepaid" && points > 0) {
+    if (language === "hindi") {
+      return `${points} सार्थी पॉइंट्स खुले - Rs ${value} अगले ऑर्डर में, कुल फायदा Rs ${savings}`;
+    }
+    if (language === "hinglish") {
+      return `${points} Sarthi points unlocked - Rs ${value} next order value, total benefit Rs ${savings}`;
+    }
+    return `${points} Sarthi points unlocked - Rs ${value} next order value, Rs ${savings} total benefit`;
+  }
+  if (order.payment_mode === "prepaid") {
+    return language === "hindi"
+      ? "Prepaid चुना गया - डिलीवरी के बाद रिवार्ड अपडेट होगा।"
+      : language === "hinglish"
+        ? "Prepaid selected - reward delivery ke baad update hoga."
+        : "Prepaid selected - reward updates after delivery.";
+  }
+  return language === "hindi"
+    ? "COD चुना गया - सार्थी ने भरोसा पहले रखा।"
+    : language === "hinglish"
+      ? "COD selected - Sarthi ne trust ko pehle rakha."
+      : "COD selected - Sarthi kept trust first.";
+}
+
+function ProofsWorkspace({
+  buyerId,
+  language,
+  onBack,
+  onViewProduct,
+  onOpenProductProof
+}: {
+  buyerId: string;
+  language: LanguageCode;
+  onBack: () => void;
+  onViewProduct: (product: Product) => void;
+  onOpenProductProof: (product: Product) => void;
+}) {
+  const [items, setItems] = useState<BuyerProofLedgerItem[]>([]);
+  const [summary, setSummary] = useState({
+    waiting_seller: 0,
+    admin_review: 0,
+    approved: 0,
+    needs_more_proof: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const totalOpen = summary.waiting_seller + summary.admin_review + summary.needs_more_proof;
+  const totalLift = items.reduce((sum, item) => sum + item.trust_impact.lift_points, 0);
+  const copy = proofLedgerCopy(language);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    getBuyerProofs(buyerId)
+      .then((payload) => {
+        if (!active) return;
+        setItems(payload.items);
+        setSummary(payload.summary);
+      })
+      .catch((err: Error) => {
+        if (active) setError(err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [buyerId]);
+
+  return (
+    <section className="buyer-workspace-shell proof-ledger-shell">
+      <div className="buyer-workspace-header">
+        <button type="button" onClick={onBack}>
+          {t(language, "shop")}
+        </button>
+        <div>
+          <span className="eyebrow">{copy.proofTracker}</span>
+          <h2>{items.length ? copy.proofsYouAskedFor : copy.myProofChecks}</h2>
+          <p>{copy.trackerSummary}</p>
+        </div>
+      </div>
+
+      <div className="proof-tracker-hero" aria-label="Proof check summary">
+        <div className={totalOpen > 0 ? "needs-action" : "all-clear"}>
+          <span>{copy.openChecks}</span>
+          <strong>{totalOpen}</strong>
+          <small>{copy.sellerOrAdminPending}</small>
+        </div>
+        <div className="approved">
+          <span>{copy.approvedProof}</span>
+          <strong>{summary.approved}</strong>
+          <small>{copy.canHelpNow}</small>
+        </div>
+        <div className="lift">
+          <span>{copy.possibleTrustLift}</span>
+          <strong>+{totalLift}</strong>
+          <small>{copy.estimatedPoints}</small>
+        </div>
+      </div>
+
+      {error && <div className="notice error">{error}</div>}
+      {loading ? (
+        <div className="workspace-empty-state">{copy.checkingProofStatus}</div>
+      ) : items.length === 0 ? (
+        <div className="workspace-empty-state">
+          <ClipboardCheck size={28} />
+          <strong>{copy.noProofChecks}</strong>
+          <p>{copy.askQuestionOrSave}</p>
+          <button type="button" onClick={onBack}>{t(language, "shopNow")}</button>
+        </div>
+      ) : (
+        <div className="proof-ledger-list proof-tracker-list">
+          {items.map((item) => (
+            <article key={item.request.request_id} className={`proof-ledger-card proof-tracker-card ${item.status}`}>
+              <div className="proof-card-topline">
+                <div className="proof-ledger-product">
+                  <img
+                    src={productImageSource(item.product)}
+                    alt={item.product.title}
+                    onError={(e) => { e.currentTarget.src = fallbackProductImage(item.product.color_family); }}
+                  />
+                  <div>
+                    <span>{item.product.seller_name}</span>
+                    <strong>{item.product.title.split("-")[0].trim()}</strong>
+                    <small>
+                      {proofAttributeLabel(item.request.attribute, language)} {copy.proof} - {item.request.request_count} {copy.buyerAsks}
+                    </small>
+                  </div>
+                </div>
+                <span className={`proof-decision-pill ${item.status}`}>
+                  {proofLedgerStatusLabel(item.status, language)}
+                </span>
+              </div>
+
+              <div className="proof-safe-action">
+                <div>
+                  <span>{copy.nextSafeStep}</span>
+                  <strong>{proofNextSafeAction(item.status, language)}</strong>
+                  <p>{proofLedgerSummary(item.status, item.trust_impact.lift_points, language)}</p>
+                </div>
+                <div className={`proof-trust-score ${item.trust_impact.lift_points > 0 ? "lift" : "waiting"}`}>
+                  <span>{copy.trustScore}</span>
+                  <strong>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</strong>
+                  <em>+{item.trust_impact.lift_points} pts</em>
+                </div>
+              </div>
+
+              <details className="proof-ledger-more">
+                <summary>{copy.details}: {proofQualityVerdict(item.proof_quality.score, item.status, language)}</summary>
+                <div className="proof-quality-card">
+                  <div className="proof-quality-head">
+                    <span>{copy.proofQuality}</span>
+                    <strong>{item.proof_quality.score}/100</strong>
+                  </div>
+                  <div className="proof-quality-checks">
+                    {item.proof_quality.checks.slice(0, 3).map((check) => (
+                      <span key={check.key} className={check.passed ? "pass" : "wait"}>
+                        {check.passed ? "OK" : "!"} {proofQualityCheckLabel(check.key, language)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="proof-ledger-timeline">
+                  {item.timeline.map((step, index) => (
+                    <div key={step.label} className={step.done ? "done" : ""}>
+                      <span />
+                      <strong>{proofTimelineLabel(index, step.label, language)}</strong>
+                      <small>{step.at ? new Date(step.at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : copy.pending}</small>
+                    </div>
+                  ))}
+                </div>
+
+                {item.proof_asset && (
+                  <div className="proof-ledger-asset">
+                    <strong>{item.proof_asset.title}</strong>
+                  <p>{item.proof_asset.description}</p>
+                </div>
+              )}
+              </details>
+
+              <div className="proof-ledger-actions">
+                <button type="button" onClick={() => onViewProduct(item.product)}>
+                  {t(language, "viewItem")}
+                </button>
+                <button type="button" className="primary" onClick={() => onOpenProductProof(item.product)}>
+                  {copy.seeProof}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type ProofLedgerCopyKey =
+  | "proofTracker"
+  | "proofsYouAskedFor"
+  | "myProofChecks"
+  | "trackerSummary"
+  | "openChecks"
+  | "sellerOrAdminPending"
+  | "approvedProof"
+  | "canHelpNow"
+  | "possibleTrustLift"
+  | "estimatedPoints"
+  | "checkingProofStatus"
+  | "noProofChecks"
+  | "askQuestionOrSave"
+  | "proof"
+  | "buyerAsks"
+  | "trustImpact"
+  | "trustScore"
+  | "proofQuality"
+  | "pending"
+  | "nextSafeStep"
+  | "details"
+  | "seeProof"
+  | "proofApproved"
+  | "adminChecking"
+  | "needsClearerProof"
+  | "waitingSeller"
+  | "safeToUseProof"
+  | "waitForReviewAction"
+  | "askClearerProofAction"
+  | "waitForSellerAction"
+  | "proofCanHelp"
+  | "sellerResponded"
+  | "currentProofWeak"
+  | "sellerNotAnswered"
+  | "trustCanImprove"
+  | "trustWaits"
+  | "strongProof"
+  | "usefulButPending"
+  | "weakProof"
+  | "noProofYet"
+  | "buyerAsked"
+  | "sellerSubmitted"
+  | "adminApproved";
+
+const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>> = {
+  english: {
+    proofTracker: "Proof tracker",
+    proofsYouAskedFor: "Proofs you asked for",
+    myProofChecks: "My proof checks",
+    trackerSummary: "Track seller proof, admin review, and how much trust can improve.",
+    openChecks: "Open checks",
+    sellerOrAdminPending: "Seller or admin action pending",
+    approvedProof: "Approved proof",
+    canHelpNow: "Can help your decision now",
+    possibleTrustLift: "Possible trust lift",
+    estimatedPoints: "Estimated points from proof checks",
+    checkingProofStatus: "Checking proof status...",
+    noProofChecks: "No proof checks yet",
+    askQuestionOrSave: "Ask a product question or save an item. Sarthi will track seller proof here.",
+    proof: "proof",
+    buyerAsks: "buyer asks",
+    trustImpact: "Trust impact",
+    trustScore: "Trust score",
+    proofQuality: "Proof quality",
+    pending: "Pending",
+    nextSafeStep: "Next safe step",
+    details: "Details",
+    seeProof: "See proof",
+    proofApproved: "Proof approved",
+    adminChecking: "Admin checking",
+    needsClearerProof: "Need clearer proof",
+    waitingSeller: "Waiting for seller",
+    safeToUseProof: "Use this proof before checkout.",
+    waitForReviewAction: "Wait for admin review before trusting it.",
+    askClearerProofAction: "Ask seller for clearer proof.",
+    waitForSellerAction: "No proof yet. Prefer COD or another item.",
+    proofCanHelp: "This proof can help you decide now.",
+    sellerResponded: "Seller replied. Reviewer is checking it before trust improves.",
+    currentProofWeak: "Current proof was not clear enough. Seller must improve it.",
+    sellerNotAnswered: "Seller has not answered this proof request yet.",
+    trustCanImprove: "{attribute} proof can improve trust by {lift} points.",
+    trustWaits: "Trust lift waits until useful proof is approved.",
+    strongProof: "Strong proof",
+    usefulButPending: "Useful, but still pending",
+    weakProof: "Weak proof",
+    noProofYet: "No proof yet",
+    buyerAsked: "Buyer asked",
+    sellerSubmitted: "Seller submitted",
+    adminApproved: "Admin approved"
+  },
+  hindi: {
+    proofTracker: "Proof tracker",
+    proofsYouAskedFor: "Aapke proof checks",
+    myProofChecks: "Mere proof checks",
+    trackerSummary: "Seller proof, admin review, aur trust improvement yahan track hota hai.",
+    openChecks: "Open checks",
+    sellerOrAdminPending: "Seller ya admin action pending",
+    approvedProof: "Approved proof",
+    canHelpNow: "Ab decision me help karega",
+    possibleTrustLift: "Trust lift",
+    estimatedPoints: "Proof checks se estimated points",
+    checkingProofStatus: "Proof status check ho raha hai...",
+    noProofChecks: "Abhi proof check nahi hai",
+    askQuestionOrSave: "Product question poochho ya item save karo. Sarthi seller proof yahan track karega.",
+    proof: "proof",
+    buyerAsks: "buyer asks",
+    trustImpact: "Trust impact",
+    trustScore: "Trust score",
+    proofQuality: "Proof quality",
+    pending: "Pending",
+    nextSafeStep: "Next safe step",
+    details: "Details",
+    seeProof: "See proof",
+    proofApproved: "Proof approved",
+    adminChecking: "Admin check kar raha hai",
+    needsClearerProof: "Clearer proof chahiye",
+    waitingSeller: "Seller ka wait",
+    safeToUseProof: "Checkout se pehle ye proof dekh lo.",
+    waitForReviewAction: "Admin review ke baad hi is proof par bharosa karo.",
+    askClearerProofAction: "Seller se clearer proof maango.",
+    waitForSellerAction: "Abhi proof nahi hai. COD ya doosra item safer hai.",
+    proofCanHelp: "Ye proof ab decision me help kar sakta hai.",
+    sellerResponded: "Seller ne reply kiya. Reviewer check kar raha hai.",
+    currentProofWeak: "Current proof clear nahi tha. Seller ko improve karna hoga.",
+    sellerNotAnswered: "Seller ne abhi proof request ka answer nahi diya.",
+    trustCanImprove: "{attribute} proof se trust {lift} points improve ho sakta hai.",
+    trustWaits: "Useful proof approve hone tak trust lift wait karega.",
+    strongProof: "Strong proof",
+    usefulButPending: "Useful, par pending",
+    weakProof: "Weak proof",
+    noProofYet: "Abhi proof nahi",
+    buyerAsked: "Buyer asked",
+    sellerSubmitted: "Seller submitted",
+    adminApproved: "Admin approved"
+  },
+  hinglish: {
+    proofTracker: "Proof tracker",
+    proofsYouAskedFor: "Proofs you asked for",
+    myProofChecks: "My proof checks",
+    trackerSummary: "Seller proof, admin review, aur trust improvement yahan track hota hai.",
+    openChecks: "Open checks",
+    sellerOrAdminPending: "Seller ya admin action pending",
+    approvedProof: "Approved proof",
+    canHelpNow: "Decision me ab help karega",
+    possibleTrustLift: "Possible trust lift",
+    estimatedPoints: "Estimated points from proof checks",
+    checkingProofStatus: "Proof status check ho raha hai...",
+    noProofChecks: "Abhi proof checks nahi hain",
+    askQuestionOrSave: "Product question poochho ya item save karo. Sarthi seller proof yahan track karega.",
+    proof: "proof",
+    buyerAsks: "buyer asks",
+    trustImpact: "Trust impact",
+    trustScore: "Trust score",
+    proofQuality: "Proof quality",
+    pending: "Pending",
+    nextSafeStep: "Next safe step",
+    details: "Details",
+    seeProof: "See proof",
+    proofApproved: "Proof approved",
+    adminChecking: "Admin checking",
+    needsClearerProof: "Clearer proof chahiye",
+    waitingSeller: "Waiting for seller",
+    safeToUseProof: "Checkout se pehle ye proof dekh lo.",
+    waitForReviewAction: "Admin review ke baad hi is proof par bharosa karo.",
+    askClearerProofAction: "Seller se clearer proof maango.",
+    waitForSellerAction: "Abhi proof nahi hai. COD ya doosra item safer hai.",
+    proofCanHelp: "Ye proof decision me help kar sakta hai.",
+    sellerResponded: "Seller replied. Reviewer check kar raha hai.",
+    currentProofWeak: "Current proof clear nahi tha. Seller must improve it.",
+    sellerNotAnswered: "Seller ne abhi answer nahi diya.",
+    trustCanImprove: "{attribute} proof trust ko {lift} points improve kar sakta hai.",
+    trustWaits: "Useful proof approve hone tak trust lift wait karega.",
+    strongProof: "Strong proof",
+    usefulButPending: "Useful, but pending",
+    weakProof: "Weak proof",
+    noProofYet: "No proof yet",
+    buyerAsked: "Buyer asked",
+    sellerSubmitted: "Seller submitted",
+    adminApproved: "Admin approved"
+  }
+};
+
+const PROOF_ATTRIBUTE_LABELS: Record<LanguageCode, Record<string, string>> = {
+  english: {
+    transparency: "Transparency",
+    fabric: "Fabric",
+    color: "Color",
+    size: "Size",
+    packaging: "Packaging",
+    offer: "Offer"
+  },
+  hindi: {
+    transparency: "Transparency",
+    fabric: "Fabric",
+    color: "Color",
+    size: "Size",
+    packaging: "Packaging",
+    offer: "Offer"
+  },
+  hinglish: {
+    transparency: "Transparency",
+    fabric: "Fabric",
+    color: "Color",
+    size: "Size",
+    packaging: "Packaging",
+    offer: "Offer"
+  }
+};
+
+const PROOF_QUALITY_CHECKS: Record<LanguageCode, Record<string, string>> = {
+  english: {
+    asset_present: "Proof file added",
+    matches_attribute: "Matches this doubt",
+    clear_description: "Clear explanation",
+    reviewed: "Reviewer checked"
+  },
+  hindi: {
+    asset_present: "Proof file added",
+    matches_attribute: "Same doubt ka proof",
+    clear_description: "Clear explanation",
+    reviewed: "Reviewer checked"
+  },
+  hinglish: {
+    asset_present: "Proof file added",
+    matches_attribute: "Same doubt ka proof",
+    clear_description: "Clear explanation",
+    reviewed: "Reviewer checked"
+  }
+};
+
+function proofLedgerCopy(language: LanguageCode) {
+  return PROOF_LEDGER_COPY[language] ?? PROOF_LEDGER_COPY.english;
+}
+
+function proofAttributeLabel(attribute: string, language: LanguageCode) {
+  return PROOF_ATTRIBUTE_LABELS[language]?.[attribute] ?? labelize(attribute);
+}
+
+function proofQualityCheckLabel(key: string, language: LanguageCode) {
+  return PROOF_QUALITY_CHECKS[language]?.[key] ?? labelize(key);
+}
+
+function proofLedgerStatusLabel(status: BuyerProofLedgerItem["status"], language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved") return copy.proofApproved;
+  if (status === "admin_review") return copy.adminChecking;
+  if (status === "needs_more_proof") return copy.needsClearerProof;
+  return copy.waitingSeller;
+}
+
+function proofLedgerSummary(status: BuyerProofLedgerItem["status"], liftPoints: number, language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved") return `${copy.proofCanHelp} +${liftPoints}`;
+  if (status === "admin_review") return copy.sellerResponded;
+  if (status === "needs_more_proof") return copy.currentProofWeak;
+  return copy.sellerNotAnswered;
+}
+
+function proofNextSafeAction(status: BuyerProofLedgerItem["status"], language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved") return copy.safeToUseProof;
+  if (status === "admin_review") return copy.waitForReviewAction;
+  if (status === "needs_more_proof") return copy.askClearerProofAction;
+  return copy.waitForSellerAction;
+}
+
+function proofQualityVerdict(score: number, status: BuyerProofLedgerItem["status"], language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved" || score >= 82) return copy.strongProof;
+  if (score >= 55) return copy.usefulButPending;
+  if (score > 0) return copy.weakProof;
+  return copy.noProofYet;
+}
+
+function proofTimelineLabel(index: number, fallback: string, language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (index === 0) return copy.buyerAsked;
+  if (index === 1) return copy.sellerSubmitted;
+  if (index === 2) return copy.adminApproved;
+  return fallback;
+}
+
+function orderStatusLabel(order: BuyerOrderItem, language: LanguageCode) {
+  if (order.status === "placed" || order.status === "placed_pending_feedback") return t(language, "orderPlaced");
+  if (order.can_submit_outcome || order.status === "delivered_needs_feedback") return t(language, "deliveredPending");
+  if (order.status === "delivered_kept") return t(language, "keptIt");
+  if (order.status === "returned") return t(language, "returnedIt");
+  if (order.status === "rto") return "RTO";
+  if (order.status === "exchanged") return t(language, "exchanged");
+  return labelize(order.status);
+}
+
+function orderStatusTone(order: BuyerOrderItem) {
+  if (order.status === "placed" || order.status === "placed_pending_feedback") return "watch";
+  if (order.can_submit_outcome || order.status === "delivered_needs_feedback") return "pending";
+  if (order.status === "returned") return "returned";
+  if (order.status === "rto") return "watch";
+  return "kept";
 }
 
 // Marketplace Feed Component (Responsive Grid view)
@@ -611,25 +1435,14 @@ function MarketplaceHome({
   onCategoryChange,
   searchTerm,
   onSearchChange,
-  autoScan,
   wishlistedProduct,
-  activeFitProfile,
-  fitProfileCount,
-  knowledgeGraph,
-  graphLoading,
-  graphError,
-  regretDecision,
-  decisionQuestion,
-  decisionLoading,
-  hasBuyerIntent,
+  language,
   onQuickSearch,
   onProductOpen,
   onWishlistProduct,
-  onOpenAutoScan,
-  onOpenGraph,
-  onDecisionQuestionChange,
-  onAskDecision,
-  onOpenAutoScanProof
+  onSaveProduct,
+  onOpenSavedItem,
+  onOpenOrders
 }: {
   products: Product[];
   allProducts: Product[];
