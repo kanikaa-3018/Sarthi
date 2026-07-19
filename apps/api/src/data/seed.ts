@@ -284,6 +284,91 @@ export function buildSeedDocuments() {
     addFact(fact_id, "order_outcomes", order_id, "order_outcome", `${status} outcome for ${variant.variant_id}${return_reason ? ` due to ${return_reason}` : ""}`, idx % 90);
   }
 
+  const expectationContracts = [{
+    contract_id: "contract_seed_pending_asha_1",
+    buyer_id: "buyer_asha",
+    product_id: "kurti_1_1",
+    variant_id: "kurti_1_1_xl",
+    status: "active",
+    contract: {
+      title: "Sarthi expectation contract",
+      summary: "Fact-backed snapshot before checkout.",
+      items: [
+        { dimension: "fit", claim: "Recommended size XL", confidence: "medium", buyer_action: "Confirm after delivery.", fact_ids: ["fact_order_0004"] },
+        { dimension: "fabric", claim: "cotton blend", confidence: "weak", buyer_action: "Return reason can teach future fabric checks.", fact_ids: ["fact_review_001"] },
+        { dimension: "color", claim: "blue", confidence: "medium", buyer_action: "Report mismatch if daylight color differs.", fact_ids: ["fact_review_002"] },
+        { dimension: "dispatch", claim: "Free delivery in 3-5 days", confidence: "medium", buyer_action: "Confirm delivery outcome.", fact_ids: [] },
+        { dimension: "offer", claim: "Timer pressure not used", confidence: "medium", buyer_action: "Use current price proof instead of urgency.", fact_ids: ["fact_price_0012"] }
+      ],
+      fact_ids: ["fact_order_0004", "fact_review_001", "fact_review_002", "fact_price_0012"],
+      privacy: { buyer_visible: true, seller_visible_as_aggregate_only: true, raw_private_memory_exposed: false }
+    },
+    created_at: iso(1),
+    completed_at: null,
+    outcome_order_id: null,
+    broken_dimension: null,
+    fact_id: "fact_contract_seed_pending_asha_1"
+  }];
+  addFact("fact_contract_seed_pending_asha_1", "expectation_contracts", "contract_seed_pending_asha_1", "expectation_contract", "Pending delivered order feedback for buyer_asha on kurti_1_1_xl", 1);
+
+  const proofRequests = [
+    proofRequest("proof_req_seed_a_fabric", "buyer_asha", "seller_a", "kurti_1_2", "kurti_1_2_xl", "fabric", "Kapda thin toh nahi hai?", 6, 3),
+    {
+      ...proofRequest("proof_req_seed_asha_color_pending", "buyer_asha", "seller_a", "kurti_2_1", "kurti_2_1_xl", "color", "Daylight mein colour same dikhega?", 4, 2),
+      status: "submitted",
+      resolution_proof_id: "proof_seed_a_color_pending"
+    },
+    {
+      ...proofRequest("proof_req_seed_asha_size_approved", "buyer_asha", "seller_a", "kurti_3_3", "kurti_3_3_xl", "size", "XL chest tight toh nahi hoga?", 5, 1),
+      status: "resolved",
+      resolved_at: iso(0, 5),
+      resolution_proof_id: "proof_seed_a_size_verified"
+    },
+    proofRequest("proof_req_seed_a_color", "buyer_neha", "seller_a", "kurti_2_1", "kurti_2_1_xl", "color", "Daylight mein colour same dikhega?", 4, 2),
+    proofRequest("proof_req_seed_a_size", "buyer_synth_01", "seller_a", "kurti_3_3", "kurti_3_3_xl", "size", "XL chest tight toh nahi hoga?", 5, 1),
+    proofRequest("proof_req_seed_a_transparency", "buyer_synth_02", "seller_a", "kurti_4_2", "kurti_4_2_l", "transparency", "White light mein transparent toh nahi?", 3, 4)
+  ];
+  for (const request of proofRequests) {
+    addFact(request.fact_id, "proof_requests", request.request_id, "proof_request", `${request.attribute} proof requested by buyers for ${request.product_id}.`, 2);
+  }
+  const sellerEvidenceAssets = [
+    {
+      proof_id: "proof_seed_a_color_pending",
+      seller_id: "seller_a",
+      product_id: "kurti_2_1",
+      attribute: "color",
+      proof_type: "daylight_photo",
+      title: "Daylight colour photo",
+      description: "Seller submitted a daylight photo for colour match review.",
+      asset_url: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
+      status: "submitted",
+      created_at: iso(1),
+      submitted_at: iso(1),
+      reviewed_at: null,
+      review_notes: null,
+      fact_id: "fact_proof_seed_a_color_pending"
+    },
+    {
+      proof_id: "proof_seed_a_size_verified",
+      seller_id: "seller_a",
+      product_id: "kurti_3_3",
+      attribute: "size",
+      proof_type: "measurement_chart",
+      title: "XL measurement chart",
+      description: "Admin approved chest and length measurements for size XL.",
+      asset_url: "seeded://proofs/seller_a/kurti_3_3_size_chart",
+      status: "verified",
+      created_at: iso(2),
+      submitted_at: iso(2),
+      reviewed_at: iso(0, 5),
+      review_notes: "Measurement proof matches the listing claim.",
+      fact_id: "fact_proof_seed_a_size_verified"
+    }
+  ];
+  for (const asset of sellerEvidenceAssets) {
+    addFact(asset.fact_id, "seller_evidence_assets", asset.proof_id, "seller_proof", `${asset.attribute} proof ${asset.status} for ${asset.product_id}.`, 1);
+  }
+
   let priceCounter = 1;
   for (const variant of variants) {
     for (const [daysAgo, delta, event_type] of [[29, 40, "baseline"], [12, 20, "price_change"], [5, 0, "current"]] as const) {
@@ -354,6 +439,22 @@ export function buildSeedDocuments() {
     sellerApplications,
     sellerVerificationDocuments: documents,
     listingDrafts: [{
+      draft_id: "draft_seed_a_ready",
+      seller_id: "seller_a",
+      title: "Green Cotton Daily Kurti - Ready Draft",
+      category: "women_kurtis",
+      garment_type: "kurti",
+      fabric: "cotton blend",
+      color_family: "green",
+      base_price: 429,
+      image_url: "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80",
+      target_cluster_id: "cluster_floral_blue",
+      status: "draft",
+      readiness_status: "catalog_only",
+      created_at: iso(3),
+      updated_at: iso(1),
+      submitted_at: null
+    }, {
       draft_id: "draft_seed_pending_b",
       seller_id: "seller_b",
       title: "Pink Printed Straight Kurti - New Seller Draft",
@@ -370,10 +471,10 @@ export function buildSeedDocuments() {
       updated_at: iso(4),
       submitted_at: iso(4)
     }],
-    proofRequests: [],
-    sellerEvidenceAssets: [],
+    proofRequests,
+    sellerEvidenceAssets,
     auditTraces: [],
-    expectationContracts: [],
+    expectationContracts,
     adminAuditEvents: [],
     llmCache: [],
     trustScoreSnapshots: [],
@@ -442,6 +543,16 @@ export async function resetMongoSeed(db: Db) {
   await insert(c.sellerApplications, docs.sellerApplications);
   await insert(c.sellerVerificationDocuments, docs.sellerVerificationDocuments);
   await insert(c.listingDrafts, docs.listingDrafts);
+  await insert(c.proofRequests, docs.proofRequests);
+  await insert(c.sellerEvidenceAssets, docs.sellerEvidenceAssets);
+  await insert(c.auditTraces, docs.auditTraces);
+  await insert(c.expectationContracts, docs.expectationContracts);
+  await insert(c.adminAuditEvents, docs.adminAuditEvents);
+  await insert(c.llmCache, docs.llmCache);
+  await insert(c.trustScoreSnapshots, docs.trustScoreSnapshots);
+  await insert(c.wishlistIntents, docs.wishlistIntents);
+  await insert(c.trustRadarEvents, docs.trustRadarEvents);
+  await insert(c.cartConfidenceSnapshots, docs.cartConfidenceSnapshots);
   await insert(c.featureWeights, docs.featureWeights);
   return {
     buyers: docs.buyers.length,
@@ -451,7 +562,9 @@ export async function resetMongoSeed(db: Db) {
     products: docs.products.length,
     variants: docs.variants.length,
     outcomes: docs.outcomes.length,
-    facts: docs.facts.length
+    facts: docs.facts.length,
+    proofRequests: docs.proofRequests.length,
+    sellerEvidenceAssets: docs.sellerEvidenceAssets.length
   };
 }
 
@@ -566,6 +679,25 @@ function doc(document_id: string, seller_id: string, document_type: string, refe
     submitted_at,
     reviewed_at: status === "approved" ? iso(17) : null,
     notes
+  };
+}
+
+function proofRequest(request_id: string, buyer_id: string, seller_id: string, product_id: string, variant_id: string, attribute: string, buyer_question: string, request_count: number, daysAgo: number) {
+  return {
+    request_id,
+    buyer_id,
+    seller_id,
+    product_id,
+    variant_id,
+    attribute,
+    buyer_question,
+    status: "open",
+    request_count,
+    created_at: iso(daysAgo),
+    updated_at: iso(0, daysAgo),
+    resolved_at: null,
+    resolution_proof_id: null,
+    fact_id: `fact_${request_id}`
   };
 }
 

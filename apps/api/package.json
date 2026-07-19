@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "seed": "tsx src/scripts/seed.ts",
     "vector:index": "tsx src/scripts/createVectorIndex.ts",
+    "test": "tsx --test src/tests/trust-rbac.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
