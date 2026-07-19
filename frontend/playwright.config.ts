@@ -21,7 +21,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "npm --prefix ../apps/api run dev",
+      command: "node ../apps/api/node_modules/tsx/dist/cli.mjs ../apps/api/src/server.ts",
       url: `${apiUrl}/health`,
       reuseExistingServer: false,
       timeout: 120_000,
@@ -29,12 +29,12 @@ export default defineConfig({
         ...inheritedEnv,
         NODE_ENV: "test",
         PORT: String(apiPort),
-        MONGODB_DB: process.env.E2E_MONGODB_DB ?? "sarthi_codex_auth_e2e",
+        MONGODB_DB: "sarthi_codex_auth_e2e",
         DEMO_CONTROLS_ENABLED: "true"
       }
     },
     {
-      command: `npm run dev -- --host 127.0.0.1 --port ${frontendPort}`,
+      command: `node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${frontendPort}`,
       url: frontendUrl,
       reuseExistingServer: false,
       timeout: 120_000,

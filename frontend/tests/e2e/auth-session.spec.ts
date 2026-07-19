@@ -58,6 +58,17 @@ test("logout completes locally when the API request fails", async ({ page }) => 
   await expect(page).toHaveURL("/login");
 });
 
+test("logout completes locally before a stalled API request settles", async ({ page }) => {
+  await loginThroughDemo(page, "buyer");
+  await expect(page).toHaveURL(DEMO_ACCOUNTS.buyer.defaultPath);
+  await page.route("**/api/auth/logout", () => new Promise(() => {}));
+
+  await page.getByTitle("Logout").click();
+
+  await expect(page).toHaveURL("/login", { timeout: 1_000 });
+  expect(await page.evaluate(() => localStorage.getItem("sarthi.auth.session"))).toBeNull();
+});
+
 async function loginThroughDemo(page: Page, portal: AuthPortal) {
   const account = DEMO_ACCOUNTS[portal];
   await page.goto("/login");

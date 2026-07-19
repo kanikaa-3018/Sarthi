@@ -59,28 +59,35 @@ export function App() {
   const [theme, setTheme] = useState<"light" | "dark" | "system">(readStoredTheme);
 
   useEffect(() => {
+    let active = true;
     const stored = getStoredSession();
     if (!stored) {
       setCheckingSession(false);
-      return;
+      return () => {
+        active = false;
+      };
     }
 
     getMe()
       .then((payload) => {
+        if (!active || getStoredSession()?.access_token !== stored.access_token) return;
         const refreshed = { ...stored, account: payload.account };
         storeSession(refreshed);
         setSession(refreshed);
-        const currentPath = window.location.pathname;
-        if (currentPath === "/" || currentPath === "/login") {
-          navigate(defaultPath(payload.account.role), { replace: true });
-        }
       })
       .catch(() => {
+        if (!active || getStoredSession()?.access_token !== stored.access_token) return;
         clearStoredSession();
         setSession(null);
       })
-      .finally(() => setCheckingSession(false));
-  }, [navigate]);
+      .finally(() => {
+        if (active) setCheckingSession(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Update theme on documentElement
   useEffect(() => {
@@ -141,13 +148,14 @@ export function App() {
 
   async function handleLogout() {
     setLoggingOut(true);
+    const revocation = logout();
+    setSession(null);
+    navigate("/login", { replace: true });
     try {
-      await logout();
+      await revocation;
     } catch {
       // Local logout must still complete when server revocation is unavailable.
     } finally {
-      setSession(null);
-      navigate("/login", { replace: true });
       setLoggingOut(false);
     }
   }
