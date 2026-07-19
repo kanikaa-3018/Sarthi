@@ -1425,13 +1425,20 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
 
               {/* Bullet factors list */}
               <div className="seller-why-reasons">
-                <strong>Deciding factors analyzed</strong>
-                {activeWhyListing.action_items.map((action, idx) => (
-                  <div key={idx} className="reason-row">
-                    <Info size={15} />
-                    <span>{action.rationale}</span>
+                <strong>Actions that improve buyer trust</strong>
+                {activeWhyListing.action_items.length ? (
+                  activeWhyListing.action_items.map((action, idx) => (
+                    <div key={idx} className="reason-row">
+                      <Info size={15} />
+                      <span>{action.rationale}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="reason-row">
+                    <CheckCircle2 size={15} />
+                    <span>No urgent fix. Keep photos, size chart, and dispatch proof updated.</span>
                   </div>
-                ))}
+                )}
               </div>
 
               <button onClick={() => setActiveWhyListing(null)} className="seller-primary-action">
