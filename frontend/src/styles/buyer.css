@@ -1598,3 +1598,803 @@
 
 .expectation-privacy-line,
 .checkout-contract-privacy {
+  align-items: flex-start;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 11.5px;
+  gap: 7px;
+  line-height: 1.4;
+}
+
+.expectation-privacy-line svg,
+.checkout-contract-privacy svg {
+  color: var(--success);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.checkout-contract-card {
+  background: var(--bg-surface-muted);
+}
+
+.checkout-contract-header strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.checkout-contract-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.checkout-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.checkout-sheet-root {
+  text-align: left;
+}
+
+.checkout-check-card {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 8px 14px 12px;
+}
+
+.checkout-check-card .kv-row strong {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}
+
+.checkout-supporting-copy {
+  color: var(--text-primary);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+.checkout-price-proof-card {
+  background: var(--bg-surface);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.checkout-price-proof-main {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.checkout-price-proof-main > span,
+.checkout-price-proof-grid span,
+.prepaid-trust-facts small {
+  color: var(--text-secondary);
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.checkout-price-proof-main > div {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.checkout-price-proof-main strong {
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.checkout-price-proof-main s {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.checkout-price-proof-main p {
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 7px 0 0;
+}
+
+.checkout-price-proof-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.checkout-price-proof-grid div {
+  background: var(--bg-surface-muted);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.checkout-price-proof-grid strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 14px;
+  margin-top: 3px;
+}
+
+.checkout-price-proof-grid small {
+  color: var(--text-secondary);
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.3;
+  margin-top: 3px;
+}
+
+.checkout-payment-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.checkout-wearer-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.checkout-wearer-card strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+.checkout-wearer-card p {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+
+.checkout-wearer-toggle {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 4px;
+}
+
+.checkout-wearer-toggle button {
+  border-radius: 8px;
+  color: var(--text-secondary);
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
+.checkout-wearer-toggle button.active {
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+}
+
+.checkout-order-placed-card {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.checkout-order-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--success) 12%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--success) 28%, var(--border-subtle));
+  border-radius: 999px;
+  color: var(--success);
+  display: inline-flex;
+  height: 64px;
+  justify-content: center;
+  width: 64px;
+}
+
+.checkout-order-placed-card h3 {
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1.1;
+  margin: 4px 0 0;
+}
+
+.checkout-order-placed-card p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 8px auto 0;
+  max-width: 420px;
+}
+
+.checkout-order-next {
+  display: grid;
+  gap: 8px;
+  justify-self: stretch;
+}
+
+.checkout-order-next div {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-primary);
+  display: flex;
+  font-size: 13px;
+  font-weight: 750;
+  gap: 8px;
+  justify-content: center;
+  padding: 10px;
+}
+
+.checkout-order-next div.checkout-order-reward {
+  background: color-mix(in srgb, var(--success) 8%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border-subtle));
+}
+
+.checkout-order-next div.checkout-order-reward svg {
+  color: var(--success);
+}
+
+.checkout-order-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  justify-self: stretch;
+}
+
+.checkout-order-actions .checkout-primary-cta,
+.checkout-secondary-cta {
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.checkout-secondary-cta {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+@media (max-width: 560px) {
+  .payment-advisor-head,
+  .payment-advisor-value-row {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-advisor-mode {
+    justify-self: start;
+  }
+
+  .checkout-order-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.checkout-keep-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.checkout-keep-card.high {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border-subtle));
+}
+
+.checkout-keep-card.medium {
+  border-color: color-mix(in srgb, var(--warning) 32%, var(--border-subtle));
+}
+
+.checkout-keep-card.low {
+  border-color: color-mix(in srgb, var(--error) 26%, var(--border-subtle));
+}
+
+.checkout-keep-header,
+.checkout-keep-action {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.checkout-keep-header strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.checkout-keep-header > span {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-primary);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 5px 8px;
+}
+
+.checkout-keep-card p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.checkout-keep-action {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 9px;
+}
+
+.checkout-keep-action span {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.checkout-keep-action button {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  min-height: 30px;
+  padding: 6px 9px;
+}
+
+.checkout-payment-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.checkout-payment-header strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.checkout-payment-header > span {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--accent-primary-hover);
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 900;
+  padding: 5px 8px;
+}
+
+.checkout-payment-card p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.checkout-trust-condition {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 11.5px;
+  font-weight: 750;
+  gap: 8px;
+  line-height: 1.35;
+  padding: 8px 9px;
+}
+
+.checkout-trust-condition svg {
+  color: var(--accent-primary);
+  flex: 0 0 auto;
+}
+
+.checkout-payment-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.checkout-payment-options button {
+  align-items: flex-start;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 9px;
+  min-height: 70px;
+  padding: 11px;
+  text-align: left;
+}
+
+.checkout-payment-options button svg {
+  color: var(--accent-primary-hover);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.checkout-payment-options button strong,
+.checkout-payment-options button small {
+  display: block;
+}
+
+.checkout-payment-options button strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.checkout-payment-options button small {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.checkout-payment-options button.active {
+  background: color-mix(in srgb, var(--accent-primary) 9%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, var(--border-subtle));
+}
+
+.payment-advisor-card {
+  background: var(--bg-surface);
+  border: 2px solid var(--border-subtle);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.payment-advisor-card.safe {
+  background: color-mix(in srgb, var(--success) 7%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border-subtle));
+}
+
+.payment-advisor-card.watch {
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--warning) 44%, var(--border-subtle));
+}
+
+.payment-advisor-head {
+  align-items: flex-start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+}
+
+.payment-advisor-icon {
+  align-items: center;
+  background: var(--text-primary);
+  border-radius: 9px;
+  color: var(--bg-surface);
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.payment-advisor-head strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 17px;
+  font-weight: 950;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.payment-advisor-head p {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: 5px 0 0;
+}
+
+.payment-advisor-mode {
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 950;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.payment-advisor-mode.safe {
+  background: var(--success);
+}
+
+.payment-advisor-mode.watch {
+  background: var(--warning);
+}
+
+.payment-advisor-value-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.payment-advisor-value-row div {
+  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 9px;
+}
+
+.payment-advisor-value-row span,
+.payment-advisor-value-row strong {
+  display: block;
+}
+
+.payment-advisor-value-row span {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.payment-advisor-value-row strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.25;
+  margin-top: 3px;
+}
+
+.payment-advisor-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.payment-advisor-checks span {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 6px 9px;
+}
+
+.payment-advisor-checks span.passed svg {
+  color: var(--success);
+}
+
+.payment-advisor-checks span.watch svg {
+  color: var(--warning);
+}
+
+.payment-advisor-details,
+.payment-offer-list,
+.payment-agent-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.payment-offer-row {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  padding: 9px;
+}
+
+.payment-offer-row > span {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border-radius: 8px;
+  color: var(--accent-primary-hover);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.payment-offer-row.eligible {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle));
+}
+
+.payment-offer-row.eligible > span {
+  color: var(--success);
+}
+
+.payment-offer-row.locked {
+  opacity: 0.72;
+}
+
+.payment-offer-row strong,
+.payment-offer-row small {
+  display: block;
+}
+
+.payment-offer-row strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 950;
+}
+
+.payment-offer-row small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.payment-offer-row em {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+  padding: 5px 7px;
+  white-space: nowrap;
+}
+
+.payment-agent-actions span {
+  align-items: flex-start;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.payment-agent-actions svg {
+  color: var(--success);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.payment-agent-actions b,
+.payment-agent-actions small {
+  display: block;
+}
+
+.payment-agent-actions b {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.payment-agent-actions small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.payment-advisor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payment-advisor-actions button {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 950;
+  min-height: 36px;
+  padding: 8px 11px;
+}
+
+.payment-advisor-actions button.primary {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--bg-surface);
+}
+
+.payment-advisor-actions button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.prepaid-trust-nudge {
+  align-items: flex-start;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  padding: 14px;
+}
+
+.prepaid-trust-nudge.safe {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border-subtle));
+}
+
+.prepaid-trust-nudge.watch {
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
+}
+
+.prepaid-trust-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-surface));
+  border-radius: 10px;
+  color: var(--success);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.prepaid-trust-nudge.watch .prepaid-trust-icon {
+  background: color-mix(in srgb, var(--warning) 12%, var(--bg-surface));
+  color: var(--warning);
+}
+
+.prepaid-trust-nudge strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.prepaid-trust-nudge p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 5px 0 0;
+}
+
+.prepaid-trust-facts {
+  display: flex;
+  flex-wrap: wrap;
