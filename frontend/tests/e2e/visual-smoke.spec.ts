@@ -14,14 +14,53 @@ test("seller and admin core screens stay visually stable", async ({ page, reques
 
   await page.goto("/seller");
   await expect(page.getByRole("heading", { name: "NayiDisha Fashions" })).toBeVisible();
-  await expect(page.locator(".seller-console-shell")).toBeVisible();
+  await expect(page.locator(".seller-app")).toBeVisible();
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
-  await page.screenshot({ path: `${screenshotDir}/seller-dashboard.png`, fullPage: true });
+  await page.screenshot({ path: `${screenshotDir}/seller-today.png`, fullPage: true });
+
+  await page.goto("/seller/products");
+  await expect(page.getByRole("table", { name: "Seller products" })).toBeVisible();
+  expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
+  await page.screenshot({ path: `${screenshotDir}/seller-products.png`, fullPage: true });
+
+  const measurementRow = page.getByRole("row").filter({ hasText: "Maroon Festive Kurta Set Festival Edit" });
+  await measurementRow.getByRole("button", { name: "Update measurements" }).click();
+  await expect(page.getByRole("dialog", { name: "Update measurements" })).toBeVisible();
+  await page.screenshot({ path: `${screenshotDir}/seller-measurement-dialog.png` });
+  await page.keyboard.press("Escape");
+
+  await page.goto("/seller/new");
+  await expect(page.getByRole("heading", { name: "Create a listing" })).toBeVisible();
+  expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
+  await page.screenshot({ path: `${screenshotDir}/seller-new-listing.png`, fullPage: true });
 
   await page.goto("/seller/proofs");
-  await expect(page.getByText(/Buyer proof requests|Proof center/i).first()).toBeVisible();
-  await expect(page.locator(".seller-proof-ledger")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Proof requests" })).toBeVisible();
+  await expect(page.locator(".seller-proof-lane")).toBeVisible();
   await page.screenshot({ path: `${screenshotDir}/seller-proof-center.png`, fullPage: true });
+
+  await page.getByRole("button", { name: "Upload proof" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Upload proof" })).toBeVisible();
+  await page.screenshot({ path: `${screenshotDir}/seller-proof-dialog.png` });
+  await page.keyboard.press("Escape");
+
+  await page.goto("/seller/market");
+  await expect(page.getByRole("table", { name: "Market evidence comparison" })).toBeVisible();
+  expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
+  await page.screenshot({ path: `${screenshotDir}/seller-market-compare.png`, fullPage: true });
+
+  await page.getByTitle("Toggle Theme").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({ path: `${screenshotDir}/seller-market-compare-dark.png`, fullPage: true });
+  await page.getByTitle("Toggle Theme").click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/seller/proofs");
+  await expect(page.getByRole("heading", { name: "Proof requests" })).toBeVisible();
+  expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
+  await page.screenshot({ path: `${screenshotDir}/seller-proofs-mobile.png`, fullPage: true });
+
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   await loginAs(page, request, "admin");
   await page.goto("/admin/uploads");
