@@ -1,18 +1,13 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import crypto from "node:crypto";
+import { getDemoAccountForRole, type DemoRole } from "../../src/demoAccounts";
+
+export type { DemoRole };
 
 export const API_BASE = process.env.E2E_API_BASE
   ?? `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
 
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
-
-const accounts = {
-  buyer: { username: "asha.buyer", password: "buyer-asha-pass" },
-  seller: { username: "seller.a", password: "seller-a-pass" },
-  admin: { username: "reviewer.admin", password: "admin-reviewer-pass" }
-};
-
-export type DemoRole = keyof typeof accounts;
 
 export async function resetSeed(request: APIRequestContext) {
   const response = await request.post(`${API_BASE}/seed/reset`);
@@ -29,7 +24,7 @@ export async function loginAs(page: Page, request: APIRequestContext, role: Demo
 }
 
 export async function apiLogin(request: APIRequestContext, role: DemoRole) {
-  const account = accounts[role];
+  const account = getDemoAccountForRole(role);
   const response = await request.post(`${API_BASE}/auth/login`, {
     data: {
       username: account.username,
