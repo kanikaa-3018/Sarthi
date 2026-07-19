@@ -1,4 +1,5 @@
 import { aiRuntimeStatus, embedTextWithProvider, generateStructuredJson } from "../services/ai.js";
+import { bedrockSmokeImage, smokeCapabilities } from "./aiSmokeFixture.js";
 
 if (!process.argv.includes("--live")) {
   console.log(JSON.stringify({
@@ -12,7 +13,14 @@ if (!process.argv.includes("--live")) {
 
 const results: Record<string, unknown> = {};
 let ok = true;
+const capabilities = smokeCapabilities(process.argv.slice(2));
 
+if (!capabilities.length) {
+  console.error("Invalid --capability. Use text, vision, or embedding.");
+  process.exit(1);
+}
+
+if (capabilities.includes("text")) {
 try {
   const text = await generateStructuredJson({
     capability: "text",
@@ -42,9 +50,11 @@ try {
   ok = false;
   results.text = { ok: false, error: publicSmokeError(error) };
 }
+}
 
+if (capabilities.includes("vision")) {
 try {
-  const image = await fetchSmokeImage();
+  const image = bedrockSmokeImage();
   const vision = await generateStructuredJson({
     capability: "vision",
     systemInstruction: "Inspect the supplied image and return a short, literal description. Do not infer identity or private traits.",
@@ -74,7 +84,9 @@ try {
   ok = false;
   results.vision = { ok: false, error: publicSmokeError(error) };
 }
+}
 
+if (capabilities.includes("embedding")) {
 try {
   const embedding = await embedTextWithProvider(
     "bedrock",
@@ -93,6 +105,7 @@ try {
   ok = false;
   results.embedding = { ok: false, error: publicSmokeError(error) };
 }
+}
 
 console.log(JSON.stringify({
   ok,
@@ -103,23 +116,6 @@ console.log(JSON.stringify({
 }, null, 2));
 
 if (!ok) process.exit(1);
-
-async function fetchSmokeImage() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try {
-    const response = await fetch(
-      "https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=160&q=55",
-      { signal: controller.signal, headers: { Accept: "image/jpeg" } }
-    );
-    if (!response.ok) throw new Error(`Smoke image returned HTTP ${response.status}`);
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (!bytes.length || bytes.length > 1_800_000) throw new Error("Smoke image size is invalid");
-    return { format: "jpeg" as const, bytes };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 
 function publicSmokeError(error: unknown) {
   if (!(error instanceof Error)) return "Unknown smoke failure";
