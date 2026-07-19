@@ -328,30 +328,21 @@ input:focus {
   box-shadow: var(--shadow-sm);
 }
 
-.shop-search-card {
-  padding: 12px;
-}
-
-.shop-search-input {
+.marketplace-search-bar,
+.marketplace-location {
   background: var(--bg-surface-muted);
   border-color: var(--border-subtle);
   border-radius: 8px;
 }
 
-.quick-search-row > span {
-  color: var(--accent-primary);
-}
-
-.quick-search-row button,
-.category-chip-row button {
+.marketplace-category-row button {
   background: var(--bg-surface-muted);
   border-color: var(--border-subtle);
   color: var(--text-primary);
 }
 
-.quick-search-row button:hover,
-.category-chip-row button:hover,
-.category-chip-row button.active {
+.marketplace-category-row button:hover,
+.marketplace-category-row button.active {
   background: var(--text-primary);
   border-color: var(--text-primary);
   color: var(--bg-canvas);
