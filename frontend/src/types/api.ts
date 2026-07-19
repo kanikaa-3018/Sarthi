@@ -973,7 +973,7 @@ export type ExpectationContract = {
   outcome_order_id: string | null;
   broken_dimension: string | null;
   checkout_order_id?: string | null;
-  order_status?: "placed_pending_feedback" | string | null;
+  order_status?: "placed" | "placed_pending_feedback" | string | null;
   placed_at?: string | null;
   payment_mode?: "cod" | "prepaid" | null;
   payment_reward_points?: number;
@@ -1126,7 +1126,7 @@ export type BuyerOrderItem = {
   variant_id: string;
   product: Product;
   variant: Variant;
-  status: "delivered_needs_feedback" | "delivered_kept" | "returned" | "rto" | "exchanged" | string;
+  status: "placed" | "placed_pending_feedback" | "delivered_needs_feedback" | "delivered_kept" | "returned" | "rto" | "exchanged" | string;
   return_reason: string | null;
   corrected_return_reason?: string | null;
   correction_note?: string | null;
