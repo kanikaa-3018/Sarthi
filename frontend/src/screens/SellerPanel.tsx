@@ -992,11 +992,11 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
             onClick={openAddProduct}
           >
             <Plus size={14} />
-            Add product
+            {copy.addProduct}
           </button>
-          {activeTab === "performance" && panel && (
+          {topFeature === "console" && workbenchTab === "performance" && panel && (
             <label>
-              Product cluster
+              {copy.productCluster}
               <select
                 value={selectedClusterId}
                 onChange={(e) => {
