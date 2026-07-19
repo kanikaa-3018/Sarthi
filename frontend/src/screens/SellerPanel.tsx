@@ -795,11 +795,14 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
         fabric: draftFabric,
         color_family: draftColor,
         base_price: Number(draftPrice),
-        image_url: draftImageUrl.trim() || "https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80"
+        image_url: draftImageUrl.trim()
       });
-      setDraftSuccess("Listing draft created successfully.");
+      setDraftSuccess(copy.listingDraftCreated);
       setDraftTitle("");
-      setDraftPrice("459");
+      setDraftGarmentType("");
+      setDraftFabric("");
+      setDraftColor("");
+      setDraftPrice("");
       setDraftImageUrl("");
       await loadPanel(selectedClusterId);
     } catch (err) {
