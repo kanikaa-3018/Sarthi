@@ -14,6 +14,7 @@
 
 - Create `frontend/src/demoAccounts.ts`: canonical browser-safe demo metadata.
 - Create `frontend/tests/e2e/auth-session.spec.ts`: real UI login and logout regressions.
+- Create `frontend/tests/e2e/runtime-isolation.spec.ts`: prove seed-reset-capable tests never target the live database.
 - Modify `frontend/src/screens/AuthScreen.tsx`: consume shared demo metadata.
 - Modify `frontend/tests/e2e/helpers.ts`: consume shared accounts and isolated API port.
 - Modify `frontend/playwright.config.ts`: own test ports and isolated database.
@@ -24,11 +25,34 @@
 ### Task 1: Isolate the Playwright runtime
 
 **Files:**
+- Create: `frontend/tests/e2e/runtime-isolation.spec.ts`
 - Modify: `frontend/playwright.config.ts`
 - Modify: `frontend/vite.config.ts`
 - Modify: `frontend/tests/e2e/helpers.ts`
 
-- [ ] **Step 1: Make Vite's existing defaults configurable**
+- [ ] **Step 1: Write a read-only failing isolation test**
+
+Create `frontend/tests/e2e/runtime-isolation.spec.ts` without calling `resetSeed`:
+
+```ts
+import { expect, test } from "@playwright/test";
+import { API_BASE } from "./helpers";
+
+test("E2E runs against the isolated auth database", async ({ request }) => {
+  const response = await request.get(`${API_BASE}/health`);
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const health = await response.json();
+  expect(health.db).toBe(process.env.E2E_MONGODB_DB ?? "sarthi_codex_auth_e2e");
+});
+```
+
+- [ ] **Step 2: Verify the current unsafe default is red**
+
+Run `npm --prefix frontend run test:e2e -- runtime-isolation.spec.ts`.
+
+Expected: FAIL with expected `sarthi_codex_auth_e2e` but received `sarthi`. This is read-only and must not invoke `/seed/reset`.
+
+- [ ] **Step 3: Make Vite's existing defaults configurable**
 
 Add above `defineConfig` in `frontend/vite.config.ts`:
 
@@ -39,7 +63,7 @@ const frontendPort = Number(process.env.SARTHI_FRONTEND_PORT ?? 5173);
 
 Use `frontendPort` for `server.port` and `apiTarget` for `server.proxy["/api"].target`. Do not change the fallback values or any build configuration.
 
-- [ ] **Step 2: Replace the Playwright configuration with an isolated runtime**
+- [ ] **Step 4: Replace the Playwright configuration with an isolated runtime**
 
 ```ts
 import { defineConfig, devices } from "@playwright/test";
@@ -88,7 +112,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 3: Point helpers at the same isolated API**
+- [ ] **Step 5: Point helpers at the same isolated API**
 
 Replace the fixed `API_BASE` in `frontend/tests/e2e/helpers.ts`:
 
@@ -97,20 +121,20 @@ export const API_BASE = process.env.E2E_API_BASE
   ?? `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
 ```
 
-- [ ] **Step 4: Prove the isolated setup with an existing test**
+- [ ] **Step 6: Prove the isolated setup before any seed reset**
 
 Run:
 
 ```powershell
-npm --prefix frontend run test:e2e -- role-flows.spec.ts --grep "buyer can reach checkout confidence flow"
+npm --prefix frontend run test:e2e -- runtime-isolation.spec.ts
 ```
 
-Expected: one test passes using ports 5190/8200 and database `sarthi_codex_auth_e2e`; live ports 5173/8000 are not reused.
+Expected: the test passes using ports 5190/8200 and database `sarthi_codex_auth_e2e`; live ports 5173/8000 are not reused. Only after this passes may a test call `resetSeed`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```powershell
-git add frontend/playwright.config.ts frontend/vite.config.ts frontend/tests/e2e/helpers.ts
+git add frontend/playwright.config.ts frontend/vite.config.ts frontend/tests/e2e/helpers.ts frontend/tests/e2e/runtime-isolation.spec.ts
 git commit -m "test: isolate browser test runtime"
 ```
 
@@ -382,4 +406,3 @@ Expected: no whitespace errors and no changes outside the listed auth/test/docs 
 - [ ] **Step 4: Hand off without touching dirty sessions**
 
 Do not merge automatically. Report the branch and commits. Warn that active main's `AuthScreen.tsx` will conflict at the stale credential object; integration must retain its new layout while importing `DEMO_ACCOUNTS`.
-
