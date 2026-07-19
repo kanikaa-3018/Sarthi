@@ -1,69 +1,118 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  Activity,
+  AlertTriangle,
   CheckCircle2,
   CircleAlert,
+  CreditCard,
   Database,
   EyeOff,
   Gauge,
+  Heart,
   Lock,
+  PackageCheck,
   RefreshCcw,
+  RotateCcw,
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
   Trash2,
+  UserRound,
+  Users,
   type LucideIcon
 } from "lucide-react";
 import {
+  correctOrderOutcome,
   deleteMemory,
   getBuyerDashboard,
+  getBuyerOrders,
   getMemory,
   getSystemReadiness,
+  saveFitProfile,
   updateMemorySettings
 } from "../api/client";
+import { t, type LanguageCode } from "../i18n";
 import type {
   BuyerDashboardResponse,
   BuyerMemoryResponse,
+  BuyerOrderItem,
+  BuyerOrdersResponse,
   FitMemory,
+  PrivacySummary,
   SystemReadiness
 } from "../types/api";
 
 type Props = {
   buyerId: string;
+  language: LanguageCode;
 };
 
 type Tone = "safe" | "watch" | "danger" | "neutral";
+type FitQuiz = {
+  usual_size: string;
+  preferred_fit: "comfort" | "regular";
+  body_cue: string;
+};
 
-export function TrustCenter({ buyerId }: Props) {
+const CORRECTION_REASONS = [
+  { code: "too_small", label: "Size was small", group: "size" },
+  { code: "too_large", label: "Size was large", group: "size" },
+  { code: "fabric_different", label: "Fabric issue", group: "fabric" },
+  { code: "color_different", label: "Colour issue", group: "color" },
+  { code: "damaged", label: "Damaged item", group: "quality" },
+  { code: "delivery_late", label: "Delivery issue", group: "delivery" }
+] as const;
+
+export function TrustCenter({ buyerId, language }: Props) {
+  const navigate = useNavigate();
   const [data, setData] = useState<BuyerMemoryResponse | null>(null);
   const [dashboard, setDashboard] = useState<BuyerDashboardResponse | null>(null);
+  const [orders, setOrders] = useState<BuyerOrdersResponse | null>(null);
   const [readiness, setReadiness] = useState<SystemReadiness | null>(null);
-  const [preferredFit, setPreferredFit] = useState("comfort");
+  const [preferredFit, setPreferredFit] = useState<"comfort" | "regular">("comfort");
+  const [fitQuiz, setFitQuiz] = useState<FitQuiz>({
+    usual_size: "M",
+    preferred_fit: "comfort",
+    body_cue: "between_sizes"
+  });
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [proofOpen, setProofOpen] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [correctionReasonByOrder, setCorrectionReasonByOrder] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    load();
+    void load();
   }, [buyerId]);
 
   async function load() {
     setBusy(true);
+    setLoading(true);
     setError(null);
     try {
-      const [payload, dashboardPayload, readinessPayload] = await Promise.all([
+      const [payload, dashboardPayload, ordersPayload, readinessPayload] = await Promise.all([
         getMemory(buyerId),
         getBuyerDashboard(buyerId),
+        getBuyerOrders(buyerId),
         getSystemReadiness()
       ]);
+      const nextPreferredFit = normalizePreferredFit(
+        dashboardPayload.profile.preferred_fit ?? payload.memory[0]?.preferred_fit ?? "comfort"
+      );
       setData(payload);
       setDashboard(dashboardPayload);
+      setOrders(ordersPayload);
       setReadiness(readinessPayload);
-      setPreferredFit(dashboardPayload.profile.preferred_fit ?? payload.memory[0]?.preferred_fit ?? "comfort");
+      setPreferredFit(nextPreferredFit);
+      setFitQuiz((current) => ({ ...current, preferred_fit: nextPreferredFit }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load trust settings");
     } finally {
       setBusy(false);
+      setLoading(false);
     }
   }
 
@@ -82,16 +131,42 @@ export function TrustCenter({ buyerId }: Props) {
     }
   }
 
-  async function savePreference() {
+  async function savePreference(nextFit = preferredFit) {
     setBusy(true);
     setError(null);
     setStatus(null);
     try {
-      await updateMemorySettings(buyerId, { preferred_fit: preferredFit });
+      await updateMemorySettings(buyerId, { preferred_fit: nextFit });
       await load();
       setStatus("Fit choice saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update fit preference");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveQuiz() {
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      await Promise.all([
+        updateMemorySettings(buyerId, { preferred_fit: fitQuiz.preferred_fit }),
+        saveFitProfile(buyerId, {
+          label: "My fit",
+          relationship: "self",
+          active: true,
+          preferred_fit: fitQuiz.preferred_fit,
+          size_map: { women_kurtis: fitQuiz.usual_size },
+          notes: [`Body cue: ${fitQuiz.body_cue}`]
+        })
+      ]);
+      setQuizOpen(false);
+      await load();
+      setStatus("Fit quiz saved. Sarthi has a better starting point now.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save fit quiz");
     } finally {
       setBusy(false);
     }
@@ -112,109 +187,133 @@ export function TrustCenter({ buyerId }: Props) {
     }
   }
 
+  async function submitCorrection(order: BuyerOrderItem) {
+    const selectedReason = correctionReasonByOrder[order.order_id] ?? order.return_reason ?? "fabric_different";
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      await correctOrderOutcome(buyerId, order.order_id, {
+        return_reason: selectedReason,
+        correction_note: selectedReason.includes("too_")
+          ? "Buyer confirmed this outcome was about size."
+          : "Buyer corrected this outcome away from size fit."
+      });
+      await load();
+      setExpandedOrderId(order.order_id);
+      setStatus("Correction saved. Future advice will use the corrected reason.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save correction");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const copy = trustCenterCopy(language);
   const privacy = data?.privacy ?? dashboard?.privacy;
+  const completedOrders = orders?.orders.filter((order) =>
+    !["placed", "placed_pending_feedback", "delivered_needs_feedback"].includes(order.status)
+  ) ?? [];
+  const latestOrder = completedOrders[0] ?? null;
+  const isLearning = Boolean(
+    dashboard &&
+    (dashboard.activity.total_outcomes < 3 ||
+      (privacy?.memory_record_count ?? 0) < 2 ||
+      dashboard.review_credibility.risk_band === "new_user")
+  );
 
   return (
-    <main className="trust-center-shell">
-      <section className="trust-hero-section trust-hero-simple">
-        <div>
-          <span className="eyebrow">Trust Center</span>
-          <h2>Your trust controls</h2>
-          <p>Choose what Sarthi can use. Sellers never see your fit memory.</p>
+    <main className="trust-center-shell trust-center-v5">
+      <section className="trust-hero-section trust-hero-simple trust-account-header">
+        <div className="trust-title-block">
+          <span className="eyebrow">{copy.trustCenter}</span>
+          <h2>{copy.title}</h2>
+          <p>{copy.subtitle}</p>
+          <div className="trust-header-meta" aria-label="Trust center status">
+            <span>
+              <Lock size={13} />
+              Fit memory private
+            </span>
+            <span>
+              <PackageCheck size={13} />
+              {dashboard ? `${dashboard.activity.total_outcomes} orders learnt` : "Orders loading"}
+            </span>
+          </div>
         </div>
-        <button className="btn-reset-db" onClick={load} disabled={busy} title="Refresh trust center">
-          <RefreshCcw size={15} className={busy ? "spin-icon" : ""} />
-        </button>
+        <div className="trust-header-actions">
+          <div className="trust-quick-actions" aria-label="Trust center navigation">
+            <button type="button" onClick={() => navigate("/shop")}>
+              <ShoppingBag size={15} />
+              {t(language, "shop")}
+            </button>
+            <button type="button" onClick={() => navigate("/shop/wishlist")}>
+              <Heart size={15} />
+              {t(language, "wishlist")}
+            </button>
+            <button type="button" onClick={() => navigate("/shop/orders")}>
+              <PackageCheck size={15} />
+              {t(language, "myOrders")}
+            </button>
+          </div>
+          <button className="trust-refresh-button" onClick={load} disabled={busy} title="Refresh trust center" aria-label="Refresh trust center">
+            <RefreshCcw size={15} className={busy ? "spin-icon" : ""} />
+          </button>
+        </div>
       </section>
 
-      {error && <div className="notice error">{error}</div>}
-      {status && <div className="notice success">{status}</div>}
+      {(error || status) && (
+        <div className="trust-message-row">
+          {error && <div className="notice error trust-inline-message">{error}</div>}
+          {status && <div className="notice success trust-inline-message">{status}</div>}
+        </div>
+      )}
 
       {data && privacy && dashboard ? (
         <>
-          <section className="trust-summary-grid" aria-label="Trust summary">
-            <TrustMetric
-              Icon={ShieldCheck}
-              label="Fit help"
-              value={privacy.fit_memory_enabled ? "On" : "Paused"}
-              detail={`${privacy.memory_record_count} saved size fact${privacy.memory_record_count === 1 ? "" : "s"}`}
-              tone={privacy.fit_memory_enabled ? "safe" : "watch"}
+          <TrustSnapshotBar dashboard={dashboard} privacy={privacy} />
+
+          <section className="trust-control-strip" aria-label="Trust controls">
+            <FitHelpControl
+              enabled={privacy.fit_memory_enabled}
+              memoryCount={privacy.memory_record_count}
+              busy={busy}
+              onToggle={() => void toggleMemory(!privacy.fit_memory_enabled)}
+              copy={copy}
             />
-            <TrustMetric
-              Icon={Gauge}
-              label="Review weight"
-              value={`${Math.round(dashboard.review_credibility.weight * 100)}%`}
-              detail={reviewBandLabel(dashboard.review_credibility.risk_band)}
-              tone={reviewTone(dashboard.review_credibility.risk_band)}
-            />
-            <TrustMetric
-              Icon={ShoppingBag}
-              label="Orders learnt"
-              value={String(dashboard.activity.total_outcomes)}
-              detail={`${dashboard.activity.kept_orders} kept, ${dashboard.activity.returned_orders} returned`}
-              tone={dashboard.activity.total_outcomes ? "safe" : "watch"}
-            />
-            <TrustMetric
-              Icon={Activity}
-              label="Checkout"
-              value={dashboard.checkout_guidance.prepaid_nudge_allowed ? "Allowed" : "Careful"}
-              detail={checkoutModeLabel(dashboard.checkout_guidance.mode)}
-              tone={dashboard.checkout_guidance.prepaid_nudge_allowed ? "safe" : "watch"}
-            />
+
+            {isLearning ? (
+              <FitLearningCard
+                quiz={fitQuiz}
+                open={quizOpen}
+                busy={busy}
+                copy={copy}
+                onOpenChange={setQuizOpen}
+                onQuizChange={setFitQuiz}
+                onSave={() => void saveQuiz()}
+              />
+            ) : (
+              <FitJourneyPreview
+                latestOrder={latestOrder}
+                memoryCount={privacy.memory_record_count}
+                onOpenOrder={(orderId) => setExpandedOrderId(orderId)}
+              />
+            )}
           </section>
+
+          <CheckoutGuidanceLine guidance={dashboard.checkout_guidance} copy={copy} />
 
           <section className="trust-center-grid">
             <div className="trust-main-column">
-              <section className="trust-card trust-decision-card">
-                <div className="trust-card-header">
-                  <div>
-                    <span className="eyebrow">How Sarthi decides</span>
-                    <h3>Four checks before advice</h3>
-                  </div>
-                </div>
-                <div className="trust-step-grid">
-                  <TrustStep Icon={Database} title="Product facts" detail="Returns, price, proof" />
-                  <TrustStep Icon={ShieldCheck} title="Seller proof" detail="Size, fabric, color" />
-                  <TrustStep Icon={Lock} title="Private fit" detail="Only on your phone view" />
-                  <TrustStep Icon={CheckCircle2} title="Final nudge" detail="Buy, check, or wait" />
-                </div>
-                <div className={`trust-guidance-box ${dashboard.checkout_guidance.prepaid_nudge_allowed ? "safe" : "watch"}`}>
-                  {dashboard.checkout_guidance.prepaid_nudge_allowed ? <CheckCircle2 size={17} /> : <CircleAlert size={17} />}
-                  <div>
-                    <strong>{dashboard.checkout_guidance.prepaid_nudge_allowed ? "Prepaid can be shown" : "No pressure checkout"}</strong>
-                    <span>{dashboard.checkout_guidance.message}</span>
-                  </div>
-                </div>
-              </section>
+              <ProofChecklist
+                dashboard={dashboard}
+                privacy={privacy}
+                readiness={readiness}
+                open={proofOpen}
+                copy={copy}
+                onToggle={() => setProofOpen((current) => !current)}
+              />
 
-              <section className="trust-card">
-                <div className="trust-card-header">
-                  <div>
-                    <span className="eyebrow">Your control</span>
-                    <h3>{privacy.fit_memory_enabled ? "Size help is active" : "Size help is paused"}</h3>
-                  </div>
-                  <span className={`trust-state-pill ${privacy.fit_memory_enabled ? "enabled" : "disabled"}`}>
-                    {privacy.fit_memory_enabled ? "On" : "Off"}
-                  </span>
-                </div>
-
-                <div className="trust-control-row">
-                  <button
-                    className={privacy.fit_memory_enabled ? "btn-secondary" : "btn-primary"}
-                    onClick={() => toggleMemory(!privacy.fit_memory_enabled)}
-                    disabled={busy}
-                  >
-                    <SlidersHorizontal size={15} />
-                    {privacy.fit_memory_enabled ? "Pause fit help" : "Turn on fit help"}
-                  </button>
-                  <button className="btn-danger" onClick={eraseMemory} disabled={busy || data.memory.length === 0}>
-                    <Trash2 size={15} />
-                    Delete size facts
-                  </button>
-                </div>
-              </section>
-
-              <section className="trust-card">
+              <section className="trust-card trust-preference-card">
                 <div className="trust-card-header">
                   <div>
                     <span className="eyebrow">Fit choice</span>
