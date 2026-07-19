@@ -93,7 +93,7 @@ The judging rubric shared for the prototype has four practical expectations. Sar
 
 ## Architecture
 
-The current active implementation is Node.js, Fastify, MongoDB, and React. Older Python/FastAPI prototype notes are kept only as historical reference; new backend work should happen in `apps/api`.
+The current active implementation is Node.js, Fastify, MongoDB, and React. Backend work lives in `apps/api`.
 
 ```text
 React + Vite frontend
@@ -349,19 +349,13 @@ Still required for production:
 | Document | Purpose |
 | --- | --- |
 | [docs/README.md](./docs/README.md) | Entry point for public docs. |
-| [docs/PRD.md](./docs/PRD.md) | Product requirements, users, scope, trust model, and roadmap. |
-| [docs/INITIAL_FEATURES.md](./docs/INITIAL_FEATURES.md) | Original feature surface and product reasoning. |
-| [docs/FINAL_FEATURE_LIST.md](./docs/FINAL_FEATURE_LIST.md) | Final implemented and excluded feature list. |
-| [docs/JUDGE_REVIEW_GUIDE.md](./docs/JUDGE_REVIEW_GUIDE.md) | How judges should inspect the prototype. |
-| [docs/DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md) | Seven-minute presentation flow. |
-| [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md) | Build phases and exit gates. |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Technical architecture notes. |
-| [docs/DATA_STRATEGY_AND_EDGE_CASES.md](./docs/DATA_STRATEGY_AND_EDGE_CASES.md) | Data strategy, failure modes, and edge cases. |
-| [docs/DATA_DICTIONARY.md](./docs/DATA_DICTIONARY.md) | Important entities and fields. |
-| [docs/PRIVACY_AND_TRUST.md](./docs/PRIVACY_AND_TRUST.md) | Privacy boundaries and trust controls. |
-| [docs/PRODUCT_READINESS.md](./docs/PRODUCT_READINESS.md) | What is real now and what remains for production. |
+| [docs/PRD.md](./docs/PRD.md) | Product scope, users, modules, requirements, and success metrics. |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Current React/Fastify/MongoDB architecture and optional AI integrations. |
+| [docs/TRUST_DATA_AND_PRIVACY.md](./docs/TRUST_DATA_AND_PRIVACY.md) | Evidence model, trust states, privacy boundaries, and edge cases. |
+| [docs/JUDGE_REVIEW_GUIDE.md](./docs/JUDGE_REVIEW_GUIDE.md) | Local setup, demo accounts, review path, and rubric mapping. |
+| [docs/DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md) | Seven-minute buyer, seller, and admin presentation flow. |
+| [docs/PRODUCT_READINESS.md](./docs/PRODUCT_READINESS.md) | What works today, what is prototype-only, and what production still needs. |
 | [docs/ATTRIBUTION.md](./docs/ATTRIBUTION.md) | Open-source package attribution. |
-| [docs/SUBMISSION_CHECKLIST.md](./docs/SUBMISSION_CHECKLIST.md) | Final submission checklist. |
 
 ## License
 
