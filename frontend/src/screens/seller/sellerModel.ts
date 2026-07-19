@@ -107,7 +107,9 @@ export function buildSellerActions(input: {
     });
   }
 
+  const activeProofTaskKeys = new Set((input.coach?.tasks ?? []).map(proofKey));
   for (const asset of input.coach?.proof_assets.filter((item) => item.status === "rejected") ?? []) {
+    if (activeProofTaskKeys.has(proofKey(asset))) continue;
     actions.push({
       id: `rejected-${asset.proof_id}`,
       priority: "high",
@@ -248,12 +250,22 @@ function proofTaskFromIssue(listing: SellerPanelListing): SellerEvidenceCoachTas
 export function buildProofLanes(coach: SellerEvidenceCoachResponse | null): SellerProofLanes {
   const tasks = [...(coach?.tasks ?? [])].sort((first, second) => PRIORITY_RANK[first.priority] - PRIORITY_RANK[second.priority]);
   const assets = coach?.proof_assets ?? [];
+  const activeTaskKeys = new Set(tasks.map(proofKey));
+  const currentAssetByKey = new Map<string, SellerProofAsset>();
+  for (const asset of assets) {
+    const key = proofKey(asset);
+    if (!currentAssetByKey.has(key)) currentAssetByKey.set(key, asset);
+  }
   return {
     openTasks: tasks,
-    rejected: assets.filter((asset) => asset.status === "rejected"),
+    rejected: assets.filter((asset) => asset.status === "rejected" && !activeTaskKeys.has(proofKey(asset)) && currentAssetByKey.get(proofKey(asset))?.proof_id === asset.proof_id),
     inReview: assets.filter((asset) => asset.status === "submitted"),
     buyerVisible: assets.filter((asset) => asset.status === "verified")
   };
+}
+
+function proofKey(item: { product_id: string; attribute: string }) {
+  return `${item.product_id}:${item.attribute}`;
 }
 
 export function buildMarketComparison(

@@ -8,7 +8,8 @@ import {
   getSellerPanel,
   submitSellerDocument,
   submitListingDraft,
-  submitSellerEvidenceAsset
+  submitSellerEvidenceAsset,
+  updateListingDraft
 } from "../../api/client";
 import type { LanguageCode } from "../../i18n";
 import type {
@@ -55,6 +56,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
   const [proofSubmitting, setProofSubmitting] = useState(false);
   const [proofError, setProofError] = useState<string | null>(null);
   const [listingSubmitting, setListingSubmitting] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [activeMeasurementRow, setActiveMeasurementRow] = useState<SellerProductRow | null>(null);
   const [measurementSubmitting, setMeasurementSubmitting] = useState(false);
   const [measurementError, setMeasurementError] = useState<string | null>(null);
@@ -103,18 +105,32 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
     }
   }, [activeRoute, location.pathname, location.search, navigate]);
 
+  useEffect(() => {
+    if (activeRoute !== "new") {
+      setEditingDraftId(null);
+      return;
+    }
+    const routeDraftId = new URLSearchParams(location.search).get("draft");
+    if (routeDraftId) setEditingDraftId(routeDraftId);
+  }, [activeRoute, location.search]);
+
   const seller = panel?.seller ?? onboarding?.seller ?? null;
   const verification = onboarding?.seller_verification ?? panel?.seller_verification ?? null;
   const listings = panel?.seller_all_listings ?? panel?.seller_listings ?? [];
   const actions = useMemo(() => buildSellerActions({ onboarding, panel, coach }), [coach, onboarding, panel]);
   const productRows = useMemo(() => buildProductRows(listings, coach?.tasks ?? []), [coach?.tasks, listings]);
   const proofLanes = useMemo(() => buildProofLanes(coach), [coach]);
+  const editingDraft = useMemo(
+    () => onboarding?.listing_drafts.find((draft) => draft.draft_id === editingDraftId) ?? null,
+    [editingDraftId, onboarding?.listing_drafts]
+  );
   const reviewerItems = (coach?.proof_assets.filter((asset) => asset.status === "submitted").length ?? 0)
     + (onboarding?.listing_drafts.filter((draft) => draft.status === "submitted").length ?? 0)
     + (onboarding?.documents.filter((document) => document.status === "submitted" || document.status === "under_review").length ?? 0);
 
   function navigateSeller(route: SellerRoute) {
     setStatusMessage(null);
+    if (route === "new") setEditingDraftId(null);
     navigate(routePath(route));
   }
 
@@ -125,7 +141,12 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
       return;
     }
     if (action.action.type === "proof") return navigateSeller("proofs");
-    if (action.action.type === "new" || action.action.type === "draft" || action.action.type === "verification") return navigateSeller("new");
+    if (action.action.type === "draft" && action.action.id) {
+      setEditingDraftId(action.action.id);
+      navigate(`/seller/new?draft=${encodeURIComponent(action.action.id)}`);
+      return;
+    }
+    if (action.action.type === "new" || action.action.type === "verification") return navigateSeller("new");
     if (action.action.type === "product") return navigateSeller("products");
   }
 
@@ -207,6 +228,22 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
     }
   }
 
+  async function handleUpdateDraft(draftId: string, input: SellerListingDraftInput): Promise<boolean> {
+    setListingSubmitting(true);
+    setError(null);
+    try {
+      await updateListingDraft(draftId, input);
+      setStatusMessage("Listing changes saved.");
+      await loadWorkspace();
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save the listing changes.");
+      return false;
+    } finally {
+      setListingSubmitting(false);
+    }
+  }
+
   async function handleVerificationSubmit(submission: SellerVerificationSubmission): Promise<boolean> {
     setVerificationSubmitting(true);
     setVerificationError(null);
@@ -279,7 +316,27 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
 
       {activeRoute === "today" && <SellerTodayPage actions={actions} facts={facts} copy={copy} onAction={handleAction} />}
       {activeRoute === "products" && <SellerProductsPage rows={productRows} copy={copy} onAction={handleProductAction} onCompare={openMarketComparison} />}
-      {activeRoute === "new" && <SellerListingFlow onboarding={onboarding} submitting={listingSubmitting} verificationSubmitting={verificationSubmitting} verificationError={verificationError} onCreateDraft={handleCreateDraft} onSubmitDraft={handleSubmitDraft} onSubmitVerification={handleVerificationSubmit} />}
+      {activeRoute === "new" && (
+        <SellerListingFlow
+          onboarding={onboarding}
+          editingDraft={editingDraft}
+          submitting={listingSubmitting}
+          verificationSubmitting={verificationSubmitting}
+          verificationError={verificationError}
+          onCreateDraft={handleCreateDraft}
+          onUpdateDraft={handleUpdateDraft}
+          onSubmitDraft={handleSubmitDraft}
+          onSubmitVerification={handleVerificationSubmit}
+          onEditDraft={(draft) => {
+            setEditingDraftId(draft.draft_id);
+            navigate(`/seller/new?draft=${encodeURIComponent(draft.draft_id)}`);
+          }}
+          onCancelEdit={() => {
+            setEditingDraftId(null);
+            navigate("/seller/new", { replace: true });
+          }}
+        />
+      )}
       {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} copy={copy} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
       {activeRoute === "market" && <SellerMarketPage listings={listings} competitors={panel?.competing_listings ?? []} actions={actions} initialProductId={new URLSearchParams(location.search).get("product")} onAction={handleAction} />}
 

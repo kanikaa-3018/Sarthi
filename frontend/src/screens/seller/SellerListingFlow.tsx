@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, ImageOff, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ImageOff, PencilLine, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ListingDraft, SellerOnboardingResponse } from "../../types/api";
 import { SellerVerificationPanel, type SellerVerificationSubmission } from "./SellerVerificationPanel";
@@ -15,12 +15,16 @@ export type SellerListingDraftInput = {
 
 type SellerListingFlowProps = {
   onboarding: SellerOnboardingResponse | null;
+  editingDraft: ListingDraft | null;
   submitting: boolean;
   verificationSubmitting: boolean;
   verificationError: string | null;
   onCreateDraft: (draft: SellerListingDraftInput) => Promise<boolean>;
+  onUpdateDraft: (draftId: string, draft: SellerListingDraftInput) => Promise<boolean>;
   onSubmitDraft: (draft: ListingDraft) => Promise<void>;
   onSubmitVerification: (submission: SellerVerificationSubmission) => Promise<boolean>;
+  onEditDraft: (draft: ListingDraft) => void;
+  onCancelEdit: () => void;
 };
 
 type DraftState = Omit<SellerListingDraftInput, "base_price"> & { base_price: string };
@@ -36,12 +40,41 @@ const EMPTY_DRAFT: DraftState = {
   image_url: ""
 };
 
-export function SellerListingFlow({ onboarding, submitting, verificationSubmitting, verificationError, onCreateDraft, onSubmitDraft, onSubmitVerification }: SellerListingFlowProps) {
+export function SellerListingFlow({
+  onboarding,
+  editingDraft,
+  submitting,
+  verificationSubmitting,
+  verificationError,
+  onCreateDraft,
+  onUpdateDraft,
+  onSubmitDraft,
+  onSubmitVerification,
+  onEditDraft,
+  onCancelEdit
+}: SellerListingFlowProps) {
   const [stage, setStage] = useState(1);
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [errors, setErrors] = useState<DraftErrors>({});
   const formRef = useRef<HTMLDivElement>(null);
   const verification = onboarding?.seller_verification.verification_status ?? "pending";
+  const isEditing = Boolean(editingDraft);
+
+  useEffect(() => {
+    if (!editingDraft) return;
+    setDraft({
+      title: editingDraft.title,
+      category: editingDraft.category,
+      garment_type: editingDraft.garment_type,
+      fabric: editingDraft.fabric,
+      color_family: editingDraft.color_family,
+      base_price: String(editingDraft.base_price),
+      image_url: editingDraft.image_url
+    });
+    setErrors({});
+    setStage(1);
+    window.requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("#seller-title")?.focus());
+  }, [editingDraft?.draft_id]);
 
   function update<Key extends keyof DraftState>(key: Key, value: DraftState[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -69,15 +102,30 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
   }
 
   async function handleSave() {
-    const success = await onCreateDraft({
+    const payload = {
       ...draft,
       base_price: Number(draft.base_price)
-    });
-    if (success) {
+    };
+    const success = editingDraft
+      ? await onUpdateDraft(editingDraft.draft_id, payload)
+      : await onCreateDraft(payload);
+    if (success && !editingDraft) {
       setDraft(EMPTY_DRAFT);
       setErrors({});
       setStage(1);
     }
+  }
+
+  async function handleSaveAndSubmit() {
+    if (!editingDraft) return;
+    const payload = {
+      ...draft,
+      base_price: Number(draft.base_price)
+    };
+    const success = await onUpdateDraft(editingDraft.draft_id, payload);
+    if (!success) return;
+    await onSubmitDraft(editingDraft);
+    onCancelEdit();
   }
 
   async function handleImageFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -95,19 +143,27 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
     <div className="seller-page seller-listing-page" ref={formRef}>
       <header className="seller-page-header seller-listing-header">
         <div>
-          <p className="seller-kicker">New product</p>
-          <h2>Create a listing</h2>
-          <p>Add facts in a clear order, check the product image, then review exactly what goes to the reviewer.</p>
+          <p className="seller-kicker">{isEditing ? "Listing revision" : "New product"}</p>
+          <h2>{isEditing ? "Fix listing details" : "Create a listing"}</h2>
+          <p>{isEditing ? "Update only the facts the reviewer flagged, then send the corrected draft back." : "Add facts in a clear order, check the product image, then review exactly what goes to the reviewer."}</p>
         </div>
         <span className={`seller-verification-note seller-verification-${verification}`}>{verificationLabel(verification)}</span>
       </header>
+
+      {editingDraft && (
+        <section className="seller-listing-review-note" aria-label="Reviewer note">
+          <div><PencilLine size={17} aria-hidden="true" /><strong>Reviewer asked for correction</strong></div>
+          <p>{editingDraft.review_notes || "Review the product title, price, image, and catalog facts before sending this draft again."}</p>
+          <button type="button" className="seller-button seller-button-secondary" onClick={onCancelEdit}>Start new listing</button>
+        </section>
+      )}
 
       {onboarding && verification !== "verified" && (
         <SellerVerificationPanel onboarding={onboarding} submitting={verificationSubmitting} apiError={verificationError} onSubmit={onSubmitVerification} />
       )}
 
       <ol className="seller-stepper" aria-label="Listing progress">
-        {["Product basics", "Image and evidence", "Review"].map((label, index) => {
+        {["Product basics", "Image and evidence", isEditing ? "Resubmit" : "Review"].map((label, index) => {
           const number = index + 1;
           return (
             <li key={label} className={number === stage ? "active" : number < stage ? "complete" : ""} aria-current={number === stage ? "step" : undefined}>
@@ -166,8 +222,8 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
             <dl>
               <div><dt>Title</dt><dd>{draft.title}</dd></div>
               <div><dt>Category</dt><dd>{draft.category}</dd></div>
-              <div><dt>Product facts</dt><dd>{draft.color_family} · {draft.fabric} · {draft.garment_type}</dd></div>
-              <div><dt>Base price</dt><dd>₹{Number(draft.base_price).toLocaleString("en-IN")}</dd></div>
+              <div><dt>Product facts</dt><dd>{draft.color_family} / {draft.fabric} / {draft.garment_type}</dd></div>
+              <div><dt>Base price</dt><dd>Rs {Number(draft.base_price).toLocaleString("en-IN")}</dd></div>
               <div><dt>Review path</dt><dd>{verification === "verified" ? "Save the draft, then send it to reviewer." : "You can save the draft, but seller verification blocks buyer visibility."}</dd></div>
             </dl>
           </div>
@@ -177,7 +233,15 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
           {stage > 1 ? <button type="button" className="seller-button seller-button-secondary" onClick={() => setStage((current) => current - 1)}><ArrowLeft size={16} aria-hidden="true" />Back</button> : <span />}
           {stage === 1 && <button type="button" className="seller-button seller-button-primary" onClick={continueFromBasics}>Continue to image<ArrowRight size={16} aria-hidden="true" /></button>}
           {stage === 2 && <button type="button" className="seller-button seller-button-primary" onClick={continueFromImage}>Review listing<ArrowRight size={16} aria-hidden="true" /></button>}
-          {stage === 3 && <button type="button" className="seller-button seller-button-primary" disabled={submitting} onClick={() => void handleSave()}>{submitting ? "Saving draft" : "Save draft"}</button>}
+          {stage === 3 && !editingDraft && <button type="button" className="seller-button seller-button-primary" disabled={submitting} onClick={() => void handleSave()}>{submitting ? "Saving draft" : "Save draft"}</button>}
+          {stage === 3 && editingDraft && (
+            <div className="seller-stage-submit-group">
+              <button type="button" className="seller-button seller-button-secondary" disabled={submitting} onClick={() => void handleSave()}>{submitting ? "Saving" : "Save changes"}</button>
+              <button type="button" className="seller-button seller-button-primary" disabled={submitting || verification !== "verified"} title={verification === "verified" ? undefined : "Complete verification before sending to reviewer"} onClick={() => void handleSaveAndSubmit()}>
+                {submitting ? "Sending" : "Save and send"}
+              </button>
+            </div>
+          )}
         </footer>
       </section>
 
@@ -186,9 +250,16 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
         {onboarding?.listing_drafts.length ? (
           <ul>
             {onboarding.listing_drafts.map((item) => (
-              <li key={item.draft_id}>
-                <div><strong>{item.title}</strong><span>₹{item.base_price.toLocaleString("en-IN")} · {item.status.replace(/_/g, " ")}</span></div>
-                <button type="button" className="seller-button seller-button-secondary" disabled={submitting || item.status !== "draft"} onClick={() => void onSubmitDraft(item)}>{item.status === "draft" ? "Send for review" : item.status.replace(/_/g, " ")}</button>
+              <li key={item.draft_id} className={item.status === "needs_revision" ? "needs-revision" : undefined}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>Rs {item.base_price.toLocaleString("en-IN")} / {item.status.replace(/_/g, " ")}</span>
+                  {item.status === "needs_revision" && <small>{item.review_notes || "Reviewer requested changes before approval."}</small>}
+                </div>
+                <div className="seller-draft-actions">
+                  {canEditDraft(item) && <button type="button" className="seller-button seller-button-secondary" disabled={submitting} onClick={() => onEditDraft(item)}>{item.status === "needs_revision" ? "Fix" : "Edit"}</button>}
+                  <button type="button" className="seller-button seller-button-primary" disabled={submitting || !canEditDraft(item) || verification !== "verified"} onClick={() => void onSubmitDraft(item)}>{draftActionLabel(item)}</button>
+                </div>
               </li>
             ))}
           </ul>
@@ -196,6 +267,18 @@ export function SellerListingFlow({ onboarding, submitting, verificationSubmitti
       </section>
     </div>
   );
+}
+
+function canEditDraft(draft: ListingDraft) {
+  return draft.status === "draft" || draft.status === "needs_revision";
+}
+
+function draftActionLabel(draft: ListingDraft) {
+  if (draft.status === "draft") return "Send for review";
+  if (draft.status === "needs_revision") return "Send revised";
+  if (draft.status === "submitted") return "With reviewer";
+  if (draft.status === "approved") return "Approved";
+  return "Unavailable";
 }
 
 function SellerListingImage({ src, title }: { src: string; title: string }) {

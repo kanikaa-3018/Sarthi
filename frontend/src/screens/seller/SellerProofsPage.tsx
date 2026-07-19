@@ -59,16 +59,17 @@ function ProofTab({ active, label, count, onClick }: { active: boolean; label: s
 }
 
 function ProofTaskRow({ task, rejected = false, onOpen }: { task: SellerEvidenceCoachTask; rejected?: boolean; onOpen: () => void }) {
+  const replacement = rejected || Boolean(task.rejection_note);
   return (
-    <article className={`seller-proof-row ${rejected ? "rejected" : ""}`}>
-      <div className="seller-proof-row-icon" aria-hidden="true">{rejected ? <RotateCcw size={18} /> : <span>{task.buyer_demand}</span>}</div>
+    <article className={`seller-proof-row ${replacement ? "rejected" : ""}`}>
+      <div className="seller-proof-row-icon" aria-hidden="true">{replacement ? <RotateCcw size={18} /> : <span>{task.buyer_demand}</span>}</div>
       <div className="seller-proof-row-main">
         <span>{task.product_title}</span>
         <h3>{task.title}</h3>
         <p>{proofTaskReason(task)}</p>
-        <small>{proofTypeLabel(task.recommended_proof_type)} · {rejected ? "Reviewer asked for replacement" : `${task.buyer_demand} buyer ${task.buyer_demand === 1 ? "request" : "requests"}`}</small>
+        <small>{proofTypeLabel(task.recommended_proof_type)} / {replacement ? "Reviewer asked for replacement" : `${task.buyer_demand} buyer ${task.buyer_demand === 1 ? "request" : "requests"}`}</small>
       </div>
-      <button type="button" className="seller-button seller-button-primary" onClick={onOpen}>{rejected ? "Replace proof" : "Upload proof"}</button>
+      <button type="button" className="seller-button seller-button-primary" onClick={onOpen}>{replacement ? "Replace proof" : "Upload proof"}</button>
     </article>
   );
 }
