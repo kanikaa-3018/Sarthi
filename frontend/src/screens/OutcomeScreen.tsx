@@ -1,26 +1,46 @@
 import { useState } from "react";
-import { CheckCircle2, AlertTriangle, ArrowLeft, RotateCcw, Route, ShieldCheck, PackageSearch } from "lucide-react";
-import { simulateOutcome } from "../api/client";
-import type { OutcomeResponse } from "../types/api";
+import { CheckCircle2, AlertTriangle, ArrowLeft, RotateCcw, Route, ShieldCheck, PackageSearch, RefreshCcw } from "lucide-react";
+import { getReturnAlternative, simulateOutcome } from "../api/client";
+import type { LanguageCode } from "../i18n";
+import type { OutcomeResponse, ReturnAlternativeResponse } from "../types/api";
 
 type Props = {
   buyerId: string;
   variantId: string;
   contractId: string | null;
+  language?: LanguageCode;
+  buyingForSomeoneElse?: boolean;
+  wearerLabel?: string;
   onClose: () => void;
 };
 
-type SurveyStep = "status" | "reason" | "confirm";
+type SurveyStep = "status" | "reason" | "assistant" | "confirm";
 type ReturnReason = "too_small" | "too_large" | "color_different" | "fabric_different" | "damaged";
+type ReturnSeverity = "minor" | "major";
+type ReturnPreference = "exchange_ok" | "refund_only";
 
-export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props) {
+export function OutcomeScreen({
+  buyerId,
+  variantId,
+  contractId,
+  language = "english",
+  buyingForSomeoneElse = false,
+  wearerLabel = "Myself",
+  onClose
+}: Props) {
   const [step, setStep] = useState<SurveyStep>("status");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<OutcomeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chosenReason, setChosenReason] = useState<string>("");
+  const [assistant, setAssistant] = useState<ReturnAlternativeResponse | null>(null);
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState<string | null>(null);
+  const [severity, setSeverity] = useState<ReturnSeverity>("minor");
+  const [preference, setPreference] = useState<ReturnPreference>("exchange_ok");
+  const copy = outcomeCopy(language);
 
-  async function submitOutcome(status: "delivered_kept" | "returned", reasonCode?: ReturnReason) {
+  async function submitOutcome(status: "delivered_kept" | "returned" | "exchanged", reasonCode?: ReturnReason) {
     setLoading(true);
     setError(null);
     try {
@@ -28,24 +48,51 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
         buyer_id: buyerId,
         variant_id: variantId,
         status,
-        return_reason: status === "returned" ? (reasonCode || "too_small") : undefined,
-        contract_id: contractId ?? undefined
+        return_reason: status === "delivered_kept" ? undefined : (reasonCode || "too_small"),
+        contract_id: contractId ?? undefined,
+        buying_for_someone_else: buyingForSomeoneElse
       });
       setResult(response);
       setStep("confirm");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save order outcome.");
+      setError(err instanceof Error ? err.message : copy.saveOutcomeError);
     } finally {
       setLoading(false);
     }
   }
 
+  async function loadReturnAssistant(
+    reasonCode: ReturnReason,
+    nextSeverity: ReturnSeverity = severity,
+    nextPreference: ReturnPreference = preference
+  ) {
+    setAssistantLoading(true);
+    setAssistantError(null);
+    setAssistant(null);
+    setSeverity(nextSeverity);
+    setPreference(nextPreference);
+    setStep("assistant");
+    try {
+      setAssistant(await getReturnAlternative({
+        buyer_id: buyerId,
+        variant_id: variantId,
+        return_reason: reasonCode,
+        severity: nextSeverity,
+        buyer_preference: nextPreference
+      }));
+    } catch (err) {
+      setAssistantError(err instanceof Error ? err.message : copy.returnOptionsError);
+    } finally {
+      setAssistantLoading(false);
+    }
+  }
+
   const reasons: Array<{ label: string; code: ReturnReason }> = [
-    { label: "Too small", code: "too_small" },
-    { label: "Too large", code: "too_large" },
-    { label: "Color different", code: "color_different" },
-    { label: "Fabric different", code: "fabric_different" },
-    { label: "Damaged", code: "damaged" }
+    { label: outcomeReasonLabel("too_small", language), code: "too_small" },
+    { label: outcomeReasonLabel("too_large", language), code: "too_large" },
+    { label: outcomeReasonLabel("color_different", language), code: "color_different" },
+    { label: outcomeReasonLabel("fabric_different", language), code: "fabric_different" },
+    { label: outcomeReasonLabel("damaged", language), code: "damaged" }
   ];
   const selectedReason = reasons.find((reason) => reason.label === chosenReason);
 
@@ -56,9 +103,11 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
       {step === "status" && (
         <div className="outcome-step">
           <div className="outcome-heading">
-            <h4>Did this order work for you?</h4>
+            <h4>{copy.didOrderWork}</h4>
             <p>
-            This feedback updates your fit memory and checks whether the pre-order expectation was met.
+            {buyingForSomeoneElse
+              ? copy.familyMemorySafe.replace("{wearer}", wearerLabel.toLowerCase())
+              : copy.selfMemoryUse}
             </p>
           </div>
 
@@ -69,7 +118,7 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
               disabled={loading}
             >
               <CheckCircle2 size={24} />
-              Kept it
+              {copy.keptIt}
             </button>
 
             <button
@@ -78,7 +127,7 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
               disabled={loading}
             >
               <RotateCcw size={24} />
-              Returned it
+              {copy.returnedIt}
             </button>
           </div>
         </div>
@@ -93,7 +142,7 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
             >
               <ArrowLeft size={16} />
             </button>
-            <h4>What did not work?</h4>
+            <h4>{copy.whatDidNotWork}</h4>
           </div>
 
           <div className="outcome-chip-grid">
@@ -113,11 +162,88 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
 
           <button
             className="outcome-submit-btn"
-            onClick={() => selectedReason && submitOutcome("returned", selectedReason.code)}
+            onClick={() => selectedReason && loadReturnAssistant(selectedReason.code)}
             disabled={loading || !selectedReason}
           >
-            Submit return reason
+            {copy.checkBeforeReturn}
           </button>
+        </div>
+      )}
+
+      {step === "assistant" && selectedReason && (
+        <div className="outcome-step">
+          <div className="outcome-reason-header">
+            <button
+              onClick={() => setStep("reason")}
+              className="outcome-back-btn"
+              aria-label={copy.backToReason}
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <h4>{copy.beforeReturn}</h4>
+          </div>
+
+          <div className="return-assistant-quick-checks">
+            <div>
+              <span>{copy.issueSize}</span>
+              <div>
+                <button
+                  type="button"
+                  className={severity === "minor" ? "selected" : ""}
+                  onClick={() => loadReturnAssistant(selectedReason.code, "minor", preference)}
+                  disabled={assistantLoading}
+                >
+                  {copy.smallIssue}
+                </button>
+                <button
+                  type="button"
+                  className={severity === "major" ? "selected" : ""}
+                  onClick={() => loadReturnAssistant(selectedReason.code, "major", preference)}
+                  disabled={assistantLoading}
+                >
+                  {copy.cannotUse}
+                </button>
+              </div>
+            </div>
+            <div>
+              <span>{copy.whatPrefer}</span>
+              <div>
+                <button
+                  type="button"
+                  className={preference === "exchange_ok" ? "selected" : ""}
+                  onClick={() => loadReturnAssistant(selectedReason.code, severity, "exchange_ok")}
+                  disabled={assistantLoading}
+                >
+                  {copy.exchangeOk}
+                </button>
+                <button
+                  type="button"
+                  className={preference === "refund_only" ? "selected" : ""}
+                  onClick={() => loadReturnAssistant(selectedReason.code, severity, "refund_only")}
+                  disabled={assistantLoading}
+                >
+                  {copy.refundOnly}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {assistantError && <div className="notice error">{assistantError}</div>}
+          {assistantLoading ? (
+            <div className="return-assistant-card loading">
+              <RefreshCcw size={18} className="spin-icon" />
+              <strong>{copy.checkingBetterOption}</strong>
+            </div>
+          ) : assistant ? (
+            <ReturnAssistantCard
+              assistant={assistant}
+              selectedReason={selectedReason.code}
+              language={language}
+              onExchange={() => submitOutcome("exchanged", selectedReason.code)}
+              onReturn={() => submitOutcome("returned", selectedReason.code)}
+              loading={loading}
+            />
+          ) : null}
         </div>
       )}
 
@@ -129,48 +255,51 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
 
           <div className="outcome-confirm-copy">
             <strong>
-              {result.expectation_contract?.status === "broken"
-                ? "Expectation gap captured."
-                : "Outcome saved and contract closed."}
+              {result.outcome.status === "exchanged"
+                ? copy.exchangeCaptured
+                : result.expectation_contract?.status === "broken"
+                ? copy.expectationGapCaptured
+                : copy.outcomeSaved}
             </strong>
             <span>
-              Aggregate product confidence will refresh after quality checks.
+              {copy.aggregateRefresh}
             </span>
           </div>
 
           <OutcomeLoopCard
             status={result.outcome.status}
-            selectedReason={chosenReason}
+            selectedReason={selectedReason?.label ?? chosenReason}
             memoryUpdated={result.outcome.memory_update.updated}
             graphSynced={result.graph_sync.available}
+            language={language}
           />
 
           <div className="outcome-confirm-facts">
             <div className="kv-row">
-              <span>Outcome ID</span>
+              <span>{copy.outcomeId}</span>
               <strong><code>{result.outcome.fact_id}</code></strong>
             </div>
             <div className="kv-row">
-              <span>Closet memory</span>
-              <strong>{result.outcome.memory_update.updated ? "Updated" : "No change needed"}</strong>
+              <span>{copy.fitMemory}</span>
+              <strong>{result.outcome.memory_update.updated ? copy.updated : copy.noChangeNeeded}</strong>
             </div>
             <div className="kv-row">
-              <span>Expectation contract</span>
+              <span>{copy.expectationContract}</span>
               <strong className={`ui-badge ${result.expectation_contract?.status === "broken" ? "caution" : "positive"}`}>
                 {result.expectation_contract
                   ? labelize(result.expectation_contract.status)
-                  : "Not attached"}
+                  : copy.notAttached}
               </strong>
             </div>
             {result.expectation_contract?.broken_dimension && (
               <div className="kv-row">
-                <span>Broken area</span>
+                <span>{copy.brokenArea}</span>
                 <strong>{labelize(result.expectation_contract.broken_dimension)}</strong>
               </div>
             )}
             <div className="kv-row">
-              <span>Evidence map</span>
-              <strong>{result.graph_sync.available ? "Synced" : "Grounded facts active"}</strong>
+              <span>{copy.evidenceMap}</span>
+              <strong>{result.graph_sync.available ? copy.synced : copy.groundedFactsActive}</strong>
             </div>
           </div>
 
@@ -178,10 +307,74 @@ export function OutcomeScreen({ buyerId, variantId, contractId, onClose }: Props
             className="outcome-done-btn"
             onClick={onClose}
           >
-            Done
+            {copy.done}
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function ReturnAssistantCard({
+  assistant,
+  selectedReason,
+  language,
+  onExchange,
+  onReturn,
+  loading
+}: {
+  assistant: ReturnAlternativeResponse;
+  selectedReason: ReturnReason;
+  language: LanguageCode;
+  onExchange: () => void;
+  onReturn: () => void;
+  loading: boolean;
+}) {
+  const recommended = assistant.suggestion.recommended;
+  const canExchange = assistant.suggestion.type === "exchange_size" || assistant.suggestion.type === "local_alteration";
+  const copy = outcomeCopy(language);
+  return (
+    <div className={`return-assistant-card ${recommended ? "recommended" : "return-valid"}`}>
+      <div className="return-assistant-head">
+        <span className="return-assistant-icon">
+          {recommended ? <Route size={18} /> : <ShieldCheck size={18} />}
+        </span>
+        <div>
+          <span className="eyebrow">{copy.returnAssistant}</span>
+          <strong>{assistant.suggestion.title}</strong>
+          <p>{assistant.suggestion.summary}</p>
+        </div>
+      </div>
+
+      <div className="return-agent-trace">
+        <div><span>{copy.observe}</span><strong>{outcomeReasonLabel(selectedReason, language)}</strong></div>
+        <div><span>{copy.reason}</span><strong>{assistant.evidence.selected_size} to {assistant.evidence.recommended_size}</strong></div>
+        <div><span>{copy.act}</span><strong>{assistant.suggestion.primary_action}</strong></div>
+      </div>
+
+      <div className="return-assistant-reasons">
+        {assistant.suggestion.reasons.slice(0, 3).map((reason) => (
+          <p key={reason}><CheckCircle2 size={13} /> {reason}</p>
+        ))}
+      </div>
+
+      {assistant.suggestion.caution && (
+        <div className="return-assistant-caution">
+          <AlertTriangle size={14} />
+          <span>{assistant.suggestion.caution}</span>
+        </div>
+      )}
+
+      <div className="return-assistant-actions">
+        {recommended && canExchange && (
+          <button type="button" className="outcome-submit-btn" onClick={onExchange} disabled={loading}>
+            {loading ? copy.saving : assistant.suggestion.primary_action}
+          </button>
+        )}
+        <button type="button" className="outcome-done-btn secondary" onClick={onReturn} disabled={loading}>
+          {loading ? copy.saving : copy.continueReturn}
+        </button>
+      </div>
     </div>
   );
 }
@@ -190,53 +383,59 @@ function OutcomeLoopCard({
   status,
   selectedReason,
   memoryUpdated,
-  graphSynced
+  graphSynced,
+  language
 }: {
   status: string;
   selectedReason: string;
   memoryUpdated: boolean;
   graphSynced: boolean;
+  language: LanguageCode;
 }) {
-  const returned = status === "returned";
-  const returnReason = selectedReason || "Return reason";
+  const returned = status === "returned" || status === "exchanged";
+  const exchanged = status === "exchanged";
+  const copy = outcomeCopy(language);
+  const returnReason = selectedReason || copy.returnReason;
   const items = returned
     ? [
         {
-          label: "Buyer memory",
+          label: copy.buyerMemory,
           value: memoryUpdated
-            ? `${returnReason} will reduce similar mistakes in future recommendations.`
-            : "No private fit-memory change was needed for this return.",
+            ? copy.returnMemoryUpdated.replace("{reason}", returnReason)
+            : copy.returnMemoryNoChange,
           icon: <ShieldCheck size={15} />
         },
         {
-          label: "Seller signal",
-          value: "Only aggregate reason counts are shared, so sellers can fix size, color, fabric, or packaging issues.",
+          label: copy.sellerSignal,
+          value: copy.aggregateSellerSignal,
           icon: <PackageSearch size={15} />
         },
         {
-          label: "Return rescue",
-          value: "Clean returns can move to exchange, nearby demand, or faster relisting instead of blindly moving backward.",
+          label: copy.returnRescue,
+          value: exchanged
+            ? copy.exchangeVisible
+            : copy.returnRescueCopy,
           icon: <Route size={15} />
         }
       ]
     : [
         {
-          label: "Buyer memory",
+          label: copy.buyerMemory,
           value: memoryUpdated
-            ? "Your retained size signal improves future fit decisions."
-            : "This kept order strengthens confidence without exposing private buyer data.",
+            ? copy.keptMemoryUpdated
+            : copy.keptMemoryNoPrivateData,
           icon: <ShieldCheck size={15} />
         },
         {
-          label: "Seller signal",
-          value: "A kept outcome adds positive SKU evidence after quality checks.",
+          label: copy.sellerSignal,
+          value: copy.keptSellerSignal,
           icon: <PackageSearch size={15} />
         },
         {
-          label: "Graph loop",
+          label: copy.graphLoop,
           value: graphSynced
-            ? "Future decision evidence is refreshed with this outcome."
-            : "Grounded facts stay active until the evidence sync is available.",
+            ? copy.graphSynced
+            : copy.groundedFactsStayActive,
           icon: <Route size={15} />
         }
       ];
@@ -244,8 +443,8 @@ function OutcomeLoopCard({
   return (
     <div className={`outcome-loop-card ${returned ? "returned" : "kept"}`}>
       <div className="outcome-loop-header">
-        <span className="eyebrow">{returned ? "Return loop" : "Trust loop"}</span>
-        <strong>{returned ? "What happens after this return" : "How this improves future checks"}</strong>
+        <span className="eyebrow">{exchanged ? copy.exchangeLoop : returned ? copy.returnLoop : copy.trustLoop}</span>
+        <strong>{exchanged ? copy.afterExchange : returned ? copy.afterReturn : copy.afterKept}</strong>
       </div>
       <div className="outcome-loop-list">
         {items.map((item) => (
@@ -257,6 +456,289 @@ function OutcomeLoopCard({
       </div>
     </div>
   );
+}
+
+type OutcomeCopyKey =
+  | "didOrderWork"
+  | "familyMemorySafe"
+  | "selfMemoryUse"
+  | "keptIt"
+  | "returnedIt"
+  | "whatDidNotWork"
+  | "checkBeforeReturn"
+  | "backToReason"
+  | "beforeReturn"
+  | "issueSize"
+  | "smallIssue"
+  | "cannotUse"
+  | "whatPrefer"
+  | "exchangeOk"
+  | "refundOnly"
+  | "checkingBetterOption"
+  | "exchangeCaptured"
+  | "expectationGapCaptured"
+  | "outcomeSaved"
+  | "aggregateRefresh"
+  | "outcomeId"
+  | "fitMemory"
+  | "updated"
+  | "noChangeNeeded"
+  | "expectationContract"
+  | "notAttached"
+  | "brokenArea"
+  | "evidenceMap"
+  | "synced"
+  | "groundedFactsActive"
+  | "done"
+  | "returnAssistant"
+  | "observe"
+  | "reason"
+  | "act"
+  | "saving"
+  | "continueReturn"
+  | "returnReason"
+  | "buyerMemory"
+  | "returnMemoryUpdated"
+  | "returnMemoryNoChange"
+  | "sellerSignal"
+  | "aggregateSellerSignal"
+  | "returnRescue"
+  | "exchangeVisible"
+  | "returnRescueCopy"
+  | "keptMemoryUpdated"
+  | "keptMemoryNoPrivateData"
+  | "keptSellerSignal"
+  | "graphLoop"
+  | "graphSynced"
+  | "groundedFactsStayActive"
+  | "exchangeLoop"
+  | "returnLoop"
+  | "trustLoop"
+  | "afterExchange"
+  | "afterReturn"
+  | "afterKept"
+  | "saveOutcomeError"
+  | "returnOptionsError";
+
+const OUTCOME_COPY: Record<LanguageCode, Record<OutcomeCopyKey, string>> = {
+  english: {
+    didOrderWork: "Did this order work for you?",
+    familyMemorySafe: "Marked for {wearer}. This helps product trust but will not change your size memory.",
+    selfMemoryUse: "This feedback updates your fit memory and checks whether the pre-order promise was met.",
+    keptIt: "Kept it",
+    returnedIt: "Returned it",
+    whatDidNotWork: "What did not work?",
+    checkBeforeReturn: "Check before return",
+    backToReason: "Back to return reason",
+    beforeReturn: "Before return",
+    issueSize: "Issue size",
+    smallIssue: "Small issue",
+    cannotUse: "Cannot use",
+    whatPrefer: "What do you prefer?",
+    exchangeOk: "Exchange ok",
+    refundOnly: "Refund only",
+    checkingBetterOption: "Sarthi is checking a better option...",
+    exchangeCaptured: "Exchange path captured.",
+    expectationGapCaptured: "Expectation gap captured.",
+    outcomeSaved: "Outcome saved and contract closed.",
+    aggregateRefresh: "Product confidence refreshes after quality checks.",
+    outcomeId: "Outcome ID",
+    fitMemory: "Fit memory",
+    updated: "Updated",
+    noChangeNeeded: "No change needed",
+    expectationContract: "Expectation contract",
+    notAttached: "Not attached",
+    brokenArea: "Broken area",
+    evidenceMap: "Evidence map",
+    synced: "Synced",
+    groundedFactsActive: "Grounded facts active",
+    done: "Done",
+    returnAssistant: "Sarthi return assistant",
+    observe: "Observe",
+    reason: "Reason",
+    act: "Act",
+    saving: "Saving...",
+    continueReturn: "Continue return",
+    returnReason: "Return reason",
+    buyerMemory: "Buyer memory",
+    returnMemoryUpdated: "{reason} will reduce similar mistakes in future recommendations.",
+    returnMemoryNoChange: "No private fit-memory change was needed for this return.",
+    sellerSignal: "Seller signal",
+    aggregateSellerSignal: "Only aggregate reason counts are shared, so sellers can fix size, color, fabric, or packaging issues.",
+    returnRescue: "Return help",
+    exchangeVisible: "The exchange remains visible without counting like a normal kept order.",
+    returnRescueCopy: "A clean return can move to exchange, nearby demand, or faster relisting.",
+    keptMemoryUpdated: "Your retained size signal improves future fit decisions.",
+    keptMemoryNoPrivateData: "This kept order strengthens confidence without exposing private buyer data.",
+    keptSellerSignal: "A kept outcome adds positive SKU evidence after quality checks.",
+    graphLoop: "Evidence loop",
+    graphSynced: "Future decision evidence is refreshed with this outcome.",
+    groundedFactsStayActive: "Grounded facts stay active until evidence sync is available.",
+    exchangeLoop: "Exchange loop",
+    returnLoop: "Return loop",
+    trustLoop: "Trust loop",
+    afterExchange: "What happens after this exchange",
+    afterReturn: "What happens after this return",
+    afterKept: "How this improves future checks",
+    saveOutcomeError: "Could not save order outcome.",
+    returnOptionsError: "Could not check return options."
+  },
+  hindi: {
+    didOrderWork: "Order aapke kaam aaya?",
+    familyMemorySafe: "{wearer} ke liye marked hai. Product trust improve hoga, par aapki size memory nahi badlegi.",
+    selfMemoryUse: "Ye feedback aapki fit memory aur pre-order promise check ko update karta hai.",
+    keptIt: "Rakh liya",
+    returnedIt: "Return kiya",
+    whatDidNotWork: "Kya problem thi?",
+    checkBeforeReturn: "Return se pehle check",
+    backToReason: "Return reason par wapas",
+    beforeReturn: "Return se pehle",
+    issueSize: "Problem kitni badi hai",
+    smallIssue: "Chhoti problem",
+    cannotUse: "Use nahi kar sakte",
+    whatPrefer: "Aap kya chahte ho?",
+    exchangeOk: "Exchange theek hai",
+    refundOnly: "Sirf refund",
+    checkingBetterOption: "Sarthi better option check kar raha hai...",
+    exchangeCaptured: "Exchange path save ho gaya.",
+    expectationGapCaptured: "Promise gap save ho gaya.",
+    outcomeSaved: "Feedback save ho gaya.",
+    aggregateRefresh: "Quality check ke baad product confidence refresh hoga.",
+    outcomeId: "Outcome ID",
+    fitMemory: "Fit memory",
+    updated: "Updated",
+    noChangeNeeded: "Change nahi chahiye",
+    expectationContract: "Promise snapshot",
+    notAttached: "Attach nahi hai",
+    brokenArea: "Problem area",
+    evidenceMap: "Proof map",
+    synced: "Synced",
+    groundedFactsActive: "Proof facts active",
+    done: "Done",
+    returnAssistant: "Sarthi return helper",
+    observe: "Dekha",
+    reason: "Socha",
+    act: "Action",
+    saving: "Saving...",
+    continueReturn: "Return continue karo",
+    returnReason: "Return reason",
+    buyerMemory: "Buyer memory",
+    returnMemoryUpdated: "{reason} future recommendations me same galti kam karega.",
+    returnMemoryNoChange: "Is return me private fit-memory change nahi hua.",
+    sellerSignal: "Seller signal",
+    aggregateSellerSignal: "Seller ko sirf total reason counts milte hain, private memory nahi.",
+    returnRescue: "Return help",
+    exchangeVisible: "Exchange visible rahega, normal kept order jaisa count nahi hoga.",
+    returnRescueCopy: "Clean return exchange, nearby demand, ya faster relisting me help kar sakta hai.",
+    keptMemoryUpdated: "Aapka retained size signal future fit ko better karega.",
+    keptMemoryNoPrivateData: "Kept order confidence badhata hai, private buyer data share nahi hota.",
+    keptSellerSignal: "Kept outcome quality check ke baad SKU proof ko improve karta hai.",
+    graphLoop: "Proof loop",
+    graphSynced: "Future decision proof is outcome se refresh hoga.",
+    groundedFactsStayActive: "Evidence sync tak grounded facts active rahenge.",
+    exchangeLoop: "Exchange loop",
+    returnLoop: "Return loop",
+    trustLoop: "Trust loop",
+    afterExchange: "Is exchange ke baad kya hoga",
+    afterReturn: "Is return ke baad kya hoga",
+    afterKept: "Future checks kaise better honge",
+    saveOutcomeError: "Order feedback save nahi hua.",
+    returnOptionsError: "Return options check nahi ho paye."
+  },
+  hinglish: {
+    didOrderWork: "Order kaam aaya?",
+    familyMemorySafe: "{wearer} ke liye marked. Product trust improve hoga, aapki size memory nahi badlegi.",
+    selfMemoryUse: "Feedback aapki fit memory aur order promise check ko update karta hai.",
+    keptIt: "Kept it",
+    returnedIt: "Returned it",
+    whatDidNotWork: "Kya issue tha?",
+    checkBeforeReturn: "Return se pehle check",
+    backToReason: "Back to return reason",
+    beforeReturn: "Before return",
+    issueSize: "Issue size",
+    smallIssue: "Small issue",
+    cannotUse: "Cannot use",
+    whatPrefer: "Preference?",
+    exchangeOk: "Exchange ok",
+    refundOnly: "Refund only",
+    checkingBetterOption: "Sarthi better option check kar raha hai...",
+    exchangeCaptured: "Exchange path saved.",
+    expectationGapCaptured: "Expectation gap saved.",
+    outcomeSaved: "Outcome saved.",
+    aggregateRefresh: "Quality checks ke baad product confidence refresh hoga.",
+    outcomeId: "Outcome ID",
+    fitMemory: "Fit memory",
+    updated: "Updated",
+    noChangeNeeded: "No change",
+    expectationContract: "Expectation snapshot",
+    notAttached: "Not attached",
+    brokenArea: "Issue area",
+    evidenceMap: "Proof map",
+    synced: "Synced",
+    groundedFactsActive: "Grounded facts active",
+    done: "Done",
+    returnAssistant: "Sarthi return helper",
+    observe: "Observe",
+    reason: "Reason",
+    act: "Act",
+    saving: "Saving...",
+    continueReturn: "Continue return",
+    returnReason: "Return reason",
+    buyerMemory: "Buyer memory",
+    returnMemoryUpdated: "{reason} future recommendations me same mistake kam karega.",
+    returnMemoryNoChange: "Private fit-memory change needed nahi tha.",
+    sellerSignal: "Seller signal",
+    aggregateSellerSignal: "Seller ko sirf aggregate reasons milte hain, private memory nahi.",
+    returnRescue: "Return help",
+    exchangeVisible: "Exchange visible rahega without counting like a normal kept order.",
+    returnRescueCopy: "Clean return exchange, nearby demand, ya faster relisting me help karta hai.",
+    keptMemoryUpdated: "Retained size signal future fit decisions improve karta hai.",
+    keptMemoryNoPrivateData: "Kept order confidence badhata hai without private buyer data exposure.",
+    keptSellerSignal: "Kept outcome quality checks ke baad SKU evidence improve karta hai.",
+    graphLoop: "Evidence loop",
+    graphSynced: "Future decision evidence refresh ho gaya.",
+    groundedFactsStayActive: "Evidence sync tak grounded facts active rahenge.",
+    exchangeLoop: "Exchange loop",
+    returnLoop: "Return loop",
+    trustLoop: "Trust loop",
+    afterExchange: "Exchange ke baad kya hoga",
+    afterReturn: "Return ke baad kya hoga",
+    afterKept: "Future checks kaise improve honge",
+    saveOutcomeError: "Order outcome save nahi hua.",
+    returnOptionsError: "Return options check nahi hue."
+  }
+};
+
+const OUTCOME_REASON_LABELS: Record<LanguageCode, Record<ReturnReason, string>> = {
+  english: {
+    too_small: "Too small",
+    too_large: "Too large",
+    color_different: "Color different",
+    fabric_different: "Fabric different",
+    damaged: "Damaged"
+  },
+  hindi: {
+    too_small: "Size chhota",
+    too_large: "Size bada",
+    color_different: "Color alag",
+    fabric_different: "Fabric alag",
+    damaged: "Damaged"
+  },
+  hinglish: {
+    too_small: "Too small",
+    too_large: "Too large",
+    color_different: "Color different",
+    fabric_different: "Fabric different",
+    damaged: "Damaged"
+  }
+};
+
+function outcomeCopy(language: LanguageCode) {
+  return OUTCOME_COPY[language] ?? OUTCOME_COPY.english;
+}
+
+function outcomeReasonLabel(reason: ReturnReason, language: LanguageCode) {
+  return OUTCOME_REASON_LABELS[language]?.[reason] ?? OUTCOME_REASON_LABELS.english[reason];
 }
 
 function labelize(value: string) {
