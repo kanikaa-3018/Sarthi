@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogOut, ShieldCheck, Sun, Moon, RefreshCcw, User, Globe } from "lucide-react";
+import { LogOut, Sun, Moon, RefreshCcw, User, Globe } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { clearStoredSession, getBuyerProofs, getMe, getStoredSession, logout, storeSession, resetSeed } from "../api/client";
 import { AuthScreen } from "../screens/AuthScreen";
@@ -8,11 +8,10 @@ import { CheckoutPage } from "../screens/CheckoutPage";
 import { SellerPanel } from "../screens/SellerPanel";
 import { AdminReviewPanel } from "../screens/AdminReviewPanel";
 import { TrustCenter } from "../screens/TrustCenter";
-import { LANGUAGE_OPTIONS, t, type ExperienceMode, type LanguageCode } from "../i18n";
+import { LANGUAGE_OPTIONS, t, type LanguageCode } from "../i18n";
 import type { AuthSession } from "../types/api";
 
 const LANGUAGE_STORAGE_KEY = "sarthi.language";
-const EXPERIENCE_MODE_STORAGE_KEY = "sarthi.experienceMode";
 const THEME_STORAGE_KEY = "sarthi.theme";
 
 type BuyerProofNavSignal = {
@@ -46,7 +45,6 @@ export function App() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(readStoredLanguage);
-  const [experienceMode, setExperienceMode] = useState<ExperienceMode>(readStoredExperienceMode);
   const [buyerProofNav, setBuyerProofNav] = useState<BuyerProofNavSignal | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -97,10 +95,6 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
   }, [language]);
-
-  useEffect(() => {
-    window.localStorage.setItem(EXPERIENCE_MODE_STORAGE_KEY, experienceMode);
-  }, [experienceMode]);
 
   useEffect(() => {
     if (session?.account.role !== "buyer" || !session.account.buyer_id) {
@@ -169,6 +163,8 @@ export function App() {
       : theme;
   const role = session?.account.role;
   const buyerId = session?.account.buyer_id;
+  const isCheckoutRoute = location.pathname.startsWith("/shop/checkout");
+  const isAdminRoute = location.pathname.startsWith("/admin");
   const sellerNavCopy = SELLER_NAV_COPY[language] ?? SELLER_NAV_COPY.english;
   const sellerNavActive = (path: string) => {
     const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
@@ -182,9 +178,13 @@ export function App() {
       ? normalizedPath === "/admin"
       : normalizedPath === path || normalizedPath.startsWith(`${path}/`);
   };
+  const adminCommandActive = () => {
+    const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
+    return ["/admin", "/admin/uploads", "/admin/drafts", "/admin/audit"].includes(normalizedPath);
+  };
 
   return (
-    <div className="web-app-container">
+    <div className={`web-app-container${isCheckoutRoute ? " checkout-app-route" : ""}${isAdminRoute ? " admin-app-route" : ""}`}>
       <header className="web-header commerce-header">
         <div className="web-header-container commerce-header-container">
           <button
@@ -206,10 +206,17 @@ export function App() {
                   <>
                     <button
                       type="button"
-                      className={location.pathname === "/shop" || location.pathname.startsWith("/shop/product") || location.pathname.startsWith("/shop/saved") ? "active" : ""}
+                      className={location.pathname === "/shop" || location.pathname.startsWith("/shop/product") || location.pathname.startsWith("/shop/saved") || location.pathname.startsWith("/shop/checkout") ? "active" : ""}
                       onClick={() => navigate("/shop")}
                     >
                       <span>{t(language, "shop")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={location.pathname.startsWith("/trust") ? "active" : ""}
+                      onClick={() => navigate("/trust")}
+                    >
+                      <span>{t(language, "trust")}</span>
                     </button>
                     <button
                       type="button"
@@ -278,35 +285,31 @@ export function App() {
                   <>
                     <button
                       type="button"
-                      className={`admin-nav-item agent ${adminNavActive("/admin") ? "active" : ""}`}
+                      className={`admin-nav-item ${adminCommandActive() ? "active" : ""}`}
                       onClick={() => navigate("/admin")}
                     >
-                      <span className="admin-nav-mark">AI</span>
-                      <span>Agent</span>
+                      <span>Queue</span>
                     </button>
                     <button
                       type="button"
-                      className={`admin-nav-item ${adminNavActive("/admin/uploads") ? "active" : ""}`}
-                      onClick={() => navigate("/admin/uploads")}
+                      className={`admin-nav-item agent ${adminNavActive("/admin/agent") ? "active" : ""}`}
+                      onClick={() => navigate("/admin/agent")}
                     >
-                      <span className="admin-nav-mark">EV</span>
-                      <span>Evidence</span>
+                      <span>Triage</span>
                     </button>
                     <button
                       type="button"
-                      className={`admin-nav-item ${adminNavActive("/admin/drafts") ? "active" : ""}`}
-                      onClick={() => navigate("/admin/drafts")}
+                      className={`admin-nav-item ${adminNavActive("/admin/policy") ? "active" : ""}`}
+                      onClick={() => navigate("/admin/policy")}
                     >
-                      <span className="admin-nav-mark">DL</span>
-                      <span>Draft Lab</span>
+                      <span>Policy</span>
                     </button>
                     <button
                       type="button"
-                      className={`admin-nav-item ${adminNavActive("/admin/audit") ? "active" : ""}`}
-                      onClick={() => navigate("/admin/audit")}
+                      className={`admin-nav-item ${adminNavActive("/admin/impact") ? "active" : ""}`}
+                      onClick={() => navigate("/admin/impact")}
                     >
-                      <span className="admin-nav-mark">LOG</span>
-                      <span>Audit</span>
+                      <span>Impact</span>
                     </button>
                   </>
                 )}
@@ -341,21 +344,6 @@ export function App() {
                   ))}
                 </select>
               </label>
-
-              {role === "buyer" && (
-                <button
-                  className="web-header-btn commerce-mode-btn"
-                  type="button"
-                  onClick={() => setExperienceMode(experienceMode === "simple" ? "standard" : "simple")}
-                  aria-pressed={experienceMode === "simple"}
-                >
-                  <ShieldCheck size={14} />
-                  <span className="hide-on-mobile">
-                    {experienceMode === "simple" ? t(language, "simpleMode") : t(language, "standardMode")}
-                  </span>
-                  <span className="show-on-mobile">{experienceMode === "simple" ? "Simple" : "Details"}</span>
-                </button>
-              )}
 
               {/* Dark/Light mode toggle */}
               <button
@@ -417,7 +405,7 @@ export function App() {
                     buyerId={buyerId}
                     ready={true}
                     language={language}
-                    experienceMode={experienceMode}
+                    experienceMode="simple"
                   />
                 ) : (
                   <RoleRedirect session={session} />
@@ -472,10 +460,6 @@ function defaultPath(role: AuthSession["account"]["role"]) {
 function readStoredLanguage(): LanguageCode {
   const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
   return LANGUAGE_OPTIONS.some((option) => option.code === stored) ? (stored as LanguageCode) : "english";
-}
-
-function readStoredExperienceMode(): ExperienceMode {
-  return window.localStorage.getItem(EXPERIENCE_MODE_STORAGE_KEY) === "standard" ? "standard" : "simple";
 }
 
 function readStoredTheme(): "light" | "dark" | "system" {
