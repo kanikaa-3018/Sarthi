@@ -870,15 +870,6 @@ input:focus {
     gap: 4px;
   }
 
-  .buyer-shop-copy h2 {
-    font-size: 34px;
-    max-width: 320px;
-  }
-
-  .buyer-shop-copy p {
-    font-size: 13px;
-  }
-
   .buyer-shop-shell .web-product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
