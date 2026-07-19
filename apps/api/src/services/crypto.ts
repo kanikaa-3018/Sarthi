@@ -9,6 +9,10 @@ export function sha256(input: string) {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
+export function sha256Bytes(input: Buffer | Uint8Array) {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
 export function clientPasswordSecret(clientHash: string) {
   return `client-sha256:${clientHash.trim().toLowerCase()}`;
 }
