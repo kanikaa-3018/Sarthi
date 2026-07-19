@@ -45,6 +45,19 @@ test("logout clears the browser session and revokes the API token", async ({ pag
   expect(me.status()).toBe(401);
 });
 
+test("logout completes locally when the API request fails", async ({ page }) => {
+  await loginThroughDemo(page, "buyer");
+  await expect(page).toHaveURL(DEMO_ACCOUNTS.buyer.defaultPath);
+  await page.route("**/api/auth/logout", (route) => route.abort("failed"));
+
+  await page.getByTitle("Logout").click();
+
+  await expect(page).toHaveURL("/login");
+  expect(await page.evaluate(() => localStorage.getItem("sarthi.auth.session"))).toBeNull();
+  await page.goto("/shop");
+  await expect(page).toHaveURL("/login");
+});
+
 async function loginThroughDemo(page: Page, portal: AuthPortal) {
   const account = DEMO_ACCOUNTS[portal];
   await page.goto("/login");

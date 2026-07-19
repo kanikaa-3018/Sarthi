@@ -141,10 +141,15 @@ export function App() {
 
   async function handleLogout() {
     setLoggingOut(true);
-    await logout();
-    setSession(null);
-    navigate("/login", { replace: true });
-    setLoggingOut(false);
+    try {
+      await logout();
+    } catch {
+      // Local logout must still complete when server revocation is unavailable.
+    } finally {
+      setSession(null);
+      navigate("/login", { replace: true });
+      setLoggingOut(false);
+    }
   }
 
   async function handleResetDatabase() {
