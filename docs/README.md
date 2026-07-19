@@ -7,6 +7,7 @@ This folder contains the public documentation intended for judges, mentors, and 
 - [PRD](PRD.md): product requirements, users, scope, trust model, and roadmap.
 - [Initial Features](INITIAL_FEATURES.md): the original feature surface and why each feature exists.
 - [Judge Review Guide](JUDGE_REVIEW_GUIDE.md): how to run, inspect, and evaluate the product.
+- [Mentor Q&A](MENTOR_QA.md): concise answers for mentor and judge discussion.
 - [Implementation Plan](IMPLEMENTATION_PLAN.md): build order and phase exit gates.
 - [Architecture](ARCHITECTURE.md): backend, frontend, data, and graph structure.
 - [Data Strategy And Edge Cases](DATA_STRATEGY_AND_EDGE_CASES.md): how the product handles missing, stale, or synthetic data.
