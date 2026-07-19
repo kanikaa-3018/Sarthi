@@ -58,7 +58,7 @@ The spec will also verify normal logout, protected-route redirection after logou
 
 ### 5. Isolated E2E runtime
 
-Make Playwright, Vite's API proxy, and the E2E helper accept optional environment-controlled API/frontend ports while keeping their current defaults unchanged. Run the new spec with dedicated ports and a dedicated database name such as `sarthi_codex_auth_e2e`.
+Make Playwright, Vite's API proxy, and the E2E helper accept environment-controlled API/frontend ports. Normal Vite development keeps its existing `5173`/`8000` defaults, while Playwright defaults to dedicated `5190`/`8200` ports and the isolated `sarthi_codex_auth_e2e` database.
 
 Isolation is a safety requirement: the tests reset seed data and must never target the active demo database or its servers.
 
@@ -79,7 +79,7 @@ Isolation is a safety requirement: the tests reset seed data and must never targ
 
 ## Risk Controls
 
-- Defaults for existing development commands stay unchanged.
+- Defaults for normal development commands stay unchanged; E2E defaults become isolated by design.
 - No seed reset is run against the normal `sarthi` database.
 - The change to `AuthScreen` is intentionally small to reduce conflicts with the active UI work.
 - Both the normal Fastify logout path and a simulated network failure are tested explicitly because they exercise separate failure modes.
