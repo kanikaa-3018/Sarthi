@@ -19,7 +19,8 @@ import {
   fitPrediction,
   variantsForProduct
 } from "../services/domain.js";
-import { inferAttribute, withoutId } from "../services/format.js";
+import { deterministicGraphChatAnswer } from "../services/graphAnswers.js";
+import { inferAttribute, label, withoutId } from "../services/format.js";
 import { clusterKnowledgeGraph } from "../services/knowledgeGraph.js";
 import { llmCacheKey, readLlmCache, writeLlmCache } from "../services/llmCache.js";
 import { resolveSimilarListingSet } from "../services/similarListings.js";
@@ -125,6 +126,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       }));
     const retrievalFactIds = retrieval.results.flatMap((result) => result.fact_ids ?? []);
     const factIds = [...new Set([...retrievalFactIds, ...graph.fact_ids])].slice(0, 10);
+    const fallback = deterministicGraphChatAnswer(graph, body.query ?? "");
     const grounded = await generateGroundedAgentAnswer({
       task: "graph_chat",
       query: body.query ?? "",
@@ -174,16 +176,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
         })),
         fact_ids: factIds
       },
-      fallback: {
-        title: "Sarthi evidence answer",
-        summary: "Sarthi checked seller trust, SKU outcomes, review credibility, and proof coverage before answering.",
-        reasons: [
-          "The evidence map separates seller reliability from product quality.",
-          "Return outcomes can downweight generic positive reviews.",
-          "Missing proof becomes a seller action item."
-        ],
-        caution: null
-      }
+      fallback
     });
     const matchedNodeIds = retrievedNodeIds.size
       ? [...retrievedNodeIds]
@@ -300,6 +293,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const body: any = request.body;
     assertBuyer(account, body.buyer_id);
     const cacheKey = llmCacheKey("agent_query", {
+      answer_version: "sku_proof_v3",
       buyer_id: body.buyer_id,
       cluster_id: body.cluster_id,
       selected_variant_id: body.selected_variant_id,
@@ -325,6 +319,15 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       ? await skuPassport(db, body.buyer_id, product.product_id, body.selected_variant_id)
       : null;
     const fact_ids: string[] = passport?.fact_ids?.slice(0, 12) ?? [];
+    const attribute = inferAttribute(body.query);
+    const fallback = product && passport
+      ? productAdviceFallback(body.query ?? "", attribute, product, passport)
+      : {
+          title: "Sarthi answer",
+          summary: "Sarthi needs a selected SKU before it can inspect seller, size, return, proof, and offer evidence.",
+          reasons: ["Open a product and select a size so Sarthi can check SKU-specific facts."],
+          caution: "This answer is not tied to a SKU yet."
+        };
     const grounded = await generateGroundedAgentAnswer({
       task: "product_advice",
       query: body.query ?? "",
@@ -359,12 +362,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
         } : null,
         fact_ids
       },
-      fallback: {
-        title: "Sarthi answer",
-        summary: "Sarthi checked seller, SKU, review, return, proof, and offer evidence. If proof is missing, it asks the seller instead of guessing.",
-        reasons: ["Answers are grounded in MongoDB evidence documents.", "Seller proof gaps become aggregate seller tasks."],
-        caution: passport?.evidence_gaps?.length ? "Some proof is still missing, so the recommendation should stay cautious." : null
-      }
+      fallback
     });
     const trace = await createTrace(db, {
       buyer_id: body.buyer_id,
@@ -374,14 +372,15 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       tools_used: ["intentDetection", "groundedAnswer", grounded.source],
       fact_ids
     });
+    const weakGeneratedAnswer = shouldUseFallbackProductAdvice(grounded.title, grounded.summary, grounded.reasons, body.query ?? "", passport, attribute);
     const response = {
       trace_id: trace.trace_id,
-      intent: [inferAttribute(body.query), "trust_question"],
+      intent: [attribute, "trust_question"],
       answer: {
-        title: grounded.title,
-        summary: grounded.summary,
-        reasons: grounded.reasons,
-        caution: grounded.caution,
+        title: weakGeneratedAnswer ? fallback.title : grounded.title,
+        summary: weakGeneratedAnswer ? fallback.summary : grounded.summary,
+        reasons: weakGeneratedAnswer ? fallback.reasons : normalizeAgentReasons(grounded.reasons, fallback.reasons),
+        caution: weakGeneratedAnswer ? fallback.caution : grounded.caution ?? fallback.caution,
         primary_action: body.selected_variant_id
           ? { type: "open_variant", variant_id: body.selected_variant_id, label: "Inspect SKU proof" }
           : null
@@ -460,4 +459,98 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     assertBuyer(account, body.buyer_id);
     return returnAlternativeAssistant(db, body);
   });
+}
+
+function productAdviceFallback(query: string, attribute: string, product: any, passport: any) {
+  const evidence = passport.outcome_evidence ?? {};
+  const fit = passport.fit ?? {};
+  const selectedSize = passport.variant?.size ? `size ${passport.variant.size}` : "this size";
+  const returnRate = Number(evidence.return_rate ?? 0);
+  const fitRate = Number(evidence.fit_as_expected_rate ?? 0);
+  const delivered = Number(evidence.delivered_orders_90d ?? 0);
+  const relevantGap = passport.evidence_gaps?.find((gap: any) => gap.attribute === attribute)
+    ?? passport.evidence_gaps?.[0]
+    ?? null;
+  const hasIssue = Boolean(passport.avoidable_issue);
+  const issueTitle = passport.avoidable_issue?.title ? String(passport.avoidable_issue.title) : null;
+  const issueAction = passport.avoidable_issue?.action ? String(passport.avoidable_issue.action) : null;
+  const reasons = [
+    delivered > 0
+      ? `${delivered} recent delivered orders were checked for this SKU.`
+      : "This SKU has limited delivered-order evidence.",
+    Number.isFinite(fitRate) && fitRate > 0
+      ? `${Math.round(fitRate * 100)}% of recent buyers kept this SKU without fit-related return feedback.`
+      : `Sarthi checked fit guidance for ${selectedSize}.`,
+    Number.isFinite(returnRate)
+      ? `${Math.round(returnRate * 100)}% recent return rate is included in the trust check.`
+      : "Return outcome evidence is included when available."
+  ];
+
+  if (fit.recommended_size) {
+    reasons.unshift(`Your safer size is ${fit.recommended_size}; selected ${selectedSize} is checked against fit memory and outcomes.`);
+  }
+
+  const missingLine = relevantGap
+    ? `The main missing proof is ${label(String(relevantGap.attribute)).toLowerCase()}: ${String(relevantGap.summary).replace(/\.$/, "")}.`
+    : "No major proof gap was found for the selected SKU.";
+  if (relevantGap) {
+    reasons.splice(fit.recommended_size ? 1 : 0, 0, `Seller proof still needs ${label(String(relevantGap.attribute)).toLowerCase()}: ${String(relevantGap.summary).replace(/\.$/, "")}.`);
+  }
+  const issueSentence = issueTitle
+    ? `Main risk: ${issueTitle.toLowerCase()}.`
+    : "One risk still needs a check before payment.";
+  const summary = hasIssue
+    ? `${product.seller_name} has evidence for ${product.title}. ${issueSentence} ${missingLine}`
+    : `${product.seller_name} has SKU evidence for ${product.title}. ${missingLine}`;
+  const caution = issueAction
+    ?? (relevantGap ? `Do not treat this as a strong recommendation until ${label(String(relevantGap.attribute)).toLowerCase()} proof is reviewed.` : null);
+
+  return {
+    title: relevantGap ? "Check this proof before buying" : "Evidence is usable",
+    summary,
+    reasons: reasons.slice(0, 4),
+    caution
+  };
+}
+
+function normalizeAgentReasons(generatedReasons: string[], fallbackReasons: string[]) {
+  const useful = generatedReasons
+    .map((reason) => reason.trim())
+    .filter((reason) => reason.length > 0)
+    .filter((reason) => !/^missing\s+/i.test(reason))
+    .filter((reason) => !/proof is missing$/i.test(reason));
+  return (useful.length >= 2 ? useful : fallbackReasons).slice(0, 4);
+}
+
+function shouldUseFallbackProductAdvice(title: string, summary: string, reasons: string[], query: string, passport: any, attribute: string) {
+  const haystack = [title, summary, ...reasons].join(" ").toLowerCase();
+  const normalizedSummary = normalizeText(summary);
+  const normalizedQuery = normalizeText(query);
+  const questionEcho = normalizedSummary.length > 12 && (
+    summary.trim().endsWith("?") ||
+    normalizedQuery.startsWith(normalizedSummary) ||
+    normalizedSummary.startsWith(normalizedQuery)
+  );
+  const vague = [
+    "lacks some details",
+    "some details for a stronger recommendation",
+    "product evidence is available",
+    "missing daylight photo missing fabric",
+    "missing fabric closeup",
+    "missing packaging photo"
+  ].some((phrase) => haystack.includes(phrase));
+  const relevantGap = passport?.evidence_gaps?.some((gap: any) => gap.attribute === attribute || (attribute === "fabric" && gap.attribute === "transparency"));
+  const overclaimsMissingProof = Boolean(relevantGap) && (
+    haystack.includes("no evidence of") ||
+    haystack.includes("no proof of") ||
+    haystack.includes("no issue") ||
+    haystack.includes("no issues") ||
+    haystack.includes("safe to buy") ||
+    haystack.includes("safe to consider")
+  );
+  return questionEcho || vague || overclaimsMissingProof;
+}
+
+function normalizeText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }

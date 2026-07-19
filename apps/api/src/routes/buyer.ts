@@ -28,7 +28,7 @@ import {
   variantEvidence,
   variantsForProduct
 } from "../services/domain.js";
-import { buyerDashboard, buyerOrders, buyerProofLedger, buyerWishlist, correctOrderOutcome, privacySummary } from "../services/buyerOperations.js";
+import { buyerDashboard, buyerOrders, buyerProofLedger, buyerWishlist, correctOrderOutcome, markCheckoutOrderDelivered, privacySummary } from "../services/buyerOperations.js";
 import { withoutId } from "../services/format.js";
 
 export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
@@ -224,6 +224,13 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     const buyerId = (request.params as any).buyer_id;
     assertBuyer(account, buyerId);
     return buyerOrders(db, buyerId);
+  });
+
+  app.post("/buyers/:buyer_id/orders/:contract_id/delivered", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const buyerId = (request.params as any).buyer_id;
+    assertBuyer(account, buyerId);
+    return markCheckoutOrderDelivered(db, buyerId, (request.params as any).contract_id);
   });
 
   app.get("/buyers/:buyer_id/proofs", async (request, reply) => {

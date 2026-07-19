@@ -92,15 +92,25 @@ export async function approveSellerApplication(db: Db, account: any, application
   const c = collections(db);
   const appDoc = await c.sellerApplications.findOne({ application_id: applicationId });
   if (!appDoc) throwNotFound("Seller application not found");
+  if (appDoc.status !== "pending_review") {
+    throwBadRequest("Seller application is not waiting for reviewer approval.");
+  }
   const missingDocuments = await missingRequiredDocuments(db, appDoc.seller_id);
   if (missingDocuments.length) {
     throwBadRequest(`Approve required documents first: ${missingDocuments.map(labelize).join(", ")}.`);
   }
+  const reviewedAt = nowIso();
+  const applicationUpdate = await c.sellerApplications.updateOne(
+    { application_id: applicationId, status: "pending_review" },
+    { $set: { status: "approved", reviewed_at: reviewedAt } }
+  );
+  if (!applicationUpdate.matchedCount) {
+    throwBadRequest("Seller application was already reviewed.");
+  }
   await Promise.all([
-    c.sellerApplications.updateOne({ application_id: applicationId }, { $set: { status: "approved" } }),
     c.sellerProfiles.updateOne(
       { seller_id: appDoc.seller_id },
-      { $set: { verification_status: "verified", gst_status: "verified", kyc_status: "verified", data_access_level: "aggregate_only", last_verified_at: nowIso() } }
+      { $set: { verification_status: "verified", gst_status: "verified", kyc_status: "verified", data_access_level: "aggregate_only", last_verified_at: reviewedAt } }
     ),
     recordAdminEvent(db, account, "seller_application_approved", "seller_application", applicationId, appDoc.seller_id, "approved", notes)
   ]);
@@ -111,11 +121,18 @@ export async function approveSellerDocument(db: Db, account: any, documentId: st
   const c = collections(db);
   const document = await c.sellerVerificationDocuments.findOne({ document_id: documentId });
   if (!document) throwNotFound("Verification document not found");
+  if (!["submitted", "under_review"].includes(document.status)) {
+    throwBadRequest("Verification document is not waiting for review.");
+  }
+  const reviewedAt = nowIso();
+  const documentUpdate = await c.sellerVerificationDocuments.updateOne(
+    { document_id: documentId, status: { $in: ["submitted", "under_review"] } },
+    { $set: { status: "approved", reviewed_at: reviewedAt, notes } }
+  );
+  if (!documentUpdate.matchedCount) {
+    throwBadRequest("Verification document was already reviewed.");
+  }
   await Promise.all([
-    c.sellerVerificationDocuments.updateOne(
-      { document_id: documentId },
-      { $set: { status: "approved", reviewed_at: nowIso(), notes } }
-    ),
     updateProfileAfterDocumentDecision(db, document.seller_id, document.document_type, "approved"),
     recordAdminEvent(db, account, "seller_document_approved", "verification_document", documentId, document.seller_id, "approved", notes)
   ]);
@@ -127,11 +144,18 @@ export async function rejectSellerDocument(db: Db, account: any, documentId: str
   const c = collections(db);
   const document = await c.sellerVerificationDocuments.findOne({ document_id: documentId });
   if (!document) throwNotFound("Verification document not found");
+  if (!["submitted", "under_review"].includes(document.status)) {
+    throwBadRequest("Verification document is not waiting for review.");
+  }
+  const reviewedAt = nowIso();
+  const documentUpdate = await c.sellerVerificationDocuments.updateOne(
+    { document_id: documentId, status: { $in: ["submitted", "under_review"] } },
+    { $set: { status: "rejected", reviewed_at: reviewedAt, notes } }
+  );
+  if (!documentUpdate.matchedCount) {
+    throwBadRequest("Verification document was already reviewed.");
+  }
   await Promise.all([
-    c.sellerVerificationDocuments.updateOne(
-      { document_id: documentId },
-      { $set: { status: "rejected", reviewed_at: nowIso(), notes } }
-    ),
     updateProfileAfterDocumentDecision(db, document.seller_id, document.document_type, "rejected"),
     recordAdminEvent(db, account, "seller_document_rejected", "verification_document", documentId, document.seller_id, "rejected", notes)
   ]);
@@ -142,8 +166,17 @@ export async function rejectSellerApplication(db: Db, account: any, applicationI
   const c = collections(db);
   const appDoc = await c.sellerApplications.findOne({ application_id: applicationId });
   if (!appDoc) throwNotFound("Seller application not found");
+  if (appDoc.status !== "pending_review") {
+    throwBadRequest("Seller application is not waiting for reviewer rejection.");
+  }
+  const applicationUpdate = await c.sellerApplications.updateOne(
+    { application_id: applicationId, status: "pending_review" },
+    { $set: { status: "rejected", reviewed_at: nowIso() } }
+  );
+  if (!applicationUpdate.matchedCount) {
+    throwBadRequest("Seller application was already reviewed.");
+  }
   await Promise.all([
-    c.sellerApplications.updateOne({ application_id: applicationId }, { $set: { status: "rejected" } }),
     c.sellerProfiles.updateOne({ seller_id: appDoc.seller_id }, { $set: { verification_status: "restricted", restricted_reason: notes } }),
     recordAdminEvent(db, account, "seller_application_rejected", "seller_application", applicationId, appDoc.seller_id, "rejected", notes)
   ]);
@@ -158,13 +191,33 @@ export async function approveListingDraft(db: Db, account: any, draftId: string,
     await recordAdminEvent(db, account, "listing_draft_approval_skipped", "listing_draft", draftId, draft.seller_id, "already_approved", notes);
     return adminQueue(db);
   }
+  if (draft.status !== "submitted") {
+    throwBadRequest("Listing draft must be submitted before admin approval.");
+  }
+  const [seller, sellerProfile] = await Promise.all([
+    c.sellers.findOne({ seller_id: draft.seller_id }),
+    c.sellerProfiles.findOne({ seller_id: draft.seller_id })
+  ]);
+  if (!seller) {
+    throwBadRequest("Listing draft seller does not exist.");
+  }
+  if (sellerProfile?.verification_status !== "verified") {
+    throwBadRequest("Seller verification must be approved before publishing a listing.");
+  }
+  const reviewStartedAt = nowIso();
+  const claim = await c.listingDrafts.updateOne(
+    { draft_id: draftId, status: "submitted" },
+    { $set: { status: "publishing", publishing_started_at: reviewStartedAt, updated_at: reviewStartedAt } }
+  );
+  if (!claim.matchedCount) {
+    throwBadRequest("Listing draft is already being reviewed or was already reviewed.");
+  }
   const product_id = id("product");
   const cluster_id = draft.target_cluster_id ?? id("cluster");
   const variant_id = `${product_id}_xl`;
   const catalogFactId = id("fact_catalog");
   const priceFactId = id("fact_price");
   const inventoryFactId = id("fact_inventory");
-  const seller = await c.sellers.findOne({ seller_id: draft.seller_id });
   const existingCluster = await c.clusters.findOne({ cluster_id });
   if (!existingCluster) {
     await c.clusters.insertOne({
@@ -248,8 +301,18 @@ export async function approveListingDraft(db: Db, account: any, draftId: string,
     })
   ]);
   await c.listingDrafts.updateOne(
-    { draft_id: draftId },
-    { $set: { status: "approved", readiness_status: "evidence_building", updated_at: nowIso() } }
+    { draft_id: draftId, status: "publishing" },
+    {
+      $set: {
+        status: "approved",
+        readiness_status: "evidence_building",
+        reviewed_at: nowIso(),
+        review_notes: notes,
+        approved_product_id: product_id,
+        approved_variant_id: variant_id,
+        updated_at: nowIso()
+      }
+    }
   );
   await recordAdminEvent(db, account, "listing_draft_approved", "listing_draft", draftId, draft.seller_id, "approved", notes);
   return adminQueue(db);
@@ -259,8 +322,18 @@ export async function requestListingRevision(db: Db, account: any, draftId: stri
   const c = collections(db);
   const draft = await c.listingDrafts.findOne({ draft_id: draftId });
   if (!draft) throwNotFound("Listing draft not found");
+  if (!["submitted", "publishing"].includes(draft.status)) {
+    throwBadRequest("Only a submitted listing draft can be sent back for revision.");
+  }
+  const reviewedAt = nowIso();
+  const draftUpdate = await c.listingDrafts.updateOne(
+    { draft_id: draftId, status: { $in: ["submitted", "publishing"] } },
+    { $set: { status: "needs_revision", reviewed_at: reviewedAt, review_notes: notes, updated_at: reviewedAt } }
+  );
+  if (!draftUpdate.matchedCount) {
+    throwBadRequest("Listing draft was already reviewed.");
+  }
   await Promise.all([
-    c.listingDrafts.updateOne({ draft_id: draftId }, { $set: { status: "needs_revision", updated_at: nowIso() } }),
     recordAdminEvent(db, account, "listing_revision_requested", "listing_draft", draftId, draft.seller_id, "revision", notes)
   ]);
   return adminQueue(db);
@@ -270,11 +343,18 @@ export async function approveSellerEvidenceAsset(db: Db, account: any, proofId: 
   const c = collections(db);
   const asset = await c.sellerEvidenceAssets.findOne({ proof_id: proofId });
   if (!asset) throwNotFound("Seller proof asset not found");
+  if (asset.status !== "submitted") {
+    throwBadRequest("Seller proof asset is not waiting for review.");
+  }
+  const reviewedAt = nowIso();
+  const assetUpdate = await c.sellerEvidenceAssets.updateOne(
+    { proof_id: proofId, status: "submitted" },
+    { $set: { status: "verified", reviewed_at: reviewedAt, review_notes: notes } }
+  );
+  if (!assetUpdate.matchedCount) {
+    throwBadRequest("Seller proof asset was already reviewed.");
+  }
   await Promise.all([
-    c.sellerEvidenceAssets.updateOne(
-      { proof_id: proofId },
-      { $set: { status: "verified", reviewed_at: nowIso(), review_notes: notes } }
-    ),
     c.proofRequests.updateMany(
       {
         seller_id: asset.seller_id,
@@ -283,17 +363,14 @@ export async function approveSellerEvidenceAsset(db: Db, account: any, proofId: 
         resolution_proof_id: proofId,
         status: { $in: ["open", "submitted"] }
       },
-      { $set: { status: "resolved", resolved_at: nowIso(), updated_at: nowIso() } }
+      { $set: { status: "resolved", resolved_at: reviewedAt, updated_at: reviewedAt } }
     ),
     c.facts.updateOne(
       { fact_id: asset.fact_id },
       { $set: { summary: `${labelize(asset.attribute)} proof approved by reviewer.` } }
     ),
     asset.proof_type === "measurement_chart"
-      ? c.variants.updateMany(
-        { product_id: asset.product_id, measurement_proof_id: proofId },
-        { $set: { measurement_status: "verified", measurement_reviewed_at: nowIso() } }
-      )
+      ? applyMeasurementReview(db, asset, proofId, "verified", reviewedAt, notes)
       : Promise.resolve(),
     recordAdminEvent(db, account, "seller_proof_approved", "seller_evidence_asset", proofId, asset.seller_id, "approved", notes)
   ]);
@@ -304,11 +381,18 @@ export async function rejectSellerEvidenceAsset(db: Db, account: any, proofId: s
   const c = collections(db);
   const asset = await c.sellerEvidenceAssets.findOne({ proof_id: proofId });
   if (!asset) throwNotFound("Seller proof asset not found");
+  if (asset.status !== "submitted") {
+    throwBadRequest("Seller proof asset is not waiting for review.");
+  }
+  const reviewedAt = nowIso();
+  const assetUpdate = await c.sellerEvidenceAssets.updateOne(
+    { proof_id: proofId, status: "submitted" },
+    { $set: { status: "rejected", reviewed_at: reviewedAt, review_notes: notes } }
+  );
+  if (!assetUpdate.matchedCount) {
+    throwBadRequest("Seller proof asset was already reviewed.");
+  }
   await Promise.all([
-    c.sellerEvidenceAssets.updateOne(
-      { proof_id: proofId },
-      { $set: { status: "rejected", reviewed_at: nowIso(), review_notes: notes } }
-    ),
     c.proofRequests.updateMany(
       {
         seller_id: asset.seller_id,
@@ -320,7 +404,7 @@ export async function rejectSellerEvidenceAsset(db: Db, account: any, proofId: s
       {
         $set: {
           status: "open",
-          updated_at: nowIso(),
+          updated_at: reviewedAt,
           rejected_proof_id: proofId,
           rejection_notes: notes,
           resolution_proof_id: null
@@ -328,14 +412,66 @@ export async function rejectSellerEvidenceAsset(db: Db, account: any, proofId: s
       }
     ),
     asset.proof_type === "measurement_chart"
-      ? c.variants.updateMany(
-        { product_id: asset.product_id, measurement_proof_id: proofId },
-        { $set: { measurement_status: "rejected", measurement_reviewed_at: nowIso(), measurement_rejection_notes: notes } }
-      )
+      ? applyMeasurementReview(db, asset, proofId, "rejected", reviewedAt, notes)
       : Promise.resolve(),
     recordAdminEvent(db, account, "seller_proof_rejected", "seller_evidence_asset", proofId, asset.seller_id, "rejected", notes)
   ]);
   return adminQueue(db);
+}
+
+async function applyMeasurementReview(
+  db: Db,
+  asset: any,
+  proofId: string,
+  status: "verified" | "rejected",
+  reviewedAt: string,
+  notes: string
+) {
+  const c = collections(db);
+  if (status === "verified") {
+    if (!Number.isFinite(asset.measurements?.l_chest_inches) || !Number.isFinite(asset.measurements?.xl_chest_inches)) {
+      throwBadRequest("Measurement proof does not contain reviewable L and XL measurements.");
+    }
+    await Promise.all([
+      c.variants.updateOne(
+        { product_id: asset.product_id, size: "L", measurement_proof_id: proofId },
+        {
+          $set: {
+            chest_inches: asset.measurements?.l_chest_inches,
+            pending_chest_inches: null,
+            measurement_status: "verified",
+            measurement_reviewed_at: reviewedAt,
+            measurement_rejection_notes: null
+          }
+        }
+      ),
+      c.variants.updateOne(
+        { product_id: asset.product_id, size: "XL", measurement_proof_id: proofId },
+        {
+          $set: {
+            chest_inches: asset.measurements?.xl_chest_inches,
+            pending_chest_inches: null,
+            measurement_status: "verified",
+            measurement_reviewed_at: reviewedAt,
+            measurement_rejection_notes: null
+          }
+        }
+      )
+    ]);
+    return;
+  }
+
+  await c.variants.updateMany(
+    { product_id: asset.product_id, measurement_proof_id: proofId },
+    {
+      $set: {
+        pending_chest_inches: null,
+        measurement_status: "rejected",
+        measurement_reviewed_at: reviewedAt,
+        measurement_rejection_notes: notes
+      }
+    }
+  );
 }
 
 async function recordAdminEvent(db: Db, account: any, action: string, targetType: string, targetId: string, sellerId: string | null, decision: string, notes: string) {

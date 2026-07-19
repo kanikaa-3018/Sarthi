@@ -122,9 +122,44 @@ export async function buyerOrders(db: Db, buyerId: string) {
 
   return {
     buyer_id: buyerId,
-    pending_feedback: pending.length,
+    pending_feedback: pending.filter(Boolean).filter((order: any) => order.can_submit_outcome).length,
     orders
   };
+}
+
+export async function markCheckoutOrderDelivered(db: Db, buyerId: string, contractId: string) {
+  const c = collections(db);
+  const contract = await c.expectationContracts.findOne({ contract_id: contractId, buyer_id: buyerId });
+  if (!contract) {
+    throwNotFound("Checkout order not found");
+  }
+  if (!contract.checkout_order_id) {
+    throwBadRequest("Only checkout orders can be marked delivered.");
+  }
+  if (contract.status !== "active" || contract.outcome_order_id) {
+    throwBadRequest("Order feedback is already closed for this checkout.");
+  }
+  if (contract.order_status === "delivered_needs_feedback") {
+    return buyerOrders(db, buyerId);
+  }
+  if (contract.order_status !== "placed") {
+    throwBadRequest("Only placed orders can be marked delivered.");
+  }
+  const deliveredAt = nowIso();
+  const update = await c.expectationContracts.updateOne(
+    {
+      contract_id: contractId,
+      buyer_id: buyerId,
+      status: "active",
+      order_status: "placed",
+      outcome_order_id: null
+    },
+    { $set: { order_status: "delivered_needs_feedback", delivered_at: deliveredAt, updated_at: deliveredAt } }
+  );
+  if (!update.matchedCount) {
+    throwBadRequest("Order delivery state changed. Refresh orders and try again.");
+  }
+  return buyerOrders(db, buyerId);
 }
 
 export async function correctOrderOutcome(db: Db, buyerId: string, orderId: string, body: any) {
@@ -353,7 +388,9 @@ export async function returnAlternativeAssistant(db: Db, body: any) {
   const nextSize = sizeAlternative(variant.size, reason, passport.fit.recommended_size);
   const canSuggestExchange = preference === "exchange_ok" && severity === "minor" && Boolean(nextSize) && ["too_small", "too_large"].includes(reason);
   const canSuggestAlteration = preference === "exchange_ok" && severity === "minor" && reason === "too_large";
-  const legitimateReturn = severity === "major" || ["damaged", "color_different", "fabric_different"].includes(reason) || preference === "refund_only";
+  const legitimateReturn = severity === "major"
+    || ["damaged", "color_different", "fabric_different", "wrong_item", "delivery_late"].includes(reason)
+    || preference === "refund_only";
 
   const deterministic = canSuggestExchange
     ? {
@@ -377,7 +414,7 @@ export async function returnAlternativeAssistant(db: Db, body: any) {
           type: "continue_return",
           title: legitimateReturn ? "Full return is valid" : "Return is still available",
           summary: legitimateReturn
-            ? "Sarthi will not push an alternative when the product is damaged, wrong, or clearly not usable."
+            ? "Sarthi will not push an alternative when the product is damaged, wrong, delayed, or clearly not usable."
             : "No safer alternative is backed strongly enough, so continuing the return is reasonable.",
           primary_action: "Continue return",
           recommended: false,
@@ -404,14 +441,16 @@ export async function returnAlternativeAssistant(db: Db, body: any) {
       fit: passport.fit,
       outcome_evidence: passport.outcome_evidence,
       avoidable_issue: passport.avoidable_issue,
-      guardrail: "Never discourage a legitimate return. Suggest exchange or alteration only for minor fit issues."
+      guardrail: "Never discourage a legitimate return. Suggest exchange or alteration only for minor size/fit issues. For damaged, wrong item, material, appearance, or delivery problems, allow the return path clearly."
     },
     fallback: {
       title: deterministic.title,
       summary: deterministic.summary,
       reasons: [
         `${passport.outcome_evidence.delivered_orders_90d} SKU outcomes were checked.`,
-        `Selected size is ${variant.size}; fit guidance points to ${passport.fit.recommended_size}.`,
+        ["too_small", "too_large"].includes(reason)
+          ? `Selected size is ${variant.size}; fit guidance points to ${passport.fit.recommended_size}.`
+          : `Issue type is ${label(reason).toLowerCase()}, so Sarthi treats this as a product or delivery mismatch rather than a fit preference.`,
         "Private buyer memory is not shared with the seller."
       ],
       caution: deterministic.recommended ? "If the product is damaged or wrong, continue the return." : null
@@ -436,9 +475,9 @@ export async function returnAlternativeAssistant(db: Db, body: any) {
       severity,
       buyer_preference: preference,
       questions: [
-        "Is the issue small or product is unusable?",
-        "Would an exchange solve it?",
-        "Is fabric/color otherwise okay?"
+        "Is the issue small or is the product unusable?",
+        "Would a replacement or exchange solve it?",
+        "Is the item otherwise okay?"
       ]
     },
     suggestion: {
@@ -465,8 +504,65 @@ export async function returnAlternativeAssistant(db: Db, body: any) {
 
 export async function recordOrderOutcome(db: Db, body: any) {
   const c = collections(db);
+  const allowedStatuses = new Set(["delivered_kept", "returned", "exchanged"]);
+  if (!allowedStatuses.has(body.status)) {
+    throwBadRequest("Order outcome status is not supported.");
+  }
+  let contract: any = null;
+  if (body.contract_id) {
+    contract = await c.expectationContracts.findOne({
+      contract_id: body.contract_id,
+      buyer_id: body.buyer_id
+    });
+    if (!contract) {
+      throwBadRequest("Order proof contract does not belong to this buyer.");
+    }
+    if (contract.variant_id !== body.variant_id) {
+      throwBadRequest("Order outcome does not match the locked product proof.");
+    }
+    if (contract.status !== "active" || contract.outcome_order_id) {
+      throwBadRequest("Order proof contract has already been completed.");
+    }
+    const orderStatus = contract.order_status ?? (contract.checkout_order_id ? "placed" : "delivered_needs_feedback");
+    if (orderStatus !== "delivered_needs_feedback") {
+      throwBadRequest("Order feedback is available only after delivery.");
+    }
+  }
+
   const order_id = id("order");
   const fact_id = id("fact_order");
+  const createdAt = nowIso();
+  if (body.contract_id && contract) {
+    const status = body.status === "returned" || body.status === "exchanged" ? "broken" : "kept";
+    const broken_dimension = body.return_reason?.includes("fabric")
+      ? "fabric"
+      : body.return_reason?.includes("color")
+        ? "color"
+        : body.return_reason?.includes("small") || body.return_reason?.includes("large")
+          ? "fit"
+          : body.return_reason?.includes("delivery")
+            ? "delivery"
+            : body.return_reason?.includes("damaged")
+              ? "packaging"
+              : body.return_reason?.includes("wrong")
+                ? "unknown"
+                : null;
+    const contractUpdate = await c.expectationContracts.updateOne(
+      {
+        contract_id: body.contract_id,
+        buyer_id: body.buyer_id,
+        variant_id: body.variant_id,
+        status: "active",
+        outcome_order_id: null
+      },
+      { $set: { status, completed_at: createdAt, outcome_order_id: order_id, broken_dimension, order_status: "feedback_submitted" } }
+    );
+    if (!contractUpdate.matchedCount) {
+      throwBadRequest("Order proof contract has already been completed.");
+    }
+    contract = { ...contract, status, completed_at: createdAt, outcome_order_id: order_id, broken_dimension, order_status: "feedback_submitted" };
+  }
+
   await c.outcomes.insertOne({
     order_id,
     buyer_id: body.buyer_id,
@@ -476,7 +572,7 @@ export async function recordOrderOutcome(db: Db, body: any) {
     buying_for_someone_else: Boolean(body.buying_for_someone_else),
     fit_memory_excluded: Boolean(body.buying_for_someone_else),
     contract_id: body.contract_id ?? null,
-    created_at: nowIso(),
+    created_at: createdAt,
     fact_id
   });
   await c.facts.insertOne({
@@ -485,7 +581,7 @@ export async function recordOrderOutcome(db: Db, body: any) {
     source_id: order_id,
     source_type: "order_outcome",
     summary: `${body.status} outcome for ${body.variant_id}`,
-    created_at: nowIso(),
+    created_at: createdAt,
     expires_at: null
   });
 
@@ -513,30 +609,11 @@ export async function recordOrderOutcome(db: Db, body: any) {
     memoryUpdate = { updated: true, memory_id, retained_size: memory.retained_size };
   }
 
-  let contract: any = null;
-  if (body.contract_id) {
-    contract = await c.expectationContracts.findOne({ contract_id: body.contract_id });
-    if (contract) {
-      const status = body.status === "returned" || body.status === "exchanged" ? "broken" : "kept";
-      const broken_dimension = body.return_reason?.includes("fabric")
-        ? "fabric"
-        : body.return_reason?.includes("color")
-          ? "color"
-          : body.return_reason?.includes("small") || body.return_reason?.includes("large")
-            ? "fit"
-            : null;
-      await c.expectationContracts.updateOne(
-        { contract_id: body.contract_id },
-        { $set: { status, completed_at: nowIso(), outcome_order_id: order_id, broken_dimension } }
-      );
-      contract = { ...contract, status, completed_at: nowIso(), outcome_order_id: order_id, broken_dimension };
-    }
-  }
   return {
     outcome: {
       order_id,
       fact_id,
-      created_at: nowIso(),
+      created_at: createdAt,
       status: body.status,
       buying_for_someone_else: Boolean(body.buying_for_someone_else),
       fit_memory_excluded: Boolean(body.buying_for_someone_else),
@@ -672,6 +749,18 @@ async function productForProductId(db: Db, productId: string) {
 function normalizeReturnReason(value: string) {
   const allowed = new Set(["too_small", "too_large", "color_different", "fabric_different", "damaged", "delivery_late", "wrong_item"]);
   return allowed.has(value) ? value : "too_small";
+}
+
+function throwBadRequest(message: string): never {
+  const error = new Error(message);
+  (error as any).statusCode = 400;
+  throw error;
+}
+
+function throwNotFound(message: string): never {
+  const error = new Error(message);
+  (error as any).statusCode = 404;
+  throw error;
 }
 
 function proofStatus(request: any, proofAsset: any) {
