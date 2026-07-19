@@ -537,7 +537,7 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
       score_breakdown: {
         ...confidenceBreakdown,
         confidence_source: confidenceAssignment.source,
-        prompt_version: "gemini_confidence_assignment_v1",
+        prompt_version: "ai_confidence_assignment_v2",
         adjusted_score: score,
         adjusted_score_percent: Math.floor(score * 100),
         adjustments: {

@@ -1,10 +1,11 @@
 import { env } from "../config/env.js";
 
-type GeminiJsonInput = {
+export type GeminiJsonInput = {
   systemInstruction: string;
   userText: string;
   userParts?: GeminiUserPart[];
   temperature?: number;
+  maxTokens?: number;
 };
 
 export type GeminiUserPart =
@@ -137,6 +138,7 @@ async function postGenerateContent(model: string, input: GeminiJsonInput) {
       }],
       generationConfig: {
         temperature: input.temperature ?? 0.2,
+        maxOutputTokens: input.maxTokens,
         responseMimeType: "application/json"
       }
     })

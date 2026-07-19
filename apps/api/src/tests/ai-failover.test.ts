@@ -76,6 +76,22 @@ describe("AI generation failover", () => {
     assert.deepEqual(result.value, { title: "Gemini fallback" });
   });
 
+  it("forwards the bounded output token budget to Gemini", async () => {
+    let received: { maxTokens?: number } | undefined;
+    const gemini = createGeminiGenerationAdapter({
+      configured: () => true,
+      model: () => "gemini-test",
+      generate: async (value) => {
+        received = value;
+        return "{\"title\":\"bounded\"}";
+      }
+    });
+
+    await gemini.generateStructured(input);
+
+    assert.equal(received?.maxTokens, 300);
+  });
+
   it("returns Bedrock output without invoking Gemini", async () => {
     let geminiCalls = 0;
 

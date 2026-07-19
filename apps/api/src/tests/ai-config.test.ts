@@ -14,6 +14,13 @@ describe("AI configuration", () => {
     assert.deepEqual(config.bedrockVisionModels, ["apac.amazon.nova-lite-v1:0"]);
     assert.equal(config.bedrockEmbeddingModel, "amazon.titan-embed-text-v2:0");
     assert.equal(config.bedrockEmbeddingDimensions, 512);
+    assert.equal(config.bedrockEnabled, false);
+  });
+
+  it("requires explicit Bedrock enablement before runtime calls", () => {
+    const config = parseAiConfig({ BEDROCK_ENABLED: "true" });
+
+    assert.equal(config.bedrockEnabled, true);
   });
 
   it("preserves legacy Gemini-only provider configuration", () => {

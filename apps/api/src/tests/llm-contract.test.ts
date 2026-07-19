@@ -43,4 +43,35 @@ describe("LLM contract helpers", () => {
       env.geminiApiKey = previousKey;
     }
   });
+
+  it("preserves the grounded answer shape from Bedrock", async () => {
+    const answer = await generateGroundedAgentAnswer({
+      task: "admin_automation",
+      query: "Which reviewer action is safe?",
+      context: { source_health: "operational" },
+      fallback: {
+        title: "Fallback",
+        summary: "Fallback summary",
+        reasons: ["Fallback reason"],
+        caution: null
+      }
+    }, async () => ({
+      provider: "bedrock",
+      model: "apac.amazon.nova-micro-v1:0",
+      value: {
+        title: "Safe action",
+        summary: "Review the evidence.",
+        reasons: ["Evidence is current."],
+        caution: null
+      }
+    }));
+
+    assert.deepEqual(answer, {
+      title: "Safe action",
+      summary: "Review the evidence.",
+      reasons: ["Evidence is current."],
+      caution: null,
+      source: "bedrock"
+    });
+  });
 });

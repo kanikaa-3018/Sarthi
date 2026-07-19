@@ -23,6 +23,7 @@ export function parseAiConfig(source: EnvironmentSource) {
 
   return {
     providerOrder,
+    bedrockEnabled: source.BEDROCK_ENABLED === "true",
     awsRegion: source.AWS_REGION ?? source.AWS_DEFAULT_REGION ?? "ap-south-1",
     bedrockTextModels: valueList(source.BEDROCK_TEXT_MODELS, [
       "apac.amazon.nova-micro-v1:0",
