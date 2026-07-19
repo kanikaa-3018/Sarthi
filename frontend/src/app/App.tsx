@@ -8,6 +8,7 @@ import { CheckoutPage } from "../screens/CheckoutPage";
 import { SellerPanel } from "../screens/SellerPanel";
 import { AdminReviewPanel } from "../screens/AdminReviewPanel";
 import { TrustCenter } from "../screens/TrustCenter";
+import { SarthiMark } from "../components/SarthiMark";
 import { LANGUAGE_OPTIONS, t, type LanguageCode } from "../i18n";
 import type { AuthSession } from "../types/api";
 
@@ -20,6 +21,11 @@ type BuyerProofNavSignal = {
   label: string;
   badgeLabel: string;
   needsAttention: boolean;
+};
+
+type ResetSeedStatus = {
+  tone: "working" | "success" | "error";
+  message: string;
 };
 
 const SELLER_NAV_COPY: Record<LanguageCode, { console: string; proofs: string; coach: string }> = {
@@ -46,6 +52,7 @@ export function App() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(readStoredLanguage);
   const [buyerProofNav, setBuyerProofNav] = useState<BuyerProofNavSignal | null>(null);
+  const [resetSeedStatus, setResetSeedStatus] = useState<ResetSeedStatus | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -63,7 +70,8 @@ export function App() {
         const refreshed = { ...stored, account: payload.account };
         storeSession(refreshed);
         setSession(refreshed);
-        if (location.pathname === "/" || location.pathname === "/login") {
+        const currentPath = window.location.pathname;
+        if (currentPath === "/" || currentPath === "/login") {
           navigate(defaultPath(payload.account.role), { replace: true });
         }
       })
@@ -72,7 +80,7 @@ export function App() {
         setSession(null);
       })
       .finally(() => setCheckingSession(false));
-  }, [location.pathname, navigate]);
+  }, [navigate]);
 
   // Update theme on documentElement
   useEffect(() => {
@@ -129,7 +137,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [location.pathname, session?.account.buyer_id, session?.account.role]);
+  }, [session?.account.buyer_id, session?.account.role]);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -140,14 +148,20 @@ export function App() {
   }
 
   async function handleResetDatabase() {
-    if (confirm("Reset database to initial seed facts?")) {
-      try {
-        await resetSeed();
-        alert("Database successfully reset!");
-        window.location.reload();
-      } catch (err) {
-        alert("Failed to reset database: " + (err instanceof Error ? err.message : String(err)));
-      }
+    if (!confirm("Reset database to initial seed facts?")) {
+      return;
+    }
+
+    setResetSeedStatus({ tone: "working", message: "Resetting facts..." });
+    try {
+      await resetSeed();
+      setResetSeedStatus({ tone: "success", message: "Facts reset. Refreshing..." });
+      window.setTimeout(() => window.location.reload(), 650);
+    } catch (err) {
+      setResetSeedStatus({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Reset failed"
+      });
     }
   }
 
@@ -178,9 +192,9 @@ export function App() {
       ? normalizedPath === "/admin"
       : normalizedPath === path || normalizedPath.startsWith(`${path}/`);
   };
-  const adminCommandActive = () => {
-    const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
-    return ["/admin", "/admin/uploads", "/admin/drafts", "/admin/audit"].includes(normalizedPath);
+  const isReviewDeskActive = () => {
+    const p = location.pathname;
+    return p === "/admin" || p.startsWith("/admin/uploads") || p.startsWith("/admin/drafts") || p.startsWith("/admin/audit");
   };
 
   return (
@@ -192,7 +206,9 @@ export function App() {
             type="button"
             onClick={() => session ? navigate(defaultPath(session.account.role)) : navigate("/login")}
           >
-            <div className="web-brand-badge">S</div>
+            <div className="web-brand-badge" aria-hidden="true">
+              <SarthiMark />
+            </div>
             <div className="commerce-brand-copy">
               <span className="web-brand-title">Sarthi</span>
               <span className="web-brand-subtitle">Shop with proof</span>
@@ -285,31 +301,31 @@ export function App() {
                   <>
                     <button
                       type="button"
-                      className={`admin-nav-item ${adminCommandActive() ? "active" : ""}`}
+                      className={`admin-nav-item ${isReviewDeskActive() ? "active" : ""}`}
                       onClick={() => navigate("/admin")}
                     >
-                      <span>Queue</span>
+                      <span>Review Desk</span>
                     </button>
                     <button
                       type="button"
-                      className={`admin-nav-item agent ${adminNavActive("/admin/agent") ? "active" : ""}`}
+                      className={`admin-nav-item agent ${location.pathname.startsWith("/admin/agent") ? "active" : ""}`}
                       onClick={() => navigate("/admin/agent")}
                     >
-                      <span>Triage</span>
+                      <span>AI Triage</span>
                     </button>
                     <button
                       type="button"
-                      className={`admin-nav-item ${adminNavActive("/admin/policy") ? "active" : ""}`}
+                      className={`admin-nav-item ${location.pathname.startsWith("/admin/policy") ? "active" : ""}`}
                       onClick={() => navigate("/admin/policy")}
                     >
-                      <span>Policy</span>
+                      <span>Risk & Policy</span>
                     </button>
                     <button
                       type="button"
-                      className={`admin-nav-item ${adminNavActive("/admin/impact") ? "active" : ""}`}
+                      className={`admin-nav-item ${location.pathname.startsWith("/admin/impact") ? "active" : ""}`}
                       onClick={() => navigate("/admin/impact")}
                     >
-                      <span>Impact</span>
+                      <span>Work Saved</span>
                     </button>
                   </>
                 )}
@@ -319,15 +335,26 @@ export function App() {
 
               {/* Reset database helper */}
               {role === "admin" && (
-                <button
-                  className="web-header-btn commerce-icon-btn"
-                  type="button"
-                  onClick={handleResetDatabase}
-                  title="Reset database"
-                >
-                  <RefreshCcw size={14} />
-                  <span className="hide-on-mobile">Reset Facts</span>
-                </button>
+                <>
+                  <button
+                    className="web-header-btn commerce-icon-btn"
+                    type="button"
+                    onClick={handleResetDatabase}
+                    disabled={resetSeedStatus?.tone === "working"}
+                    title="Reset database"
+                  >
+                    <RefreshCcw size={14} />
+                    <span className="hide-on-mobile">Reset Facts</span>
+                  </button>
+                  {resetSeedStatus && (
+                    <span
+                      className={`reset-seed-status ${resetSeedStatus.tone}`}
+                      role={resetSeedStatus.tone === "error" ? "alert" : "status"}
+                    >
+                      {resetSeedStatus.message}
+                    </span>
+                  )}
+                </>
               )}
 
               {/* Language Switcher */}
