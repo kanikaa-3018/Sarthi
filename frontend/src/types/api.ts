@@ -20,6 +20,22 @@ export type Product = {
   taxonomy_attributes?: Array<{ field_name: string; display_name: string; value: string }>;
   seller_snapshot?: Record<string, number | string | boolean>;
   fulfillment?: Record<string, number | string | boolean>;
+  buyer_trust?: ProductFeedTrust;
+};
+
+export type ProductFeedTrust = {
+  status: ProductTrustState["status"];
+  confidence: ProductTrustState["confidence"];
+  can_recommend: boolean;
+  headline: string;
+  buyer_guidance: string;
+  reasons: string[];
+  missing_data: string[];
+  source_status: SourceHealth["overall_status"] | "unknown";
+  seller_status: SellerVerification["verification_status"];
+  evidence_strength: VariantEvidence["evidence_strength"];
+  delivered_orders_90d: number;
+  open_proof_count: number;
 };
 
 export type FeedResponse = {
@@ -378,10 +394,12 @@ export type ProofRequest = {
   product_id: string;
   variant_id: string | null;
   attribute: ProofAttribute;
-  status: "open" | "resolved" | "dismissed";
+  status: "open" | "submitted" | "resolved" | "dismissed";
   request_count: number;
+  buyer_question?: string | null;
   created_at: string;
   updated_at: string;
+  resolved_at?: string | null;
   fact_id: string;
 };
 
@@ -776,6 +794,108 @@ export type WishlistRadarResponse = {
   };
 };
 
+export type BuyerWishlistItem = {
+  intent: WishlistIntentResponse["intent"];
+  product: Product;
+  variant: Variant | null;
+  radar: WishlistRadarEvent | null;
+};
+
+export type BuyerWishlistResponse = {
+  buyer_id: string;
+  count: number;
+  items: BuyerWishlistItem[];
+};
+
+export type BuyerProofLedgerItem = {
+  request: ProofRequest;
+  product: Product;
+  variant: Variant | null;
+  proof_asset: {
+    proof_id: string;
+    title: string;
+    description: string;
+    asset_url: string;
+    proof_type: ProofCoverageItem["recommended_proof_type"];
+    status: "submitted" | "verified" | "rejected";
+    submitted_at: string;
+    reviewed_at: string | null;
+    review_notes: string | null;
+    fact_id: string;
+  } | null;
+  status: "waiting_seller" | "admin_review" | "approved" | "needs_more_proof";
+  status_label: string;
+  next_step: string;
+  buyer_summary: string;
+  proof_quality: {
+    score: number;
+    label: string;
+    verdict: string;
+    checks: Array<{
+      key: string;
+      label: string;
+      passed: boolean;
+      detail: string;
+    }>;
+  };
+  trust_impact: {
+    before_score: number;
+    expected_after_score: number;
+    lift_points: number;
+    confidence: "low" | "medium" | "high";
+    reason: string;
+  };
+  timeline: Array<{ label: string; done: boolean; at: string | null }>;
+};
+
+export type BuyerProofLedgerResponse = {
+  buyer_id: string;
+  count: number;
+  summary: {
+    waiting_seller: number;
+    admin_review: number;
+    approved: number;
+    needs_more_proof: number;
+  };
+  items: BuyerProofLedgerItem[];
+};
+
+export type PaymentAssistOffer = {
+  offer_id: string;
+  label: string;
+  amount_rupees: number;
+  eligible: boolean;
+  reason: string;
+  payment_method: "upi" | "card" | "wallet" | "prepaid";
+};
+
+export type PaymentAssistCheck = {
+  key: string;
+  label: string;
+  status: "passed" | "watch";
+  detail: string;
+};
+
+export type PaymentAssist = {
+  recommended_mode: "prepaid" | "cod";
+  confidence_label: string;
+  title: string;
+  summary: string;
+  cart_value_rupees: number;
+  total_prepaid_benefit_rupees: number;
+  reward_points: number;
+  reward_value_rupees: number;
+  best_offer: PaymentAssistOffer | null;
+  offers: PaymentAssistOffer[];
+  safety_checks: PaymentAssistCheck[];
+  buyer_next_step: string;
+  agent_actions: Array<{
+    label: string;
+    detail: string;
+    done: boolean;
+  }>;
+};
+
 export type CartConfidenceResponse = {
   trace_id: string;
   buyer_id: string;
@@ -798,6 +918,7 @@ export type CartConfidenceResponse = {
     trust_condition: string;
     company_benefit: string;
   };
+  payment_assist?: PaymentAssist;
   line_items: Array<{
     product: Product;
     variant: Variant;
@@ -851,7 +972,54 @@ export type ExpectationContract = {
   completed_at: string | null;
   outcome_order_id: string | null;
   broken_dimension: string | null;
+  checkout_order_id?: string | null;
+  order_status?: "placed_pending_feedback" | string | null;
+  placed_at?: string | null;
+  payment_mode?: "cod" | "prepaid" | null;
+  payment_reward_points?: number;
+  payment_reward_value_rupees?: number;
+  payment_offer_savings_rupees?: number;
+  payment_assist_summary?: string | null;
+  buying_for_someone_else?: boolean;
+  fit_memory_excluded?: boolean;
+  wearer_label?: string | null;
   fact_id: string;
+};
+
+export type ReturnAlternativeResponse = {
+  trace_id: string;
+  buyer_id: string;
+  variant_id: string;
+  issue: {
+    reason: string;
+    severity: "minor" | "major";
+    buyer_preference: "exchange_ok" | "refund_only";
+    questions: string[];
+  };
+  suggestion: {
+    type: "exchange_size" | "local_alteration" | "continue_return";
+    title: string;
+    summary: string;
+    primary_action: string;
+    recommended: boolean;
+    confidence: "low" | "medium" | "high";
+    reasons: string[];
+    caution?: string | null;
+    suggested_size?: string | null;
+  };
+  agent: {
+    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  };
+  evidence: {
+    product_title: string;
+    seller_name: string;
+    selected_size: string;
+    recommended_size: string;
+    delivered_orders_90d: number;
+    return_rate: number;
+    fact_ids: string[];
+  };
+  graph_path: GraphPath;
 };
 
 export type OutcomeResponse = {
@@ -860,6 +1028,8 @@ export type OutcomeResponse = {
     fact_id: string;
     created_at: string;
     status: string;
+    buying_for_someone_else?: boolean;
+    fit_memory_excluded?: boolean;
     memory_update: {
       updated: boolean;
       reason?: string;
@@ -946,6 +1116,44 @@ export type BuyerDashboardResponse = {
   recent_memory: FitMemory[];
   recent_expectation_contracts: ExpectationContract[];
   guardrails: string[];
+};
+
+export type BuyerOrderItem = {
+  order_id: string;
+  checkout_order_id?: string | null;
+  contract_id: string | null;
+  buyer_id: string;
+  variant_id: string;
+  product: Product;
+  variant: Variant;
+  status: "delivered_needs_feedback" | "delivered_kept" | "returned" | "rto" | "exchanged" | string;
+  return_reason: string | null;
+  corrected_return_reason?: string | null;
+  correction_note?: string | null;
+  corrected_at?: string | null;
+  buying_for_someone_else?: boolean;
+  fit_memory_excluded?: boolean;
+  wearer_label?: string | null;
+  payment_mode?: "cod" | "prepaid" | null;
+  payment_reward_points?: number;
+  payment_reward_value_rupees?: number;
+  payment_offer_savings_rupees?: number;
+  payment_assist_summary?: string | null;
+  created_at: string;
+  fact_id: string | null;
+  can_submit_outcome: boolean;
+};
+
+export type BuyerOrdersResponse = {
+  buyer_id: string;
+  pending_feedback: number;
+  orders: BuyerOrderItem[];
+};
+
+export type CheckoutOrderResponse = {
+  checkout_order_id: string;
+  order: BuyerOrderItem | null;
+  expectation_contract: ExpectationContract | null;
 };
 
 export type FactDetail = {
@@ -1081,12 +1289,45 @@ export type SellerPanelResponse = {
     inputs_not_used: string[];
   };
   seller_listings: SellerPanelListing[];
+  seller_all_listings?: SellerPanelListing[];
+  action_board?: SellerActionBoard;
   competing_listings: SellerPanelListing[];
   privacy_guard: {
     safe_for_seller: boolean;
     summary: string;
   };
   fact_ids: string[];
+};
+
+export type SellerActionBoard = {
+  headline: string;
+  summary: string;
+  reasons: string[];
+  agent: {
+    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  };
+  rating_plan?: {
+    title: string;
+    summary: string;
+    steps: string[];
+  };
+  cards: Array<{
+    product_id: string;
+    product_title: string;
+    image_url: string;
+    priority: "high" | "medium" | "low";
+    issue: string;
+    action: string;
+    why: string;
+    issue_summary?: string;
+    buyer_impact?: string;
+    next_step?: string;
+    rating_lift?: string;
+    trust_steps?: string[];
+    proof_type: ProofCoverageItem["recommended_proof_type"];
+    metric: string;
+    score: number;
+  }>;
 };
 
 export type SellerEvidenceCoachTask = {
@@ -1108,6 +1349,29 @@ export type SellerEvidenceCoachResponse = {
   seller_id: string;
   open_task_count: number;
   resolved_request_count: number;
+  proof_nav: {
+    approved_count: number;
+    in_review_count: number;
+    rejected_count: number;
+    products_with_proof: number;
+    trust_lift_points: number;
+    rating_forecast: string;
+  };
+  proof_assets: Array<{
+    proof_id: string;
+    product_id: string;
+    product_title: string;
+    product_image_url: string | null;
+    attribute: ProofAttribute;
+    proof_type: ProofCoverageItem["recommended_proof_type"];
+    status: "submitted" | "verified" | "rejected";
+    quality_score: number;
+    quality_label: string;
+    trust_lift_points: number;
+    submitted_at: string;
+    reviewed_at: string | null;
+    review_notes: string | null;
+  }>;
   tasks: SellerEvidenceCoachTask[];
   privacy_guard: {
     safe_for_seller: boolean;
@@ -1239,6 +1503,27 @@ export type AdminListingDraft = ListingDraft & {
   verification_status: "verified" | "pending" | "restricted" | null;
 };
 
+export type AdminProofAsset = {
+  proof_id: string;
+  seller_id: string;
+  seller_name: string;
+  product_id: string;
+  product_title: string;
+  product_image_url: string | null;
+  attribute: ProofAttribute;
+  proof_type: ProofCoverageItem["recommended_proof_type"];
+  title: string;
+  description: string;
+  asset_url: string;
+  status: "submitted" | "verified" | "rejected";
+  created_at: string;
+  submitted_at?: string;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  open_request_count: number;
+  fact_id: string;
+};
+
 export type AdminAuditEvent = {
   event_id: string;
   actor_account_id: string;
@@ -1252,9 +1537,101 @@ export type AdminAuditEvent = {
   created_at: string;
 };
 
+export type AdminPrescreenSuggestion = {
+  queue_item_id: string;
+  item_type: "seller_application" | "verification_document" | "listing_draft" | "proof_asset";
+  risk_score: number;
+  risk_level: "low" | "medium" | "high";
+  suggested_action: "approve" | "reject" | "approve_document" | "reject_document" | "publish" | "request_revision" | "manual_check";
+  confidence: "low" | "medium" | "high";
+  route_to: "standard_review" | "senior_reviewer";
+  observe: string;
+  reason: string;
+  act: string;
+  learn: string;
+  evidence: Array<{ label: string; value: string; source_id: string }>;
+  checks: Array<{ label: string; status: "pass" | "warn" | "fail"; detail: string }>;
+  fact_ids: string[];
+  agent_provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+};
+
+export type AdminQueueItem = {
+  queue_item_id: string;
+  item_type: "seller_application" | "verification_document" | "listing_draft" | "proof_asset";
+  seller_id: string;
+  seller_name: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  risk_score: number;
+  risk_level: "low" | "medium" | "high";
+  suggested_action: AdminPrescreenSuggestion["suggested_action"];
+  route_to: "standard_review" | "senior_reviewer";
+  confidence: "low" | "medium" | "high";
+  submitted_at: string | null;
+  age_hours: number;
+  sla_hours: number;
+  sla_state: "ok" | "due_today" | "breached";
+  buyer_impact: string;
+  trust_impact_points: number;
+  blocker: string | null;
+  primary_action: string;
+  evidence: Array<{ label: string; value: string; source_id: string }>;
+  agent_provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+};
+
+export type AdminSellerDossier = {
+  seller_id: string;
+  seller_name: string;
+  verification_status: "verified" | "pending" | "restricted" | string;
+  gst_status: string;
+  kyc_status: string;
+  open_review_items: number;
+  highest_risk_score: number;
+  route_to: "standard_review" | "senior_reviewer";
+  pending_documents: string[];
+  approved_document_count: number;
+  rejected_document_count: number;
+  submitted_draft_count: number;
+  submitted_proof_count: number;
+  resolved_proof_count: number;
+  buyer_requests_waiting: number;
+  next_action: string;
+  last_activity_at: string | null;
+};
+
 export type AdminReviewQueue = {
-  seller_applications: AdminSellerApplication[];
-  documents: AdminVerificationDocument[];
-  listing_drafts: AdminListingDraft[];
+  summary: {
+    active_count: number;
+    pending_applications: number;
+    document_checks: number;
+    submitted_drafts: number;
+    proof_reviews: number;
+    blocked_items: number;
+    senior_routed: number;
+    breached_sla_count: number;
+    suggested_actions: number;
+    buyer_requests_waiting: number;
+    trust_lift_pending: number;
+    source_status: SourceHealth["overall_status"];
+    source_blocking: boolean;
+  };
+  source_health: SourceHealth;
+  automation_plan: {
+    headline: string;
+    summary: string;
+    next_steps: string[];
+    first_queue_item_id: string | null;
+    blocked_count: number;
+    can_batch_count: number;
+    caution: string | null;
+    agent_provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  };
+  active_queue: AdminQueueItem[];
+  seller_dossiers: AdminSellerDossier[];
+  seller_applications: Array<AdminSellerApplication & { prescreen: AdminPrescreenSuggestion }>;
+  documents: Array<AdminVerificationDocument & { prescreen: AdminPrescreenSuggestion }>;
+  listing_drafts: Array<AdminListingDraft & { prescreen: AdminPrescreenSuggestion }>;
+  proof_assets: Array<AdminProofAsset & { prescreen: AdminPrescreenSuggestion }>;
   audit_events: AdminAuditEvent[];
 };

@@ -4,7 +4,11 @@ import type {
   AuthSession,
   AuditTrace,
   BuyerDashboardResponse,
+  BuyerOrdersResponse,
+  BuyerProofLedgerResponse,
+  BuyerWishlistResponse,
   CartConfidenceResponse,
+  CheckoutOrderResponse,
   BuyerMemoryResponse,
   CheckoutResponse,
   ClusterKnowledgeGraph,
@@ -23,6 +27,7 @@ import type {
   ProofAttribute,
   ProofCoverageItem,
   RegretDecisionResponse,
+  ReturnAlternativeResponse,
   Scenario,
   Seller,
   SellerEvidenceAssetResponse,
@@ -215,6 +220,20 @@ export function rejectSellerApplication(applicationId: string, notes: string) {
   });
 }
 
+export function approveSellerDocument(documentId: string, notes: string) {
+  return request<AdminReviewQueue>(`/admin/verification-documents/${encodeURIComponent(documentId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ notes })
+  });
+}
+
+export function rejectSellerDocument(documentId: string, notes: string) {
+  return request<AdminReviewQueue>(`/admin/verification-documents/${encodeURIComponent(documentId)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ notes })
+  });
+}
+
 export function approveListingDraft(draftId: string, notes: string) {
   return request<AdminReviewQueue>(`/admin/listing-drafts/${encodeURIComponent(draftId)}/approve`, {
     method: "POST",
@@ -224,6 +243,20 @@ export function approveListingDraft(draftId: string, notes: string) {
 
 export function requestListingRevision(draftId: string, notes: string) {
   return request<AdminReviewQueue>(`/admin/listing-drafts/${encodeURIComponent(draftId)}/revision`, {
+    method: "POST",
+    body: JSON.stringify({ notes })
+  });
+}
+
+export function approveSellerEvidenceAsset(proofId: string, notes: string) {
+  return request<AdminReviewQueue>(`/admin/evidence-assets/${encodeURIComponent(proofId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ notes })
+  });
+}
+
+export function rejectSellerEvidenceAsset(proofId: string, notes: string) {
+  return request<AdminReviewQueue>(`/admin/evidence-assets/${encodeURIComponent(proofId)}/reject`, {
     method: "POST",
     body: JSON.stringify({ notes })
   });
@@ -258,7 +291,15 @@ export function createListingDraft(payload: {
 }
 
 export function correctMeasurement(productId: string, payload: { l_chest: number; xl_chest: number }) {
-  return request<{ ok: boolean; status: string }>(`/seller/listings/${encodeURIComponent(productId)}/correct-measurement`, {
+  return request<{
+    ok: boolean;
+    status: string;
+    proof_id: string;
+    fact_id: string;
+    product_id: string;
+    measurements: { l_chest_inches: number; xl_chest_inches: number };
+    resolved_open_requests: number;
+  }>(`/seller/listings/${encodeURIComponent(productId)}/correct-measurement`, {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -331,6 +372,14 @@ export function createWishlistIntent(payload: {
 
 export function getWishlistRadar(buyerId: string) {
   return request<WishlistRadarResponse>(`/buyers/${encodeURIComponent(buyerId)}/wishlist-radar`);
+}
+
+export function getBuyerWishlist(buyerId: string) {
+  return request<BuyerWishlistResponse>(`/buyers/${encodeURIComponent(buyerId)}/wishlist`);
+}
+
+export function getBuyerProofs(buyerId: string) {
+  return request<BuyerProofLedgerResponse>(`/buyers/${encodeURIComponent(buyerId)}/proofs`);
 }
 
 export function getCartConfidence(payload: {
@@ -430,6 +479,20 @@ export function verifyOffer(buyerId: string, variantId: string) {
   });
 }
 
+export function placeCheckoutOrder(payload: {
+  buyer_id: string;
+  variant_id: string;
+  contract_id?: string;
+  payment_mode: "cod" | "prepaid";
+  buying_for_someone_else?: boolean;
+  wearer_label?: string;
+}) {
+  return request<CheckoutOrderResponse>("/orders/place", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function createExpectationContract(payload: {
   buyer_id: string;
   variant_id: string;
@@ -451,11 +514,53 @@ export function getExpectationContract(contractId: string) {
 export function simulateOutcome(payload: {
   buyer_id: string;
   variant_id: string;
-  status: "delivered_kept" | "returned";
+  status: "delivered_kept" | "returned" | "exchanged";
   return_reason?: string;
   contract_id?: string;
+  buying_for_someone_else?: boolean;
 }) {
   return request<OutcomeResponse>("/orders/simulate", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function correctOrderOutcome(
+  buyerId: string,
+  orderId: string,
+  payload: {
+    return_reason: string;
+    correction_note?: string;
+  }
+) {
+  return request<{
+    buyer_id: string;
+    order_id: string;
+    outcome: Record<string, unknown> | null;
+    correction: {
+      previous_return_reason: string | null;
+      corrected_return_reason: string;
+      correction_note: string | null;
+      corrected_at: string;
+    };
+    graph_sync: {
+      available: boolean;
+      reviewer_credibility_weight: number;
+    };
+  }>(`/buyers/${encodeURIComponent(buyerId)}/orders/${encodeURIComponent(orderId)}/correction`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getReturnAlternative(payload: {
+  buyer_id: string;
+  variant_id: string;
+  return_reason: string;
+  severity?: "minor" | "major";
+  buyer_preference?: "exchange_ok" | "refund_only";
+}) {
+  return request<ReturnAlternativeResponse>("/orders/return-assistant", {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -471,6 +576,10 @@ export function getPrivacy(buyerId: string) {
 
 export function getBuyerDashboard(buyerId: string) {
   return request<BuyerDashboardResponse>(`/buyers/${encodeURIComponent(buyerId)}/dashboard`);
+}
+
+export function getBuyerOrders(buyerId: string) {
+  return request<BuyerOrdersResponse>(`/buyers/${encodeURIComponent(buyerId)}/orders`);
 }
 
 export function getMemory(buyerId: string) {

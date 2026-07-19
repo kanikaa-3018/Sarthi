@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { LogOut, ShieldCheck, Sun, Moon, RefreshCcw, User, Globe, Store, ClipboardCheck } from "lucide-react";
+import { LogOut, ShieldCheck, Sun, Moon, RefreshCcw, User, Globe } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { clearStoredSession, getMe, getStoredSession, logout, storeSession, resetSeed } from "../api/client";
+import { clearStoredSession, getBuyerProofs, getMe, getStoredSession, logout, storeSession, resetSeed } from "../api/client";
 import { AuthScreen } from "../screens/AuthScreen";
 import { FeedScreen } from "../screens/FeedScreen";
+import { CheckoutPage } from "../screens/CheckoutPage";
 import { SellerPanel } from "../screens/SellerPanel";
 import { AdminReviewPanel } from "../screens/AdminReviewPanel";
 import { TrustCenter } from "../screens/TrustCenter";
@@ -14,12 +15,39 @@ const LANGUAGE_STORAGE_KEY = "sarthi.language";
 const EXPERIENCE_MODE_STORAGE_KEY = "sarthi.experienceMode";
 const THEME_STORAGE_KEY = "sarthi.theme";
 
+type BuyerProofNavSignal = {
+  open: number;
+  approved: number;
+  label: string;
+  badgeLabel: string;
+  needsAttention: boolean;
+};
+
+const SELLER_NAV_COPY: Record<LanguageCode, { console: string; proofs: string; coach: string }> = {
+  english: {
+    console: "Seller console",
+    proofs: "Proof center",
+    coach: "Trust coach"
+  },
+  hindi: {
+    console: "सेलर कंसोल",
+    proofs: "प्रूफ सेंटर",
+    coach: "ट्रस्ट कोच"
+  },
+  hinglish: {
+    console: "Seller ka console",
+    proofs: "Proof center",
+    coach: "Trust coach"
+  }
+};
+
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(readStoredLanguage);
   const [experienceMode, setExperienceMode] = useState<ExperienceMode>(readStoredExperienceMode);
+  const [buyerProofNav, setBuyerProofNav] = useState<BuyerProofNavSignal | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -74,6 +102,41 @@ export function App() {
     window.localStorage.setItem(EXPERIENCE_MODE_STORAGE_KEY, experienceMode);
   }, [experienceMode]);
 
+  useEffect(() => {
+    if (session?.account.role !== "buyer" || !session.account.buyer_id) {
+      setBuyerProofNav(null);
+      return;
+    }
+    let active = true;
+    getBuyerProofs(session.account.buyer_id)
+      .then((payload) => {
+        if (!active) return;
+        const open = payload.summary.waiting_seller + payload.summary.admin_review + payload.summary.needs_more_proof;
+        const approved = payload.summary.approved;
+        setBuyerProofNav({
+          open,
+          approved,
+          label: open > 0
+            ? `${open} need proof check`
+            : approved > 0
+              ? `${approved} ready`
+              : "No saved proof yet",
+          badgeLabel: open > 0
+            ? String(open)
+            : approved > 0
+              ? String(approved)
+              : "",
+          needsAttention: open > 0
+        });
+      })
+      .catch(() => {
+        if (active) setBuyerProofNav(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [location.pathname, session?.account.buyer_id, session?.account.role]);
+
   async function handleLogout() {
     setLoggingOut(true);
     await logout();
@@ -106,6 +169,19 @@ export function App() {
       : theme;
   const role = session?.account.role;
   const buyerId = session?.account.buyer_id;
+  const sellerNavCopy = SELLER_NAV_COPY[language] ?? SELLER_NAV_COPY.english;
+  const sellerNavActive = (path: string) => {
+    const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
+    return path === "/seller"
+      ? normalizedPath === "/seller"
+      : normalizedPath === path || normalizedPath.startsWith(`${path}/`);
+  };
+  const adminNavActive = (path: string) => {
+    const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
+    return path === "/admin"
+      ? normalizedPath === "/admin"
+      : normalizedPath === path || normalizedPath.startsWith(`${path}/`);
+  };
 
   return (
     <div className="web-app-container">
@@ -130,33 +206,109 @@ export function App() {
                   <>
                     <button
                       type="button"
-                      className={location.pathname.startsWith("/shop") ? "active" : ""}
+                      className={location.pathname === "/shop" || location.pathname.startsWith("/shop/product") || location.pathname.startsWith("/shop/saved") ? "active" : ""}
                       onClick={() => navigate("/shop")}
                     >
-                      <Store size={14} />
                       <span>{t(language, "shop")}</span>
                     </button>
                     <button
                       type="button"
-                      className={location.pathname.startsWith("/trust") ? "active" : ""}
-                      onClick={() => navigate("/trust")}
+                      className={location.pathname.startsWith("/shop/wishlist") ? "active" : ""}
+                      onClick={() => navigate("/shop/wishlist")}
                     >
-                      <ShieldCheck size={14} />
-                      <span>{t(language, "trust")}</span>
+                      <span>{t(language, "saved")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={location.pathname.startsWith("/shop/orders") ? "active" : ""}
+                      onClick={() => navigate("/shop/orders")}
+                    >
+                      <span>{t(language, "orders")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`proof-nav-item ${location.pathname.startsWith("/shop/proofs") ? "active" : ""}`}
+                      onClick={() => navigate("/shop/proofs")}
+                      aria-label={buyerProofNav ? `Proof, ${buyerProofNav.label}` : "Proof"}
+                      title={buyerProofNav ? `Proof: ${buyerProofNav.label}` : "Proof"}
+                    >
+                      <span className="proof-nav-label">Proof</span>
+                      {buyerProofNav?.badgeLabel && (
+                        <em className={`nav-proof-badge ${buyerProofNav.needsAttention ? "attention" : "ready"}`}>
+                          {buyerProofNav.badgeLabel}
+                        </em>
+                      )}
                     </button>
                   </>
                 )}
                 {role === "seller" && (
-                  <span className="commerce-role-lock">
-                    <Store size={14} />
-                    {t(language, "sellerConsole")}
-                  </span>
+                  <>
+                    <button
+                      type="button"
+                      className={sellerNavActive("/seller") ? "active" : ""}
+                      onClick={() => navigate("/seller")}
+                    >
+                      <span>{sellerNavCopy.console}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`seller-proof-nav-item ${sellerNavActive("/seller/proofs") ? "active" : ""}`}
+                      onClick={() => navigate("/seller/proofs")}
+                    >
+                      <span>{sellerNavCopy.proofs}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        sellerNavActive("/seller/trust-coach") ||
+                        sellerNavActive("/seller/copilot") ||
+                        sellerNavActive("/seller/autopilot") ||
+                        sellerNavActive("/seller/listing-lab") ||
+                        sellerNavActive("/seller/rating-forecast")
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() => navigate("/seller/trust-coach")}
+                    >
+                      <span>{sellerNavCopy.coach}</span>
+                    </button>
+                  </>
                 )}
                 {role === "admin" && (
-                  <span className="commerce-role-lock">
-                    <ClipboardCheck size={14} />
-                    {t(language, "reviewQueue")}
-                  </span>
+                  <>
+                    <button
+                      type="button"
+                      className={`admin-nav-item agent ${adminNavActive("/admin") ? "active" : ""}`}
+                      onClick={() => navigate("/admin")}
+                    >
+                      <span className="admin-nav-mark">AI</span>
+                      <span>Agent</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`admin-nav-item ${adminNavActive("/admin/uploads") ? "active" : ""}`}
+                      onClick={() => navigate("/admin/uploads")}
+                    >
+                      <span className="admin-nav-mark">EV</span>
+                      <span>Evidence</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`admin-nav-item ${adminNavActive("/admin/drafts") ? "active" : ""}`}
+                      onClick={() => navigate("/admin/drafts")}
+                    >
+                      <span className="admin-nav-mark">DL</span>
+                      <span>Draft Lab</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`admin-nav-item ${adminNavActive("/admin/audit") ? "active" : ""}`}
+                      onClick={() => navigate("/admin/audit")}
+                    >
+                      <span className="admin-nav-mark">LOG</span>
+                      <span>Audit</span>
+                    </button>
+                  </>
                 )}
               </nav>
 
@@ -255,7 +407,7 @@ export function App() {
               )
             }
           />
-          {["/shop", "/shop/product/:productId", "/shop/saved/:productId"].map((path) => (
+          {["/shop", "/shop/wishlist", "/shop/orders", "/shop/proofs", "/shop/product/:productId", "/shop/saved/:productId"].map((path) => (
             <Route
               key={path}
               path={path}
@@ -273,14 +425,27 @@ export function App() {
               }
             />
           ))}
+          <Route
+            path="/shop/checkout/:productId/:variantId"
+            element={
+              role === "buyer" && buyerId ? (
+                <CheckoutPage
+                  buyerId={buyerId}
+                  language={language}
+                />
+              ) : (
+                <RoleRedirect session={session} />
+              )
+            }
+          />
           <Route path="/shop/*" element={<Navigate to="/shop" replace />} />
           <Route
             path="/trust/*"
-            element={role === "buyer" && buyerId ? <TrustCenter buyerId={buyerId} /> : <RoleRedirect session={session} />}
+            element={role === "buyer" && buyerId ? <TrustCenter buyerId={buyerId} language={language} /> : <RoleRedirect session={session} />}
           />
           <Route
             path="/seller/*"
-            element={role === "seller" ? <SellerPanel /> : <RoleRedirect session={session} />}
+            element={role === "seller" ? <SellerPanel language={language} /> : <RoleRedirect session={session} />}
           />
           <Route
             path="/admin/*"
@@ -315,5 +480,5 @@ function readStoredExperienceMode(): ExperienceMode {
 
 function readStoredTheme(): "light" | "dark" | "system" {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === "light" || stored === "system" ? stored : "dark";
+  return stored === "dark" || stored === "system" ? stored : "light";
 }
