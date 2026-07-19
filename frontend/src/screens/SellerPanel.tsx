@@ -849,7 +849,7 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
     setDraftSuccess(null);
     try {
       await submitListingDraft(draftId);
-      setDraftSuccess("Listing draft submitted to admin review queue!");
+      setDraftSuccess(copy.listingDraftSubmitted);
       await loadPanel(selectedClusterId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error submitting listing draft");
