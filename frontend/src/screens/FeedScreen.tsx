@@ -99,6 +99,8 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   // Overlay/Sheet visibility
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
+  const [safetyCheckingProduct, setSafetyCheckingProduct] = useState<Product | null>(null);
+  const [safetyCheckingStep, setSafetyCheckingStep] = useState(0);
   
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -231,21 +233,53 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
     setError(null);
 
-    const [decisionOutcome, graphOutcome, radarOutcome] = await Promise.allSettled([
-      runRegretFirewall({
-        buyer_id: buyerId,
-        product_id: product.product_id,
-        query: "Is this safe to buy before ordering?",
-        create_missing_proof_request: false
-      }),
-      getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id),
-      createWishlistIntent({
-        buyer_id: buyerId,
-        product_id: product.product_id,
-        profile_id: activeFitProfile?.profile_id,
-        create_seller_signal: true
-      })
+    let animationInterval: number | null = null;
+    let animationPromise: Promise<void> = Promise.resolve();
+
+    if (options.openCompare) {
+      setSafetyCheckingProduct(product);
+      setSafetyCheckingStep(0);
+      animationPromise = new Promise<void>((resolve) => {
+        let currentStep = 0;
+        animationInterval = window.setInterval(() => {
+          currentStep++;
+          if (currentStep <= 5) {
+            setSafetyCheckingStep(currentStep);
+          } else {
+            if (animationInterval !== null) {
+              window.clearInterval(animationInterval);
+            }
+            resolve();
+          }
+        }, 400);
+      });
+    }
+
+    const [allApisResult] = await Promise.all([
+      Promise.allSettled([
+        runRegretFirewall({
+          buyer_id: buyerId,
+          product_id: product.product_id,
+          query: "Is this safe to buy before ordering?",
+          create_missing_proof_request: false
+        }),
+        getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id),
+        createWishlistIntent({
+          buyer_id: buyerId,
+          product_id: product.product_id,
+          profile_id: activeFitProfile?.profile_id,
+          create_seller_signal: true
+        })
+      ]),
+      animationPromise
     ]);
+
+    if (animationInterval !== null) {
+      window.clearInterval(animationInterval);
+    }
+    setSafetyCheckingProduct(null);
+
+    const [decisionOutcome, graphOutcome, radarOutcome] = allApisResult;
 
     if (graphOutcome.status === "fulfilled") {
       setKnowledgeGraph(graphOutcome.value);
@@ -575,8 +609,91 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           )}
         </button>
       )}
+
+      {/* Sarthi Safety Check Premium Overlay */}
+      {safetyCheckingProduct && (
+        <div className="safety-check-loading-overlay">
+          <div className="safety-check-loading-card">
+            <div className="safety-check-loading-icon-wrapper">
+              <ShieldCheck size={32} className="safety-check-shield-anim" />
+              <div className="safety-check-loading-spinner" />
+            </div>
+            
+            <span className="eyebrow">{getSafetyCheckTranslation("sarthiSafetyCheck", language)}</span>
+            <h2>{getSafetyCheckTranslation("verifyingProductSafety", language)}</h2>
+            
+            <div className="safety-check-steps-progress">
+              <div className="progress-bar-track">
+                <div 
+                  className="progress-bar-fill" 
+                  style={{ width: `${(safetyCheckingStep / 5) * 100}%` }} 
+                />
+              </div>
+              
+              <div className="safety-check-step-message" key={safetyCheckingStep}>
+                {getSafetyCheckingStepMessage(safetyCheckingStep, language)}
+              </div>
+            </div>
+            
+            <div className="safety-check-loading-footer">
+              <span>{getSafetyCheckTranslation("checkingSellers", language).replace("{count}", String(clusterListingCount(products, safetyCheckingProduct.cluster_id)))}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function getSafetyCheckingStepMessage(step: number, language: LanguageCode) {
+  const steps: Record<LanguageCode, string[]> = {
+    english: [
+      "Auditing listings across similar sellers...",
+      "Verifying seller KYC and credentials...",
+      "Analyzing past return and mismatch rates...",
+      "Matching measurements to your fit profile...",
+      "Calibrating Sarthi Trust Passport...",
+      "Grounded check complete!"
+    ],
+    hindi: [
+      "Similar sellers ke listings audit ho rahe hain...",
+      "Seller KYC aur documents verify ho rahe hain...",
+      "Returns aur mismatch rate check kiya ja raha hai...",
+      "Aapke fit profile se measurements match ho rahe hain...",
+      "Sarthi Trust Passport taiyar kiya ja raha hai...",
+      "Grounded check poora ho gaya hai!"
+    ],
+    hinglish: [
+      "Similar sellers ke listings audit ho rahe hain...",
+      "Seller KYC aur documents verify ho rahe hain...",
+      "Returns aur mismatch rate check kiya ja raha hai...",
+      "Aapke fit profile se measurements match ho rahe hain...",
+      "Sarthi Trust Passport taiyar kiya ja raha hai...",
+      "Grounded check poora ho gaya hai!"
+    ]
+  };
+  return steps[language]?.[step] ?? steps.english[step] ?? "";
+}
+
+function getSafetyCheckTranslation(key: string, language: LanguageCode) {
+  const translations: Record<string, Record<LanguageCode, string>> = {
+    sarthiSafetyCheck: {
+      english: "Sarthi Safety Check",
+      hindi: "सारथी सेफ्टी चेक",
+      hinglish: "Sarthi Safety Check"
+    },
+    verifyingProductSafety: {
+      english: "Verifying purchase safety...",
+      hindi: "खरीद की सुरक्षा जांची जा रही है...",
+      hinglish: "Purchase safety verify ho rahi hai..."
+    },
+    checkingSellers: {
+      english: "Checking {count} similar sellers",
+      hindi: "{count} समान सेलर्स की जांच की जा रही है",
+      hinglish: "{count} similar sellers check ho rahe hain"
+    }
+  };
+  return translations[key]?.[language] ?? translations[key]?.english ?? "";
 }
 
 function compareFromDecision(decision: RegretDecisionResponse): CompareResponse {

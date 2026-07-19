@@ -200,6 +200,75 @@ export function CheckoutPage({ buyerId, language }: Props) {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="checkout-page-shell loading-skeleton" aria-hidden="true">
+        <header className="checkout-page-header">
+          <div className="skeleton-btn" />
+          <div className="skeleton-title-group" style={{ display: "inline-block", verticalAlign: "middle", marginLeft: "12px", width: "180px" }}>
+            <span className="skeleton-text short" style={{ height: "10px", margin: "2px 0" }} />
+            <span className="skeleton-text medium" style={{ height: "16px", margin: 0 }} />
+          </div>
+        </header>
+
+        <div className="checkout-page-layout">
+          <main className="checkout-page-main">
+            {/* Review Items Card */}
+            <div className="skeleton-card" style={{ height: "160px" }}>
+              <span className="skeleton-text short" />
+              <div style={{ display: "flex", gap: "16px", marginTop: "16px" }}>
+                <div className="skeleton-image" style={{ width: "80px", height: "100px", borderRadius: "6px" }} />
+                <div style={{ flex: 1 }}>
+                  <span className="skeleton-text medium" />
+                  <span className="skeleton-text long" />
+                </div>
+              </div>
+            </div>
+
+            {/* Buying for who Card */}
+            <div className="skeleton-card" style={{ height: "140px" }}>
+              <span className="skeleton-text short" />
+              <div style={{ display: "flex", gap: "8px", margin: "12px 0" }}>
+                <div className="skeleton-btn" style={{ borderRadius: "6px", width: "70px", height: "35px" }} />
+                <div className="skeleton-btn" style={{ borderRadius: "6px", width: "70px", height: "35px" }} />
+                <div className="skeleton-btn" style={{ borderRadius: "6px", width: "70px", height: "35px" }} />
+              </div>
+            </div>
+
+            {/* Billing Card */}
+            <div className="skeleton-card" style={{ height: "180px" }}>
+              <span className="skeleton-text short" />
+              <span className="skeleton-text long" />
+              <span className="skeleton-text medium" />
+            </div>
+          </main>
+
+          <aside className="checkout-page-sidebar">
+            {/* Summary / Price Details Card */}
+            <div className="skeleton-card" style={{ height: "200px" }}>
+              <span className="skeleton-text short" />
+              <span className="skeleton-text long" style={{ margin: "12px 0" }} />
+              <span className="skeleton-text medium" />
+              <span className="skeleton-text long" />
+            </div>
+
+            {/* Safe Payment Guide */}
+            <div className="skeleton-card" style={{ height: "160px" }}>
+              <span className="skeleton-text short" />
+              <span className="skeleton-text long" />
+              <span className="skeleton-text medium" />
+            </div>
+
+            {/* Place Order Sticky Buy Button */}
+            <div className="skeleton-card" style={{ height: "80px", display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <div className="skeleton-btn" style={{ width: "80%", height: "44px", borderRadius: "8px" }} />
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section className="checkout-page-shell">
       <header className="checkout-page-header">

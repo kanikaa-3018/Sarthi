@@ -161,9 +161,77 @@ export function ProductDetailPanel({
 
   if (!detail) {
     return (
-      <div className="detail-loading-state">
-        <div />
-        <span />
+      <div className="product-detail-shell loading-skeleton" aria-hidden="true">
+        {/* Header Skeleton */}
+        <div className="product-detail-header">
+          <div className="skeleton-btn" />
+          <div className="skeleton-title-group" style={{ display: "inline-block", verticalAlign: "middle", marginLeft: "12px", width: "180px" }}>
+            <span className="skeleton-text short" style={{ height: "10px", margin: "2px 0" }} />
+            <span className="skeleton-text medium" style={{ height: "16px", margin: 0 }} />
+          </div>
+        </div>
+
+        {/* 2-Column Web Detail Layout */}
+        <div className="web-detail-layout">
+          {/* Left Column Skeleton */}
+          <div className="detail-gallery-container">
+            <div className="detail-product-card skeleton-card">
+              <div className="detail-image-frame skeleton-image" style={{ height: "380px" }} />
+              <div className="detail-product-summary" style={{ marginTop: "16px" }}>
+                <span className="skeleton-text short" />
+                <span className="skeleton-text long" />
+                <span className="skeleton-text medium" style={{ height: "24px" }} />
+              </div>
+            </div>
+            
+            <div className="sku-evidence-card skeleton-card">
+              <span className="skeleton-text short" />
+              <div className="skeleton-grid-3">
+                <div className="skeleton-grid-item" />
+                <div className="skeleton-grid-item" />
+                <div className="skeleton-grid-item" />
+              </div>
+              <span className="skeleton-text long" />
+            </div>
+          </div>
+
+          {/* Right Column Skeleton */}
+          <div className="detail-decision-container">
+            {/* KeepConfidenceCard skeleton placeholder */}
+            <div className="skeleton-card" style={{ height: "180px" }}>
+              <span className="skeleton-text short" />
+              <span className="skeleton-text long" />
+              <span className="skeleton-text medium" />
+            </div>
+            
+            {/* Size selector card skeleton placeholder */}
+            <div className="skeleton-card" style={{ height: "140px" }}>
+              <span className="skeleton-text short" />
+              <div style={{ display: "flex", gap: "8px", margin: "12px 0" }}>
+                <div className="skeleton-btn" style={{ borderRadius: "6px", width: "45px", height: "35px" }} />
+                <div className="skeleton-btn" style={{ borderRadius: "6px", width: "45px", height: "35px" }} />
+                <div className="skeleton-btn" style={{ borderRadius: "6px", width: "45px", height: "35px" }} />
+                <div className="skeleton-btn" style={{ borderRadius: "6px", width: "45px", height: "35px" }} />
+              </div>
+              <span className="skeleton-text medium" />
+            </div>
+
+            {/* CartConfidenceCard skeleton placeholder */}
+            <div className="skeleton-card" style={{ height: "150px" }}>
+              <span className="skeleton-text short" />
+              <span className="skeleton-text long" />
+            </div>
+
+            {/* Sticky buy button skeleton placeholder */}
+            <div className="skeleton-card" style={{ height: "90px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ width: "30%" }}>
+                <span className="skeleton-text short" />
+                <span className="skeleton-text medium" />
+              </div>
+              <div className="skeleton-btn" style={{ width: "120px", height: "44px", borderRadius: "8px" }} />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
