@@ -408,27 +408,6 @@ input:focus {
   color: var(--text-primary);
 }
 
-.buyer-save-btn:not(:disabled) {
-  background: var(--text-primary);
-  color: var(--bg-canvas);
-}
-
-.buyer-save-btn.saved {
-  background: color-mix(in srgb, var(--success) 18%, var(--bg-surface));
-  color: var(--success);
-}
-
-.product-badge.commerce {
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
-}
-
-.product-badge.mapped {
-  background: color-mix(in srgb, var(--success) 16%, var(--bg-surface));
-  border-color: color-mix(in srgb, var(--success) 36%, transparent);
-  color: var(--success);
-}
-
 /* Saved trust workspace */
 .sarthi-saved-workspace {
   padding: 0;
