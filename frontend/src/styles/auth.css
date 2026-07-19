@@ -458,7 +458,7 @@
   .auth-app-route .auth-story-panel {
     display: none !important;
   }
-  
+
   .auth-app-route .auth-entry-layout {
     grid-template-columns: 1fr !important;
     max-width: 440px !important;
