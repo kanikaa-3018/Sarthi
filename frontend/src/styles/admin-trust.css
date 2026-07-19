@@ -5565,4 +5565,904 @@
   gap: 14px;
 }
 
+.admin-mode-hero,
+.admin-mode-panel,
+.admin-agent-lane,
+.admin-policy-metric,
+.admin-impact-card {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-mode-hero {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  padding: 13px;
+}
+
+.admin-mode-hero-icon {
+  align-items: center;
+  background: var(--text-primary);
+  border-radius: 8px;
+  color: var(--bg-surface);
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.admin-mode-hero span,
+.admin-mode-panel-head p,
+.admin-priority-copy span,
+.admin-priority-copy small,
+.admin-plan-step p,
+.admin-policy-gate-row span,
+.admin-source-row span,
+.admin-source-row small,
+.admin-impact-card p {
+  color: var(--text-secondary);
+}
+
+.admin-mode-hero span {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.admin-mode-hero h3 {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.2;
+  margin: 2px 0 3px;
+}
+
+.admin-mode-hero p {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.admin-agent-lanes,
+.admin-policy-metrics,
+.admin-impact-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-agent-lanes {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-policy-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.admin-impact-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-agent-lane,
+.admin-policy-metric,
+.admin-impact-card {
+  padding: 12px;
+}
+
+.admin-agent-lane,
+.admin-policy-metric {
+  border-left: 4px solid var(--border-subtle);
+}
+
+.admin-agent-lane.good,
+.admin-policy-metric.good {
+  border-left-color: var(--success);
+}
+
+.admin-agent-lane.warn,
+.admin-policy-metric.warn {
+  border-left-color: var(--warning);
+}
+
+.admin-agent-lane.bad,
+.admin-policy-metric.bad {
+  border-left-color: var(--error);
+}
+
+.admin-agent-lane span,
+.admin-policy-metric span,
+.admin-impact-card span {
+  color: var(--text-secondary);
+  display: block;
+  font-size: 10.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-agent-lane strong,
+.admin-policy-metric strong,
+.admin-impact-card strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+  margin-top: 5px;
+}
+
+.admin-agent-lane p,
+.admin-impact-card p {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 7px 0 0;
+}
+
+.admin-mode-alert {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
+  border-radius: 8px;
+  color: var(--text-primary);
+  display: grid;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 8px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  padding: 10px;
+}
+
+.admin-mode-alert svg {
+  color: var(--warning);
+  margin-top: 1px;
+}
+
+.admin-mode-split {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+}
+
+.admin-mode-panel {
+  min-width: 0;
+  padding: 12px;
+}
+
+.admin-mode-panel-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 11px;
+}
+
+.admin-mode-panel-head h3 {
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.admin-mode-panel-head p {
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 2px 0 0;
+}
+
+.admin-mode-panel-head > span {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 900;
+  min-width: 28px;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.admin-priority-list,
+.admin-plan-list,
+.admin-policy-gate-list,
+.admin-source-list,
+.admin-impact-bars,
+.admin-impact-guardrails {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-priority-card {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--border-subtle);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  padding: 9px;
+}
+
+.admin-priority-card.breached {
+  border-left-color: var(--error);
+}
+
+.admin-priority-card.due_today {
+  border-left-color: var(--warning);
+}
+
+.admin-priority-card.ok {
+  border-left-color: var(--success);
+}
+
+.admin-priority-copy {
+  min-width: 0;
+}
+
+.admin-priority-copy strong,
+.admin-priority-copy span,
+.admin-priority-copy small {
+  display: block;
+  min-width: 0;
+}
+
+.admin-priority-copy strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.admin-priority-copy span,
+.admin-priority-copy small {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.admin-priority-meta {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.admin-plan-panel {
+  position: sticky;
+  top: 76px;
+}
+
+.admin-plan-step {
+  align-items: flex-start;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  padding: 9px;
+}
+
+.admin-plan-step > span {
+  align-items: center;
+  background: var(--text-primary);
+  border-radius: 999px;
+  color: var(--bg-surface);
+  display: flex;
+  font-size: 11px;
+  font-weight: 900;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.admin-plan-step p {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 2px 0 0;
+}
+
+.admin-plan-action {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.admin-policy-gate-row,
+.admin-source-row {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+}
+
+.admin-policy-gate-row {
+  align-items: flex-start;
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.admin-policy-gate-row.pass svg {
+  color: var(--success);
+}
+
+.admin-policy-gate-row.warn svg {
+  color: var(--warning);
+}
+
+.admin-policy-gate-row.fail svg {
+  color: var(--error);
+}
+
+.admin-policy-gate-row strong,
+.admin-policy-gate-row span {
+  display: block;
+}
+
+.admin-policy-gate-row strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.admin-policy-gate-row span {
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.admin-source-row {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.admin-source-row strong,
+.admin-source-row span,
+.admin-source-row small {
+  display: block;
+  min-width: 0;
+}
+
+.admin-source-row strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.admin-source-row span,
+.admin-source-row small {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.admin-impact-guardrails {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-impact-bar-row {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-impact-bar-row > div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.admin-impact-bar-row strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.admin-impact-bar-row span {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 850;
+}
+
+.admin-impact-bar-row em {
+  background: linear-gradient(90deg, var(--accent-primary), color-mix(in srgb, var(--success) 65%, var(--accent-primary)));
+  border-radius: 999px;
+  display: block;
+  height: 8px;
+  min-width: 8px;
+}
+
+.seller-empty-panel.compact {
+  font-size: 12px;
+  padding: 12px;
+}
+
+@media (max-width: 1180px) {
+  .seller-report-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-policy-metrics,
+  .admin-impact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .seller-assistant-steps,
+  .seller-detail-grid,
+  .seller-report-facts,
+  .seller-check-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .seller-report-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-mode-split {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-agent-strip {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+  }
+
+  .admin-agent-lanes {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-agent-stats {
+    grid-column: 1 / -1;
+  }
+
+  .admin-plan-panel {
+    position: static;
+  }
+
+  .seller-packet-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-uploads-layout,
+  .seller-uploads-layout.has-selection {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-report-list-panel {
+    max-height: none;
+    position: static;
+  }
+
+  .seller-upload-review-panel {
+    position: static;
+  }
+
+  .seller-packet-review-panel {
+    position: static;
+  }
+
+  .seller-report-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+}
+
+@media (max-width: 760px) {
+  .seller-report-header,
+  .seller-selected-summary-card,
+  .seller-report-decision-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .seller-report-refresh {
+    width: 100%;
+  }
+
+  .seller-report-summary,
+  .admin-impact-grid,
+  .admin-impact-guardrails,
+  .admin-mode-hero,
+  .admin-policy-metrics,
+  .seller-report-tabs,
+  .seller-lane-list,
+  .seller-report-list,
+  .seller-uploads-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-agent-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-agent-orb {
+    display: none;
+  }
+
+  .admin-agent-main strong,
+  .admin-agent-main p {
+    white-space: normal;
+  }
+
+  .admin-agent-stats {
+    flex-wrap: wrap;
+  }
+
+  .seller-assistant-panel,
+  .seller-media-detail,
+  .seller-card-header,
+  .seller-section-header,
+  .seller-active-work-row,
+  .admin-priority-card,
+  .admin-source-row,
+  .seller-draft-accordion-toggle,
+  .seller-packet-row,
+  .seller-audit-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-mode-hero-icon {
+    display: none;
+  }
+
+  .admin-priority-meta {
+    align-items: flex-start;
+  }
+
+  .seller-draft-thumb {
+    height: 72px;
+    width: 72px;
+  }
+
+  .seller-card-badges,
+  .seller-selected-summary-meta,
+  .seller-draft-row-meta,
+  .seller-report-decision-side,
+  .seller-packet-row-meta {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .seller-media-detail > img,
+  .seller-file-preview {
+    width: 100%;
+  }
+
+  .seller-action-row button {
+    flex-basis: 100%;
+  }
+}
+
+/* -------------------------------------------------------------
+   ADMIN REVIEW CLARITY PASS
+------------------------------------------------------------- */
+.seller-report-shell {
+  gap: 16px;
+}
+
+.seller-report-header {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 4px 2px 14px;
+}
+
+.seller-report-header h2 {
+  font-size: 25px;
+  letter-spacing: 0;
+}
+
+.seller-report-header p {
+  max-width: 760px;
+}
+
+.seller-report-tabs {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  gap: 6px;
+  padding: 0 0 8px;
+}
+
+.seller-report-tabs button {
+  background: transparent;
+  border-radius: 8px;
+  justify-content: space-between;
+  min-height: 38px;
+}
+
+.seller-report-tabs button:hover,
+.seller-report-tabs button.active {
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.seller-tab-icon {
+  height: 24px;
+  width: 24px;
+}
+
+.admin-agent-strip {
+  background: var(--surface);
+  border-color: var(--border-subtle);
+  border-left: 4px solid var(--accent-primary);
+  border-radius: 8px;
+  box-shadow: none;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto auto;
+  padding: 10px 12px;
+}
+
+.admin-agent-orb {
+  border-radius: 8px;
+  height: 34px;
+  width: 34px;
+}
+
+.admin-agent-action {
+  border-radius: 8px;
+}
+
+.seller-report-layout {
+  gap: 18px;
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+
+.seller-report-list-panel,
+.seller-report-detail-panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.seller-report-list-panel {
+  padding: 0;
+  top: 92px;
+}
+
+.seller-report-detail-panel {
+  padding: 0;
+}
+
+.seller-report-panel-head {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 0 10px;
+}
+
+.seller-report-panel-head h3 {
+  font-size: 15px;
+}
+
+.seller-lane-list {
+  gap: 6px;
+}
+
+.seller-lane-list button {
+  background: var(--surface);
+}
+
+.seller-lane-list button.active {
+  border-color: color-mix(in srgb, var(--accent-primary) 44%, var(--border-subtle));
+}
+
+.seller-report-button {
+  background: transparent;
+  border-color: transparent;
+  border-left: 3px solid transparent;
+  box-shadow: none;
+}
+
+.seller-report-button:hover,
+.seller-report-button.selected {
+  background: var(--surface);
+  border-color: var(--border-subtle);
+  border-left-color: var(--accent-primary);
+}
+
+.seller-report-button-metrics span {
+  background: var(--bg-surface-muted);
+}
+
+.seller-report-detail-stack {
+  gap: 14px;
+}
+
+.seller-selected-summary-card {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 14px;
+}
+
+.seller-selected-summary-card h3 {
+  font-size: 21px;
+}
+
+.seller-selected-summary-counts span {
+  background: var(--surface);
+}
+
+.seller-packet-layout {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(270px, 330px) minmax(0, 1fr);
+}
+
+.seller-packet-list-panel {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: none;
+  max-height: calc(100vh - 132px);
+  overflow-y: auto;
+  padding: 12px;
+  position: sticky;
+  top: 92px;
+}
+
+.seller-packet-review-panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  width: 100%;
+}
+
+.seller-packet-head {
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 10px;
+}
+
+.seller-packet-groups {
+  margin-top: 12px;
+}
+
+.seller-packet-group {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.seller-packet-group + .seller-packet-group {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+
+.seller-packet-row {
+  background: transparent;
+  border-color: transparent;
+  border-left: 3px solid transparent;
+  grid-template-columns: 30px minmax(0, 1fr);
+  min-height: 58px;
+  padding: 8px;
+}
+
+.seller-packet-row:hover,
+.seller-packet-row.selected {
+  background: var(--bg-surface-muted);
+  border-color: var(--border-subtle);
+  border-left-color: var(--accent-primary);
+}
+
+.seller-packet-row-meta {
+  align-items: flex-start;
+  flex-direction: row;
+  flex-wrap: wrap;
+  grid-column: 2;
+}
+
+.seller-packet-selected-head {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  padding: 0 0 12px;
+}
+
+.seller-review-card,
+.seller-draft-accordion,
+.seller-uploads-table-panel,
+.seller-upload-review-panel,
+.seller-report-section,
+.admin-mode-panel,
+.admin-agent-lane,
+.admin-policy-metric,
+.admin-impact-card {
+  box-shadow: none;
+}
+
+.seller-review-card {
+  gap: 12px;
+}
+
+.seller-review-foldout {
+  background: var(--surface);
+}
+
+.seller-review-foldout.open,
+.seller-prescreen-box,
+.seller-note-editor {
+  background: var(--bg-surface-muted);
+}
+
+.seller-draft-accordion {
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.seller-draft-accordion:hover {
+  box-shadow: none;
+}
+
+.seller-uploads-layout,
+.seller-uploads-layout.has-selection {
+  gap: 16px;
+}
+
+.seller-uploads-table-panel,
+.seller-upload-review-panel {
+  border-radius: 8px;
+}
+
+.seller-upload-review-head {
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 10px;
+}
+
+.seller-upload-table-wrap {
+  border-radius: 8px;
+}
+
+.admin-mode-hero {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 14px;
+}
+
+.admin-agent-lanes,
+.admin-policy-metrics,
+.admin-impact-grid {
+  gap: 12px;
+}
+
+.admin-agent-lane,
+.admin-policy-metric,
+.admin-impact-card {
+  border-radius: 8px;
+}
+
+.admin-mode-panel {
+  border-radius: 8px;
+}
+
+.admin-priority-card {
+  background: transparent;
+  border-color: var(--border-subtle);
+}
+
 
