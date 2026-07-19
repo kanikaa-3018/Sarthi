@@ -590,22 +590,24 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
   const [proofTitle, setProofTitle] = useState("");
   const [proofDescription, setProofDescription] = useState("");
   const [proofAssetUrl, setProofAssetUrl] = useState("");
+  const [proofSuccess, setProofSuccess] = useState<string | null>(null);
 
   // Onboarding submissions
   const [docType, setDocType] = useState<"gst_certificate" | "pan_card" | "address_proof" | "bank_proof">("gst_certificate");
   const [docRef, setDocRef] = useState("");
   const [docFileName, setDocFileName] = useState("");
   const [docFileBase64, setDocFileBase64] = useState("");
+  const [docMimeType, setDocMimeType] = useState("application/pdf");
   const [docSubmitting, setDocSubmitting] = useState(false);
   const [docSuccess, setDocSuccess] = useState<string | null>(null);
 
   // Listing Draft inputs
   const [draftTitle, setDraftTitle] = useState("");
   const [draftCategory, setDraftCategory] = useState("women_kurtis");
-  const [draftGarmentType, setDraftGarmentType] = useState("kurti");
-  const [draftFabric, setDraftFabric] = useState("cotton blend");
-  const [draftColor, setDraftColor] = useState("blue");
-  const [draftPrice, setDraftPrice] = useState("459");
+  const [draftGarmentType, setDraftGarmentType] = useState("");
+  const [draftFabric, setDraftFabric] = useState("");
+  const [draftColor, setDraftColor] = useState("");
+  const [draftPrice, setDraftPrice] = useState("");
   const [draftImageUrl, setDraftImageUrl] = useState("");
   const [draftCreating, setDraftCreating] = useState(false);
   const [draftSuccess, setDraftSuccess] = useState<string | null>(null);
