@@ -1,0 +1,905 @@
+/* Reviewer workbench
+   This file is intentionally loaded last and scoped to the admin route. It
+   replaces accumulated reviewer overrides without changing buyer or seller UI. */
+
+.admin-app-route .reviewer-workbench {
+  box-sizing: border-box !important;
+  display: grid !important;
+  gap: 12px !important;
+  margin: 0 auto !important;
+  max-width: 1440px !important;
+  padding: 12px 28px 40px !important;
+  width: 100% !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-header {
+  align-items: center !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 16px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  min-height: 0 !important;
+  padding: 0 0 12px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-kicker {
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-header h2 {
+  color: var(--text-primary) !important;
+  font-size: clamp(23px, 2vw, 28px) !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.08 !important;
+  margin: 3px 0 4px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-header p {
+  color: var(--text-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+  margin: 0 !important;
+  max-width: 720px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-refresh {
+  background: var(--accent-primary) !important;
+  border: 1px solid var(--accent-primary) !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  min-height: 36px !important;
+  padding: 0 13px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-tabs {
+  align-self: start !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  gap: 2px !important;
+  padding: 3px !important;
+  width: auto !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-tabs button {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  color: var(--text-secondary) !important;
+  flex: 0 0 auto !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  gap: 8px !important;
+  min-height: 34px !important;
+  padding: 6px 10px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-tabs button.active {
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--surface)) !important;
+  border-color: color-mix(in srgb, var(--accent-primary) 34%, var(--border-subtle)) !important;
+  color: var(--text-primary) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-tabs em {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 5px !important;
+  color: var(--text-primary) !important;
+  font-size: 10px !important;
+  font-style: normal !important;
+  min-width: 22px !important;
+  padding: 3px 6px !important;
+  text-align: center !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-layout {
+  align-items: start !important;
+  display: grid !important;
+  gap: 16px !important;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-list-panel,
+.admin-app-route .reviewer-workbench .seller-uploads-table-panel,
+.admin-app-route .reviewer-workbench .seller-upload-review-panel {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-list-panel {
+  gap: 10px !important;
+  max-height: calc(100vh - 96px) !important;
+  padding: 12px !important;
+  position: sticky !important;
+  top: 82px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-panel-head h3,
+.admin-app-route .reviewer-workbench .seller-uploads-head h3 {
+  color: var(--text-primary) !important;
+  font-size: 16px !important;
+  font-weight: 850 !important;
+  line-height: 1.2 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-panel-head p,
+.admin-app-route .reviewer-workbench .seller-uploads-head p {
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-lane-list {
+  display: grid !important;
+  gap: 6px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-lane-list button {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 7px !important;
+  color: var(--text-secondary) !important;
+  min-height: 34px !important;
+  padding: 6px 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-lane-list button.active {
+  background: var(--surface) !important;
+  border-color: color-mix(in srgb, var(--accent-primary) 38%, var(--border-subtle)) !important;
+  color: var(--text-primary) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-search {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  min-height: 40px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-list {
+  gap: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-button {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid transparent !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  padding: 10px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-button.selected {
+  background: color-mix(in srgb, var(--accent-primary) 4%, var(--surface)) !important;
+  border-left-color: var(--accent-primary) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-recommended-label {
+  color: var(--accent-primary) !important;
+  display: block !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  margin-bottom: 5px !important;
+  text-transform: uppercase !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-button p {
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
+  color: var(--text-secondary) !important;
+  display: -webkit-box !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+  overflow: hidden !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-selected-summary-card {
+  align-items: center !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 12px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  min-height: 0 !important;
+  padding: 10px 12px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-selected-summary-card h3 {
+  color: var(--text-primary) !important;
+  font-size: 20px !important;
+  font-weight: 850 !important;
+  line-height: 1.1 !important;
+  margin: 2px 0 3px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-selected-summary-card p {
+  color: var(--text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  margin: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-selected-summary-counts {
+  gap: 5px !important;
+  margin-top: 6px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-selected-summary-meta {
+  align-items: center !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  justify-content: flex-end !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-selected-summary-counts span,
+.admin-app-route .reviewer-workbench .seller-report-button-metrics span {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 5px !important;
+  color: var(--text-secondary) !important;
+  font-size: 10px !important;
+  padding: 4px 6px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-report-detail-stack,
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack {
+  gap: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack {
+  align-items: start !important;
+  display: grid !important;
+  grid-template-columns: minmax(250px, 0.58fr) minmax(420px, 1.42fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-head {
+  grid-column: 1 / -1 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-review-card {
+  grid-column: 2 !important;
+  grid-row: 2 / span 2 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .reviewer-guidance {
+  grid-column: 1 !important;
+  grid-row: 3 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-layout {
+  display: grid !important;
+  gap: 9px !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-list-panel,
+.admin-app-route .reviewer-workbench .seller-packet-review-panel {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  padding: 10px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-head h3 {
+  font-size: 15px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-head p {
+  display: none !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-groups {
+  display: grid !important;
+  gap: 7px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  margin-top: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-row-list {
+  display: grid !important;
+  gap: 7px !important;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-row {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid transparent !important;
+  border-radius: 8px !important;
+  grid-template-columns: 28px minmax(0, 1fr) auto !important;
+  min-height: 54px !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-row.selected {
+  background: color-mix(in srgb, var(--accent-primary) 4%, var(--surface)) !important;
+  border-left-color: var(--accent-primary) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-row strong {
+  font-size: 12.5px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-head {
+  align-items: center !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  display: grid !important;
+  gap: 12px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  padding: 0 0 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-head h3 {
+  font-size: 18px !important;
+  line-height: 1.15 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-head p {
+  display: none !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid var(--accent-primary) !important;
+  border-radius: 8px !important;
+  display: grid !important;
+  gap: 8px 12px !important;
+  grid-template-columns: minmax(210px, 0.7fr) minmax(0, 1.3fr) !important;
+  padding: 10px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid div:nth-child(2) {
+  border-right: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid div:nth-child(-n + 2) {
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief.fast {
+  border-left-color: var(--success) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief.hold,
+.admin-app-route .reviewer-workbench .seller-decision-brief.review {
+  border-left-color: var(--warning) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-main h4 {
+  font-size: 15px !important;
+  margin: 2px 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-main p {
+  font-size: 11.5px !important;
+  line-height: 1.3 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-grid {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 7px !important;
+  display: grid !important;
+  gap: 0 !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  overflow: hidden !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-grid div {
+  background: var(--surface) !important;
+  border: 0 !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  padding: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-grid div:last-child {
+  border-right: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-grid span {
+  font-size: 9.5px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-grid strong {
+  font-size: 11px !important;
+  margin-top: 2px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-note {
+  background: transparent !important;
+  border: 0 !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  grid-column: 1 / -1 !important;
+  padding: 7px 0 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-note span {
+  font-size: 11.5px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-review-card {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  gap: 8px !important;
+  padding: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-card-header {
+  grid-template-columns: 30px minmax(0, 1fr) auto !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-card-icon {
+  height: 30px !important;
+  width: 30px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-card-title h4 {
+  font-size: 14px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-review-foldout {
+  border-radius: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-review-foldout-toggle {
+  min-height: 38px !important;
+  padding: 7px 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-note-editor {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 7px !important;
+  gap: 6px !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-note-editor textarea {
+  background: var(--surface) !important;
+  height: 44px !important;
+  min-height: 44px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-action-row {
+  gap: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-action-row button {
+  border-radius: 7px !important;
+  min-height: 36px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-action-row .seller-primary-action {
+  background: var(--success) !important;
+  border: 1px solid var(--success) !important;
+  color: #fff !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-action-row .seller-danger-action {
+  background: color-mix(in srgb, var(--error) 7%, var(--surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--error) 48%, var(--border-subtle)) !important;
+  color: var(--error) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-action-row .seller-secondary-action {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-action-row button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.48 !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-guidance {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 7px !important;
+  overflow: hidden !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-guidance summary {
+  align-items: center !important;
+  background: var(--bg-surface-muted) !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  justify-content: space-between !important;
+  list-style: none !important;
+  min-height: 38px !important;
+  padding: 7px 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-guidance summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-guidance summary small {
+  color: var(--text-muted) !important;
+  font-size: 10.5px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-guidance .seller-review-checklist {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-uploads-layout,
+.admin-app-route .reviewer-workbench .seller-uploads-layout.has-selection {
+  align-items: start !important;
+  display: grid !important;
+  gap: 14px !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-uploads-layout.has-selection {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-uploads-table-panel,
+.admin-app-route .reviewer-workbench .seller-upload-review-panel {
+  padding: 12px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-upload-review-panel {
+  position: sticky !important;
+  top: 82px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-upload-table-wrap {
+  border-radius: 8px !important;
+  overflow-x: auto !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-upload-table {
+  min-width: 760px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-upload-table th {
+  font-size: 10px !important;
+  padding: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-upload-table td {
+  padding: 10px 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-upload-card-list {
+  display: none !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-upload-back {
+  align-self: start !important;
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-upload-back:hover {
+  color: var(--accent-primary) !important;
+}
+
+@media (max-width: 960px) {
+  .admin-app-route .reviewer-workbench .seller-report-layout,
+  .admin-app-route .reviewer-workbench .seller-uploads-layout.has-selection {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-report-list-panel,
+  .admin-app-route .reviewer-workbench .seller-upload-review-panel {
+    max-height: none !important;
+    position: static !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-packet-selected-head,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-review-card,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .reviewer-guidance {
+    grid-column: 1 !important;
+    grid-row: auto !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-app-route .web-header {
+    padding: 10px 12px !important;
+  }
+
+  .admin-app-route .commerce-header-container {
+    align-items: center !important;
+    display: grid !important;
+    gap: 10px !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 8px 0 10px !important;
+  }
+
+  .admin-app-route .commerce-brand {
+    grid-column: 1 !important;
+    justify-self: start !important;
+    min-width: 0 !important;
+  }
+
+  .admin-app-route .commerce-nav {
+    display: grid !important;
+    gap: 5px !important;
+    grid-column: 1 !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  .admin-app-route .commerce-nav button.admin-nav-item {
+    box-sizing: border-box !important;
+    font-size: 10.5px !important;
+    justify-content: center !important;
+    line-height: 1.15 !important;
+    min-height: 38px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    padding: 6px 3px !important;
+    text-align: center !important;
+    white-space: normal !important;
+    width: 100% !important;
+  }
+
+  .admin-app-route .commerce-nav button.admin-nav-item > span:last-child {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+  }
+
+  .admin-app-route .commerce-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    grid-column: 1 !important;
+    justify-content: space-between !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .admin-app-route .commerce-actions > * {
+    min-width: 0 !important;
+  }
+
+  .admin-app-route .reviewer-workbench {
+    gap: 10px !important;
+    padding: 14px 12px 28px !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-report-header {
+    align-items: stretch !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-report-refresh {
+    justify-self: stretch !important;
+    width: 100% !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-report-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    width: 100% !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-report-tabs button {
+    justify-content: space-between !important;
+    min-width: 0 !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-selected-summary-card,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-head,
+  .admin-app-route .reviewer-workbench .seller-decision-brief {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-packet-groups {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-selected-summary-meta,
+  .admin-app-route .reviewer-workbench .seller-packet-row-meta {
+    align-items: flex-start !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-packet-row-list,
+  .admin-app-route .reviewer-workbench .seller-decision-brief-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-decision-brief-grid div {
+    border-bottom: 1px solid var(--border-subtle) !important;
+    border-right: 0 !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-decision-brief-grid div:last-child {
+    border-bottom: 0 !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-card-header {
+    grid-template-columns: 30px minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-card-badges {
+    align-items: flex-start !important;
+    flex-direction: row !important;
+    grid-column: 2 !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-action-row {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-action-row button {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-uploads-controls {
+    align-items: stretch !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-upload-table-wrap {
+    display: none !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-list {
+    display: grid !important;
+    gap: 9px !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card {
+    background: var(--surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-left: 3px solid transparent !important;
+    border-radius: 8px !important;
+    display: grid !important;
+    gap: 9px !important;
+    min-width: 0 !important;
+    padding: 11px !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card.selected {
+    background: color-mix(in srgb, var(--accent-primary) 4%, var(--surface)) !important;
+    border-left-color: var(--accent-primary) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-head {
+    align-items: start !important;
+    display: grid !important;
+    gap: 9px !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-head span {
+    color: var(--text-muted) !important;
+    display: block !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-head strong {
+    color: var(--text-primary) !important;
+    display: block !important;
+    font-size: 14px !important;
+    line-height: 1.25 !important;
+    margin-top: 3px !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-head p,
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-subtitle {
+    color: var(--text-secondary) !important;
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+    margin: 3px 0 0 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts {
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 7px !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts div {
+    min-width: 0 !important;
+    padding: 8px !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts div + div {
+    border-left: 1px solid var(--border-subtle) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts dt {
+    color: var(--text-muted) !important;
+    font-size: 9.5px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts dd {
+    color: var(--text-primary) !important;
+    font-size: 11.5px !important;
+    font-weight: 750 !important;
+    line-height: 1.3 !important;
+    margin: 3px 0 0 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts dd.good {
+    color: var(--success) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts dd.warn {
+    color: var(--warning) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts dd.bad {
+    color: var(--error) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card .seller-upload-review-button {
+    min-height: 36px !important;
+    width: 100% !important;
+  }
+}

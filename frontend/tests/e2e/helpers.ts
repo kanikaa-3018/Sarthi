@@ -7,7 +7,7 @@ export type { DemoRole };
 export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
 
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
-const E2E_DATABASE_NAME = "sarthi_codex_auth_e2e";
+export const E2E_DATABASE_NAME = process.env.E2E_MONGODB_DB ?? "sarthi_codex_auth_e2e";
 
 export async function resetSeed(request: APIRequestContext) {
   const health = await request.get(`${API_BASE}/health`);
