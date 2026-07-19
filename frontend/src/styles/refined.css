@@ -1876,3 +1876,903 @@ button,
 
 .product-detail-header button svg {
   color: var(--text-secondary);
+}
+
+.product-detail-header strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.web-detail-layout {
+  align-items: start;
+  gap: clamp(22px, 3.2vw, 42px);
+  grid-template-columns: minmax(360px, 0.94fr) minmax(390px, 0.86fr);
+  margin-inline: auto;
+  max-width: min(1320px, 100%);
+  width: 100%;
+}
+
+.detail-gallery-container,
+.detail-info-container,
+.detail-decision-container {
+  gap: 18px;
+}
+
+.detail-decision-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  box-sizing: border-box;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  position: sticky;
+  top: 92px;
+}
+
+.detail-product-card {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+.detail-image-frame {
+  background: var(--bg-surface-muted);
+  border-radius: 16px;
+  max-height: 480px;
+  order: 2;
+  overflow: hidden;
+}
+
+.detail-image-frame img {
+  background: var(--bg-surface-muted);
+}
+
+.detail-image-frame span {
+  background: rgba(20, 22, 28, 0.74);
+  font-weight: 600;
+}
+
+.detail-product-summary {
+  order: 1;
+  padding: 0 0 14px !important;
+}
+
+.detail-product-summary > span {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.detail-product-summary h1 {
+  font-size: clamp(22px, 2vw, 30px);
+  letter-spacing: 0;
+  margin-top: 5px;
+}
+
+.detail-price-row strong {
+  font-size: clamp(26px, 2.6vw, 34px);
+}
+
+.detail-price-row small,
+.ui-badge,
+.keep-driver-list span,
+.checkout-keep-driver-row span,
+.cart-confidence-chips span,
+.trust-chip-list span,
+.radar-chip-row span {
+  border: 0 !important;
+}
+
+.size-selector-card,
+.sku-evidence-card,
+.keep-confidence-card,
+.trust-receipt-card,
+.samvaad-card,
+.cod-action-card,
+.avoidable-issue-card,
+.cart-confidence-card {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible;
+  padding: 0 !important;
+}
+
+.size-selector-card,
+.sku-evidence-card,
+.trust-receipt-card,
+.samvaad-card,
+.cod-action-card,
+.simple-proof-summary,
+.cart-confidence-card {
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 76%, transparent) !important;
+  padding-top: 18px !important;
+}
+
+.detail-decision-container .size-selector-card,
+.detail-decision-container .cart-confidence-card,
+.detail-decision-container .cod-action-card {
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 76%, transparent) !important;
+  padding-top: 16px !important;
+}
+
+.detail-decision-container .keep-confidence-card {
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin: 0;
+  padding: 0 0 16px 18px !important;
+}
+
+.detail-decision-container .keep-driver-list span:nth-child(n + 3),
+.detail-decision-container .cart-confidence-chips,
+.detail-decision-container .cart-line-summary.simple,
+.detail-decision-container .cart-bracket-alert,
+.detail-decision-container .cart-confidence-card .keep-proof-link {
+  display: none !important;
+}
+
+.detail-priority-card .section-heading-row.compact h3 {
+  font-size: 20px;
+}
+
+.keep-confidence-card {
+  background: var(--bg-surface) !important;
+  border-left: 4px solid var(--warning) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--shadow-sm) !important;
+  gap: 10px !important;
+  padding: 16px !important;
+}
+
+.keep-confidence-card.high {
+  border-left-color: var(--success) !important;
+}
+
+.keep-confidence-card.low {
+  border-left-color: var(--error) !important;
+}
+
+.simple-decision-top {
+  align-items: flex-start;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.simple-decision-top .eyebrow,
+.simple-decision-top strong,
+.simple-decision-top p {
+  display: block;
+}
+
+.simple-decision-top strong {
+  font-size: 18px;
+  line-height: 1.2;
+  margin-top: 3px;
+}
+
+.simple-decision-icon {
+  background: transparent !important;
+  height: 26px;
+  width: 26px;
+}
+
+.keep-score-meter,
+.cart-score-pill {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  min-width: 58px;
+  padding: 0 !important;
+}
+
+.keep-score-meter span,
+.cart-score-pill strong {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.simple-signal-list,
+.cart-confidence-chips {
+  gap: 8px;
+}
+
+.keep-driver-list span,
+.cart-confidence-chips span {
+  background: var(--bg-surface-muted) !important;
+  color: var(--text-secondary) !important;
+  font-weight: 600;
+  padding: 6px 9px;
+}
+
+.keep-driver-list span.positive {
+  color: var(--success) !important;
+}
+
+.keep-driver-list span.medium {
+  color: var(--warning) !important;
+}
+
+.keep-driver-list span.high {
+  color: var(--error) !important;
+}
+
+.keep-action-row {
+  background: var(--bg-surface-muted) !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  padding: 9px 10px !important;
+}
+
+.simple-decision-card > .keep-proof-link {
+  display: none !important;
+}
+
+.simple-proof-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.simple-proof-summary h3 {
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 3px 0 3px;
+}
+
+.simple-proof-summary p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.simple-proof-facts,
+.simple-proof-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.simple-proof-facts span {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border-radius: 999px;
+  color: var(--success);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
+.simple-proof-facts span.watch {
+  color: var(--warning);
+}
+
+.simple-proof-actions button {
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 0;
+}
+
+.simple-proof-actions button + button {
+  color: var(--text-secondary);
+}
+
+.cart-confidence-card {
+  gap: 12px;
+}
+
+.cart-confidence-header {
+  align-items: flex-start;
+}
+
+.cart-confidence-header strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.2;
+  margin-top: 3px;
+}
+
+.cart-confidence-header p {
+  margin-top: 4px !important;
+}
+
+.cart-confidence-card.high .cart-score-pill strong {
+  color: var(--success);
+}
+
+.cart-confidence-card.medium .cart-score-pill strong {
+  color: var(--warning);
+}
+
+.cart-confidence-card.low .cart-score-pill strong,
+.cart-confidence-card.attention .cart-score-pill strong {
+  color: var(--error);
+}
+
+.trust-receipt-score,
+.trust-receipt-facts div,
+.trust-receipt-actions,
+.trust-receipt-section {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.trust-receipt-score {
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+
+.trust-receipt-section,
+.trust-receipt-facts {
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent) !important;
+  padding-top: 12px !important;
+}
+
+.trust-receipt-facts {
+  gap: 8px;
+}
+
+.trust-receipt-facts div {
+  background: var(--bg-surface-muted) !important;
+  border-radius: 10px !important;
+  padding: 10px !important;
+}
+
+.keep-proof-link,
+.proof-detail-toggle,
+.btn-action-secondary {
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--text-secondary) !important;
+  padding-inline: 0 !important;
+}
+
+.avoidable-issue-card {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--warning) 7%, transparent) !important;
+  border-left: 4px solid var(--warning) !important;
+  border-radius: 12px !important;
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px !important;
+}
+
+.avoidable-issue-card span {
+  color: var(--text-secondary) !important;
+}
+
+.sku-evidence-grid div,
+.cart-line-summary.simple > div,
+.proof-technical-panel,
+.plain-proof-row {
+  background: var(--bg-surface-muted) !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+}
+
+.detail-size-options button {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  font-weight: 700;
+}
+
+.detail-size-options button.active {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--bg-surface);
+}
+
+.samvaad-card-header svg {
+  color: var(--success);
+}
+
+.samvaad-suggestion-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.samvaad-suggestion-list button {
+  background: var(--bg-surface-muted) !important;
+  border: 0 !important;
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.samvaad-input-row {
+  background: var(--bg-surface);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  border-radius: 12px;
+}
+
+.cod-action-card {
+  align-items: center;
+  background: var(--text-primary) !important;
+  border-radius: 14px !important;
+  flex-direction: row;
+  padding: 14px 16px !important;
+}
+
+.cod-action-card span,
+.cod-action-card strong {
+  color: var(--bg-surface);
+}
+
+.cod-action-card .btn-sticky-buy {
+  background: var(--accent-primary);
+  border-radius: 10px;
+}
+
+.detail-help-strip,
+.detail-support-panel {
+  box-sizing: border-box;
+  margin-inline: auto;
+  max-width: min(1320px, 100%);
+  width: 100%;
+}
+
+.detail-help-strip {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 14px 16px;
+}
+
+.detail-help-strip strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 15px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.detail-help-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.detail-help-actions button {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-primary);
+  display: inline-flex;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 13px;
+}
+
+.detail-help-actions button.active {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--bg-surface);
+}
+
+.detail-support-panel {
+  animation: support-panel-in 180ms ease-out;
+}
+
+.detail-support-panel > .samvaad-card,
+.detail-support-panel > .simple-proof-summary,
+.detail-support-panel > .trust-receipt-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--shadow-sm) !important;
+  padding: 18px !important;
+}
+
+.detail-support-panel.ask-panel {
+  max-width: min(840px, 100%);
+}
+
+.detail-standard-proof-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+@keyframes support-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .commerce-header-container {
+    gap: 10px;
+  }
+
+  .commerce-nav {
+    gap: 14px;
+  }
+
+  .web-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-info-container,
+  .detail-decision-container {
+    position: static;
+  }
+
+  .detail-help-strip,
+  .detail-standard-proof-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-help-actions {
+    justify-content: stretch;
+  }
+
+  .detail-help-actions button {
+    justify-content: center;
+    flex: 1 1 160px;
+  }
+
+  .samvaad-suggestion-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Knowledge graph interaction layer: click a node to isolate its proof path; ask a question to pulse the used facts. */
+.kg-focus-strip {
+  align-items: center;
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  display: flex;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.kg-focus-strip svg {
+  color: var(--success);
+  flex: 0 0 auto;
+}
+
+.kg-focus-strip span {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.kg-focus-strip button {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: auto;
+  padding: 0;
+}
+
+.kg-focus-strip.pulse {
+  animation: kg-focus-pulse 1.2s ease-in-out 2;
+}
+
+.kg-real-node,
+.kg-real-edge,
+.kg-real-edge-label {
+  transition:
+    opacity 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    stroke-width 180ms ease;
+}
+
+.kg-real-node.dimmed,
+.kg-real-edge-label.dimmed {
+  filter: grayscale(0.55);
+  opacity: 0.28;
+}
+
+.kg-real-edge.dimmed {
+  opacity: 0.12;
+}
+
+.kg-real-node.connected:not(.selected):not(.highlighted) {
+  background: var(--bg-surface);
+  border-color: color-mix(in srgb, var(--text-primary) 32%, var(--border-subtle));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  opacity: 1;
+}
+
+.kg-real-edge.connected {
+  opacity: 1;
+  stroke: color-mix(in srgb, var(--text-primary) 74%, var(--success));
+  stroke-width: 1.85;
+}
+
+.kg-real-edge-label.connected {
+  background: var(--bg-surface);
+  border-color: color-mix(in srgb, var(--text-primary) 24%, var(--border-subtle));
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  opacity: 1;
+}
+
+.kg-real-node.answer-pulse,
+.kg-real-edge-label.answer-pulse {
+  animation: kg-answer-node-pulse 1.15s ease-in-out 2;
+}
+
+.kg-real-edge.answer-pulse {
+  animation: kg-answer-edge-pulse 1.15s ease-in-out 2;
+  stroke-dasharray: 4 3;
+}
+
+@keyframes kg-focus-pulse {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  }
+}
+
+@keyframes kg-answer-node-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.015);
+  }
+}
+
+@keyframes kg-answer-edge-pulse {
+  0%,
+  100% {
+    stroke-width: 1.35;
+  }
+  50% {
+    stroke-width: 2.2;
+  }
+}
+
+@media (max-width: 560px) {
+  .kg-focus-strip {
+    align-items: flex-start;
+  }
+
+  .kg-focus-strip button {
+    margin-left: 0;
+  }
+}
+
+/* Buyer usability pass: product cards should feel like commerce, with one clear trust action. */
+:root {
+  --app-shell-max: 1480px;
+}
+
+.marketplace-toolbar,
+.marketplace-trust-strip,
+.buyer-product-card,
+.wishlist-product-card,
+.order-product-card {
+  background: var(--bg-surface) !important;
+  border-color: color-mix(in srgb, var(--border-subtle) 78%, transparent) !important;
+}
+
+.marketplace-trust-strip {
+  align-items: center;
+  border: 0 !important;
+  box-shadow: none !important;
+  min-height: 32px !important;
+  padding-inline: 0 !important;
+}
+
+.marketplace-trust-strip span {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.buyer-shop-shell .web-product-grid {
+  gap: clamp(14px, 1.5vw, 22px);
+}
+
+.buyer-product-card {
+  border-radius: 10px !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.buyer-product-card:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 16%, var(--border-subtle)) !important;
+  box-shadow: var(--shadow-md);
+}
+
+.buyer-product-image {
+  aspect-ratio: 4 / 5 !important;
+  background: var(--bg-surface-muted) !important;
+  position: relative;
+}
+
+.buyer-product-image img {
+  transition: transform 220ms ease;
+}
+
+.buyer-product-card:hover .buyer-product-image img {
+  transform: scale(1.025);
+}
+
+.buyer-save-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 36px;
+  z-index: 3;
+}
+
+.buyer-save-icon.saved {
+  color: var(--accent-primary);
+}
+
+.buyer-save-icon:hover {
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+}
+
+.buyer-product-body {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px 13px !important;
+}
+
+.buyer-product-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  min-height: 0 !important;
+}
+
+.product-trust-phrase {
+  align-items: center !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  color: var(--text-secondary) !important;
+  display: inline-flex !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  gap: 5px;
+  line-height: 1.25 !important;
+  margin: 0;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+
+.product-trust-phrase.safe svg {
+  color: var(--success);
+}
+
+.product-trust-phrase.watch svg,
+.product-trust-phrase.proof svg {
+  color: var(--warning);
+}
+
+.buyer-product-actions {
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: 40px minmax(0, 1fr);
+  margin-top: 4px;
+}
+
+.buyer-product-actions button {
+  border-radius: 10px !important;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.buyer-product-actions button:not(.primary) {
+  background: var(--bg-surface-muted) !important;
+  border: 0 !important;
+  color: var(--text-secondary) !important;
+}
+
+.buyer-product-actions button.primary {
+  background: var(--accent-primary) !important;
+  border: 0 !important;
+  color: var(--text-on-accent) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.buyer-product-actions .icon-only {
+  padding: 0 !important;
+}
+
+.buyer-product-actions .icon-only span {
+  display: none;
+}
+
+.product-trust-badge {
+  bottom: auto !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: var(--shadow-sm);
+  display: inline-flex !important;
+  gap: 5px;
+  height: auto !important;
+  left: 10px;
+  max-width: calc(100% - 58px) !important;
+  min-height: 28px !important;
+  padding: 6px 9px !important;
+  right: auto !important;
+  top: 10px;
+  width: auto !important;
+}
+
+.product-trust-badge.safe {
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent) !important;
+  color: var(--success) !important;
+}
+
+.product-trust-badge.watch,
+.product-trust-badge.proof {
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent) !important;
+  color: var(--warning) !important;
+}
+
+.trust-snapshot-bar {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) !important;
+}
+
+.trust-snapshot-bar > div {
+  min-height: 64px;
+}
+
+.trust-snapshot-bar strong {
+  white-space: normal !important;
+}
+
+.trust-center-v5 .trust-account-header,
+.trust-center-v5 .fit-help-control,
+.trust-center-v5 .fit-learning-card,
+.trust-center-v5 .fit-journey-preview,
+.trust-center-v5 .checkout-guidance-line,
+.trust-center-v5 .trust-card {
+  border-color: color-mix(in srgb, var(--border-subtle) 78%, transparent) !important;
+  box-shadow: none !important;
+}
+
+/* Proof workspace: make it a guided proof layer, not a wall of boxed metrics. */
+.sarthi-saved-workspace {
+  gap: 14px;
+}
