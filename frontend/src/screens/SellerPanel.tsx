@@ -812,18 +812,32 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
     }
   }
 
-  function handleAutoFillDraft() {
-    setDraftTitle("Blue Floral Cotton Kurti - Seller Draft");
-    setDraftCategory("women_kurtis");
-    setDraftGarmentType("kurti");
-    setDraftFabric("cotton blend");
-    setDraftColor("blue");
-    setDraftPrice("459");
-    setDraftImageUrl("https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80");
+  function handleImproveDraftTitle() {
+    const parts = [draftColor, draftFabric, draftGarmentType]
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (!parts.length) {
+      setError(copy.readinessIncomplete);
+      return;
+    }
+    setError(null);
+    setDraftTitle(toTitleCase(parts.join(" ")));
+  }
+
+  async function handleDraftImageFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (!isAllowedUploadFile(file, ["image/jpeg", "image/png", "image/webp"], 1_500_000)) {
+      setError("Product image must be JPG, PNG, or WebP under 1.5 MB.");
+      event.currentTarget.value = "";
+      return;
+    }
+    setError(null);
+    setDraftImageUrl(await readFileAsDataUrl(file));
   }
 
   function openAddProduct() {
-    setActiveTab("onboarding");
+    selectWorkbenchTab("add_product");
     window.setTimeout(() => {
       document.getElementById("seller-create-product")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 40);
