@@ -8,6 +8,7 @@ import { AiProviderError } from "./aiTypes.js";
 import { env } from "../config/env.js";
 import { createBedrockProvider } from "./bedrock.js";
 import {
+  geminiActiveModel,
   geminiConfigured,
   geminiRuntimeStatus,
   embedText as embedGeminiText,
@@ -29,6 +30,8 @@ type GeminiGenerationAdapterOptions = {
     systemInstruction: string;
     userText: string;
     userParts?: GeminiUserPart[];
+    capability?: StructuredGenerationInput["capability"];
+    schema?: StructuredGenerationInput["schema"];
     temperature?: number;
     maxTokens?: number;
   }): Promise<string | null>;
@@ -51,6 +54,8 @@ export function createGeminiGenerationAdapter(options: GeminiGenerationAdapterOp
                   data: Buffer.from(part.image.bytes).toString("base64")
                 }
               }),
+          capability: input.capability,
+          schema: input.schema,
           temperature: 0,
           maxTokens: input.maxTokens
         });
@@ -107,7 +112,7 @@ const productionAdapters: Record<AiProvider, GenerationAdapter> = {
   },
   gemini: createGeminiGenerationAdapter({
     configured: geminiConfigured,
-    model: () => env.geminiModel,
+    model: geminiActiveModel,
     generate: generateGeminiJson
   })
 };

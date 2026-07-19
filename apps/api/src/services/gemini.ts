@@ -5,6 +5,8 @@ export type GeminiJsonInput = {
   systemInstruction: string;
   userText: string;
   userParts?: GeminiUserPart[];
+  capability?: "text" | "vision";
+  schema?: Record<string, unknown>;
   temperature?: number;
   maxTokens?: number;
 };
@@ -22,8 +24,14 @@ let lastEmbeddingModel: string | null = null;
 
 const GENERATE_MODEL_FALLBACKS = [
   "gemini-3.1-flash-lite",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash"
+  "gemini-3.5-flash",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite"
+];
+const VISION_MODEL_FALLBACKS = [
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-2.0-flash"
 ];
 const EMBEDDING_MODEL_FALLBACKS = ["gemini-embedding-001"];
 const MODEL_ALIASES: Record<string, string> = {
@@ -78,15 +86,22 @@ export async function generateGeminiJson(input: GeminiJsonInput) {
   if (geminiCircuitOpen("generation")) return null;
   let lastError: unknown = null;
   try {
-    for (const model of modelCandidates(env.llmModel, GENERATE_MODEL_FALLBACKS)) {
+    const fallbacks = input.capability === "vision" ? VISION_MODEL_FALLBACKS : GENERATE_MODEL_FALLBACKS;
+    for (const model of modelCandidates(env.llmModel, fallbacks)) {
       try {
         const payload = await postGenerateContent(model, input);
         const safetyReason = geminiSafetyReason(payload);
         if (safetyReason) {
           throw new AiProviderError("safety", "Gemini safety policy stopped the response");
         }
+        const text = payload.candidates?.[0]?.content?.parts?.map((part: any) => part.text).filter(Boolean).join("") ?? "";
+        if (!text.trim()) {
+          const error = new Error(`Gemini returned empty content (${model})`);
+          (error as any).status = payload.candidates?.[0]?.finishReason === "MAX_TOKENS" ? 429 : 502;
+          throw error;
+        }
         lastGenerateModel = model;
-        return payload.candidates?.[0]?.content?.parts?.map((part: any) => part.text).join("") ?? "";
+        return text;
       } catch (error) {
         lastError = error;
         if (!shouldTryNextModel(error)) break;
@@ -158,6 +173,10 @@ export function geminiSafetyReason(payload: unknown) {
   return candidate ? String(candidate.finishReason).toUpperCase() : null;
 }
 
+export function geminiActiveModel() {
+  return lastGenerateModel ?? env.geminiModel;
+}
+
 function modelName(value: string) {
   const model = value.replace(/^models\//, "");
   return MODEL_ALIASES[model] ?? model;
@@ -185,7 +204,8 @@ async function postGenerateContent(model: string, input: GeminiJsonInput) {
       generationConfig: {
         temperature: input.temperature ?? 0.2,
         maxOutputTokens: input.maxTokens,
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        responseSchema: input.schema
       }
     })
   });
@@ -210,9 +230,12 @@ async function postEmbedContent(
       content: {
         parts: [{ text: text.slice(0, 6000) }]
       },
+      taskType,
+      ...(title && taskType === "RETRIEVAL_DOCUMENT" ? { title } : {}),
+      outputDimensionality: env.embeddingDimensions,
       embedContentConfig: {
         taskType,
-        title,
+        ...(title && taskType === "RETRIEVAL_DOCUMENT" ? { title } : {}),
         outputDimensionality: env.embeddingDimensions,
         autoTruncate: true
       }
@@ -240,7 +263,7 @@ async function safeErrorText(response: Response) {
 
 function shouldTryNextModel(error: unknown) {
   const status = typeof (error as any)?.status === "number" ? (error as any).status : null;
-  return status === 404;
+  return status === 400 || status === 404 || status === 429 || status === 502 || status === 503;
 }
 
 function geminiCircuitOpen(capability: keyof typeof geminiCircuits) {

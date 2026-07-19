@@ -176,6 +176,83 @@ describe("AI generation failover", () => {
     assert.equal(bedrockCalls, 0);
   });
 
+  it("tries a newer Gemini vision model when the primary model is quota limited", async () => {
+    const previousOrder = env.providerOrder;
+    const previousProvider = env.llmProvider;
+    const previousKey = env.geminiApiKey;
+    const previousModel = env.llmModel;
+    const previousFetch = globalThis.fetch;
+    const calls: string[] = [];
+    env.providerOrder = ["gemini"];
+    env.llmProvider = "gemini";
+    env.geminiApiKey = "test-key";
+    env.llmModel = "gemini-3.1-flash-lite";
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      if (calls.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "quota limited" } }), {
+          status: 429,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: "{\"description\":\"catalog item\"}" }] } }]
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    try {
+      const text = await generateGeminiJson({
+        capability: "vision",
+        systemInstruction: "Return JSON.",
+        userText: "Describe image",
+        userParts: [{ text: "image context" }],
+        maxTokens: 80
+      });
+
+      assert.equal(text, "{\"description\":\"catalog item\"}");
+      assert.match(calls[0], /gemini-3\.1-flash-lite/);
+      assert.match(calls[1], /gemini-3\.5-flash/);
+    } finally {
+      env.providerOrder = previousOrder;
+      env.llmProvider = previousProvider;
+      env.geminiApiKey = previousKey;
+      env.llmModel = previousModel;
+      globalThis.fetch = previousFetch;
+    }
+  });
+
+  it("sends Gemini embedding dimensionality in top-level and config fields", async () => {
+    const previousOrder = env.providerOrder;
+    const previousKey = env.geminiApiKey;
+    const previousFetch = globalThis.fetch;
+    let requestBody: any = null;
+    env.providerOrder = ["gemini"];
+    env.geminiApiKey = "test-key";
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ embedding: { values: Array(env.embeddingDimensions).fill(0.01) } }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    try {
+      const embedding = await embedText("seller proof", "RETRIEVAL_QUERY");
+
+      assert.equal(embedding?.length, env.embeddingDimensions);
+      assert.equal(requestBody.taskType, "RETRIEVAL_QUERY");
+      assert.equal(requestBody.outputDimensionality, env.embeddingDimensions);
+      assert.equal(requestBody.embedContentConfig.outputDimensionality, env.embeddingDimensions);
+    } finally {
+      env.providerOrder = previousOrder;
+      env.geminiApiKey = previousKey;
+      globalThis.fetch = previousFetch;
+    }
+  });
+
   it("keeps Gemini generation and embedding circuits independent", async () => {
     const previousOrder = env.providerOrder;
     const previousKey = env.geminiApiKey;

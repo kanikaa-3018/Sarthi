@@ -82,6 +82,46 @@ describe("provider-neutral AI callers", () => {
     assert.deepEqual(result.cards.map((card: any) => card.product_id), ["product_1"]);
   });
 
+  it("rejects generic seller coach headlines from model output", async () => {
+    const cards = [{
+      product_id: "product_1",
+      product_title: "Blue kurta",
+      priority: "high",
+      issue: "Fit doubt",
+      action: "Add size chart",
+      metric: "4 returns",
+      score: 42,
+      proof_type: "measurement_chart",
+      why: "Buyers need fit proof"
+    }];
+
+    const result = await generateSellerCoach(cards, 1, async () => ({
+      provider: "bedrock" as const,
+      model: "nova-test",
+      value: {
+        headline: "Seller Coaching for Meesho-style Marketplace",
+        summary: "A chart can reduce buyer doubt.",
+        reasons: ["Fit proof is missing"],
+        product_coaching: [{
+          product_id: "product_1",
+          issue_summary: "Fit proof is unclear.",
+          buyer_impact: "Buyers hesitate.",
+          next_step: "Upload a chart.",
+          rating_lift: "Improves trust.",
+          trust_steps: ["Measure each size"]
+        }],
+        rating_plan: {
+          title: "Build trust",
+          summary: "Publish accurate proof.",
+          steps: ["Add the chart"]
+        }
+      }
+    }));
+
+    assert.equal(result.headline, "Fix the products blocking buyer trust");
+    assert.equal(result.provider, "bedrock");
+  });
+
   it("builds one provider-neutral image payload for Bedrock and Gemini", async () => {
     const previousFetch = globalThis.fetch;
     globalThis.fetch = async () => new Response(new Uint8Array([137, 80, 78, 71]), {
