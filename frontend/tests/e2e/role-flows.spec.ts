@@ -51,14 +51,13 @@ test("seller proof submission reaches admin approval loop", async ({ page, reque
   const sellerSession = await loginAs(page, request, "seller");
 
   await page.goto("/seller/proofs");
-  await expect(page.getByText("Show buyers proof they can trust")).toBeVisible();
-  await page.getByRole("button", { name: /Upload next proof/i }).click();
+  await expect(page.getByRole("heading", { name: "Proof requests" })).toBeVisible();
+  await page.getByRole("button", { name: "Upload proof" }).first().click();
 
-  await expect(page.getByText("Review and submit")).toBeVisible();
-  await page.getByRole("button", { name: /Apply draft/i }).click();
+  await expect(page.getByRole("dialog", { name: "Upload proof" })).toBeVisible();
   await expect(page.getByLabel("Proof title")).toHaveValue("Fabric close-up proof");
-  await page.getByLabel("Proof file or real image link").fill("seeded://proofs/e2e/fabric-closeup");
-  await expect(page.getByRole("button", { name: /Submit proof reference/i })).toBeEnabled();
+  await page.getByLabel("Proof file or secure link").fill("seeded://proofs/e2e/fabric-closeup");
+  await expect(page.getByRole("button", { name: "Submit for review" })).toBeEnabled();
 
   await Promise.all([
     page.waitForResponse((response) =>
@@ -66,12 +65,11 @@ test("seller proof submission reaches admin approval loop", async ({ page, reque
       response.request().method() === "POST" &&
       response.ok()
     ),
-    page.getByRole("button", { name: /Submit proof reference/i }).click()
+    page.getByRole("button", { name: "Submit for review" }).click()
   ]);
 
-  await expect(page.getByText(/Proof submitted to admin/i)).toBeVisible();
-  await expect(page.getByText(/Fabric close-up for fabric/i).first()).toBeVisible();
-  await expect(page.getByText("Admin review").first()).toBeVisible();
+  await expect(page.getByText("Proof submitted to reviewer.")).toBeVisible();
+  await expect(page.getByText("With reviewer").first()).toBeVisible();
 
   await loginAs(page, request, "admin");
   await page.goto("/admin/uploads");

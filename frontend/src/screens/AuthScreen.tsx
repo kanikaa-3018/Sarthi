@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { login, signupBuyer, signupSeller } from "../api/client";
 import { SarthiMark } from "../components/SarthiMark";
 import { DEMO_ACCOUNTS, type AuthPortal } from "../demoAccounts";
@@ -54,6 +54,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
   const [flow, setFlow] = useState<AuthFlow>("signin");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [buyerLang, setBuyerLang] = useState<LanguageCode>(language);
   const [businessName, setBusinessName] = useState("");
@@ -92,6 +93,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
     setFlow("signin");
     setError(null);
     setSuccess(null);
+    setShowPassword(false);
   }
 
   function useDemoCredentials() {
@@ -284,8 +286,9 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             )}
 
             <div className="auth-input-group">
-              <label>{portal === "buyer" ? "Mobile or username" : "Username"}</label>
+              <label htmlFor="auth-username">{portal === "buyer" ? "Mobile or username" : "Username"}</label>
               <input
+                id="auth-username"
                 type="text"
                 placeholder={flow === "signin" ? demo.username : "Create a unique username"}
                 value={username}
@@ -297,23 +300,30 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             </div>
 
             <div className="auth-input-group">
-              <label>Password</label>
-              <input
-                type="password"
-                placeholder={flow === "signin" ? "Enter password" : "Minimum 8 characters"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={flow === "signin" ? "current-password" : "new-password"}
-                disabled={loading}
-                required
-              />
+              <label htmlFor="auth-password">Password</label>
+              <div className="auth-password-control">
+                <input
+                  id="auth-password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder={flow === "signin" ? "Enter password" : "Minimum 8 characters"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={flow === "signin" ? "current-password" : "new-password"}
+                  disabled={loading}
+                  required
+                />
+                <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)} disabled={loading}>
+                  {showPassword ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+                </button>
+              </div>
             </div>
 
             {flow === "signup" && portal === "buyer" && (
               <>
                 <div className="auth-input-group">
-                  <label>Full name</label>
+                  <label htmlFor="auth-display-name">Full name</label>
                   <input
+                    id="auth-display-name"
                     type="text"
                     placeholder="Name shown in your account"
                     value={displayName}
@@ -324,8 +334,9 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
                 </div>
 
                 <div className="auth-input-group">
-                  <label>Preferred language</label>
+                  <label htmlFor="auth-buyer-language">Preferred language</label>
                   <select
+                    id="auth-buyer-language"
                     value={buyerLang}
                     onChange={(event) => setBuyerLang(event.target.value as LanguageCode)}
                     disabled={loading}
@@ -343,8 +354,9 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             {flow === "signup" && portal === "seller" && (
               <>
                 <div className="auth-input-group">
-                  <label>Business or store name</label>
+                  <label htmlFor="auth-business-name">Business or store name</label>
                   <input
+                    id="auth-business-name"
                     type="text"
                     placeholder="Legal or marketplace store name"
                     value={businessName}
@@ -355,8 +367,9 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
                 </div>
 
                 <div className="auth-input-group">
-                  <label>GSTIN</label>
+                  <label htmlFor="auth-gstin">GSTIN</label>
                   <input
+                    id="auth-gstin"
                     type="text"
                     placeholder="GST number for review"
                     value={gstNumber}
@@ -367,8 +380,9 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
                 </div>
 
                 <div className="auth-input-group">
-                  <label>Pickup pincode</label>
+                  <label htmlFor="auth-pickup-pincode">Pickup pincode</label>
                   <input
+                    id="auth-pickup-pincode"
                     type="text"
                     inputMode="numeric"
                     maxLength={6}
@@ -381,8 +395,9 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
                 </div>
 
                 <div className="auth-input-group">
-                  <label>Support contact</label>
+                  <label htmlFor="auth-support-contact">Support contact</label>
                   <input
+                    id="auth-support-contact"
                     type="text"
                     placeholder="Phone or email for verification"
                     value={supportContact}
