@@ -131,6 +131,12 @@ body {
   line-height: 1.5;
 }
 
+html.buyer-scroll-lock,
+body.buyer-scroll-lock {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

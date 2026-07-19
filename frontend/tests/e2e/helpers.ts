@@ -14,6 +14,7 @@ export async function resetSeed(request: APIRequestContext) {
   const health = await request.get(`${API_BASE}/health`);
   expect(health.ok(), await health.text()).toBeTruthy();
   const environment = await health.json() as { db?: string };
+  expect(E2E_DATABASE_NAME, "Refusing to reset a database without an e2e marker").toMatch(/(?:^|_)e2e(?:_|$)/);
   expect(environment.db, "Refusing to reset a non-E2E database").toBe(E2E_DATABASE_NAME);
 
   const response = await request.post(`${API_BASE}/seed/reset`);
