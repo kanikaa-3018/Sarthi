@@ -170,11 +170,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
     <div className="mobile-auth-container auth-entry-shell">
       <div className="auth-entry-layout">
         <aside className="auth-story-panel" aria-label="Sarthi product summary">
-          <div className="auth-story-brand">
-            <div className="brand-logo-badge auth-logo-mark">
-              <SarthiMark />
-            </div>
-          </div>
+
           <h2>One login. Three clean workspaces.</h2>
           <p>
             Buyers get proof before checkout, sellers get evidence tasks and reviewers keep seller claims under control.

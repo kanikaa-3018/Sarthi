@@ -124,19 +124,19 @@
 }
 
 /* 4. Right Authentication Card */
-.auth-entry-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.04);
-  border-radius: 16px;
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  max-height: 80dvh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+.auth-app-route .mobile-auth-card.auth-entry-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.04) !important;
+  border-radius: 16px !important;
+  padding: 28px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 20px !important;
+  max-height: 70dvh !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
 }
 
 .auth-card-heading {
@@ -473,15 +473,33 @@
 
 /* Mobile Screens (Tighter Height Limits to Prevent Scrolling) */
 @media (max-width: 560px) {
-  .auth-app-route .web-content-container {
-    padding: 0 8px !important;
+  .auth-app-route {
+    overflow: hidden !important;
+    height: 100dvh !important;
   }
 
-  .auth-app-route .auth-entry-card {
+  .auth-app-route .web-content-container {
+    padding: 0 8px !important;
+    height: auto !important;
+    align-items: center !important;
+  }
+
+  .auth-app-route .mobile-auth-container.auth-entry-shell {
+    padding: 8px 12px !important;
+  }
+
+  .auth-app-route .auth-entry-layout {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+  }
+
+  .auth-app-route .mobile-auth-card.auth-entry-card {
     padding: 16px !important;
     border-radius: 12px !important;
     gap: 14px !important;
-    max-height: 92dvh !important;
+    max-height: 72dvh !important;
+    overflow-y: auto !important;
   }
 
   .auth-app-route .auth-card-heading h1 {
