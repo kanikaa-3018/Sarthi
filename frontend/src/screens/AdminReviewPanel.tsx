@@ -695,85 +695,275 @@ function PolicyBrainView({ queue }: { queue: AdminReviewQueue }) {
           </div>
         </section>
 
-      <div className="admin-action-row">
-        <button
-          className="admin-approve"
-          onClick={onApprove}
-          disabled={!canApprove || busyAction === `approve-draft-${draft.draft_id}`}
-        >
-          <Send size={14} />
-          Publish
-        </button>
-        <button
-          className="admin-reject"
-          onClick={onRevision}
-          disabled={!submitted || note.trim().length < 8 || busyAction === `revision-draft-${draft.draft_id}`}
-        >
-          <XCircle size={14} />
-          Revision
-        </button>
+        <section className="admin-mode-panel">
+          <div className="admin-mode-panel-head">
+            <div>
+              <h3>Source freshness</h3>
+              <p>Reviewer automation is only trusted when sources are usable.</p>
+            </div>
+            <span>{queue.source_health.sources.length}</span>
+          </div>
+          <div className="admin-source-list">
+            {queue.source_health.sources.map((source) => (
+              <article className={`admin-source-row ${source.effective_status}`} key={source.source_id}>
+                <div>
+                  <strong>{source.display_name}</strong>
+                  <span>{source.owner_system} | SLA {source.freshness_sla_hours}h</span>
+                </div>
+                <StatusPill value={source.effective_status} />
+                <small>{formatDate(source.last_synced_at)}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function PolicyMetric({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: string;
+  tone: "good" | "warn" | "bad";
+}) {
+  return (
+    <article className={`admin-policy-metric ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function PolicyGateRow({
+  gate
+}: {
+  gate: { label: string; status: "pass" | "warn" | "fail"; detail: string };
+}) {
+  return (
+    <article className={`admin-policy-gate-row ${gate.status}`}>
+      {gate.status === "pass" ? <CheckCircle2 size={16} /> : gate.status === "warn" ? <AlertTriangle size={16} /> : <XCircle size={16} />}
+      <div>
+        <strong>{gate.label}</strong>
+        <span>{gate.detail}</span>
       </div>
     </article>
   );
 }
 
-function DocumentRow({ document }: { document: AdminVerificationDocument }) {
+function ImpactView({ queue }: { queue: AdminReviewQueue }) {
+  const prescreens = collectPrescreens(queue);
+  const checkCounts = countPrescreenChecks(prescreens);
+  const totalChecks = checkCounts.pass + checkCounts.warn + checkCounts.fail;
+  const highConfidence = queue.active_queue.filter((item) => item.confidence === "high" && item.route_to === "standard_review").length;
+  const reviewMix = [
+    { label: "Applications", value: queue.summary.pending_applications },
+    { label: "Documents", value: queue.summary.document_checks },
+    { label: "Drafts", value: queue.summary.submitted_drafts },
+    { label: "Proof", value: queue.summary.proof_reviews }
+  ];
+  const largestMixValue = Math.max(...reviewMix.map((item) => item.value), 1);
+
   return (
-    <div className="admin-doc-row">
-      <div>
-        <strong>{labelize(document.document_type)}</strong>
-        <span>{document.seller_name}</span>
+    <section className="admin-impact-view">
+      <div className="admin-impact-grid">
+        <ImpactMetric label="Checks pre-read" value={totalChecks} detail="Validation rows the reviewer no longer scans first" />
+        <ImpactMetric label="Suggested actions" value={queue.summary.suggested_actions} detail="Approve, reject, publish, or revise suggestions" />
+        <ImpactMetric label="Fast decisions" value={highConfidence} detail="High-confidence standard-review items" />
+        <ImpactMetric label="Trust lift waiting" value={queue.summary.trust_lift_pending} detail="Potential seller score points after review" />
       </div>
-      <StatusBadge value={document.status} />
-      <small>{document.reference}</small>
-      {document.sha256 ? (
-        <small>{document.file_name} · {formatBytes(document.file_size_bytes)} · hash {document.sha256.slice(0, 12)}</small>
-      ) : (
-        <small>File evidence missing</small>
-      )}
-    </div>
+
+      <div className="admin-mode-split">
+        <section className="admin-mode-panel">
+          <div className="admin-mode-panel-head">
+            <div>
+              <h3>Where effort goes</h3>
+              <p>Current queue split, so reviewers know which skill set is needed today.</p>
+            </div>
+          </div>
+          <div className="admin-impact-bars">
+            {reviewMix.map((item) => (
+              <div className="admin-impact-bar-row" key={item.label}>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.value}</span>
+                </div>
+                <em style={{ width: `${Math.max(8, Math.round((item.value / largestMixValue) * 100))}%` }} />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="admin-mode-panel">
+          <div className="admin-mode-panel-head">
+            <div>
+              <h3>Automation guardrails</h3>
+              <p>Numbers that keep the assistant useful without hiding risk.</p>
+            </div>
+          </div>
+          <div className="admin-impact-guardrails">
+            <DetailTile label="Senior routed" value={queue.summary.senior_routed} />
+            <DetailTile label="Blocked items" value={queue.summary.blocked_items} />
+            <DetailTile label="SLA breaches" value={queue.summary.breached_sla_count} />
+            <DetailTile label="Buyer proof waits" value={queue.summary.buyer_requests_waiting} />
+          </div>
+        </section>
+      </div>
+    </section>
   );
 }
 
-function AuditEventRow({ event }: { event: AdminAuditEvent }) {
+function ImpactMetric({
+  label,
+  value,
+  detail
+}: {
+  label: string;
+  value: number;
+  detail: string;
+}) {
   return (
-    <div className="admin-doc-row">
-      <div>
-        <strong>{labelize(event.action)}</strong>
-        <span>{event.actor_name} · {labelize(event.target_type)} {event.target_id}</span>
-      </div>
-      <StatusBadge value={event.decision} />
-      <small>{event.notes}</small>
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return <div className="admin-empty-state">{message}</div>;
-}
-
-function Detail({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="admin-detail">
+    <article className="admin-impact-card">
       <span>{label}</span>
-      <strong>{labelize(String(value))}</strong>
-    </div>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </article>
   );
 }
 
-function StatusBadge({ value }: { value: string }) {
-  return <span className={`admin-status-badge ${statusClass(value)}`}>{labelize(value)}</span>;
-}
+function SellerReportsView({
+  queue,
+  selectedReport,
+  selectedSellerId,
+  sellerSearch,
+  notes,
+  busyAction,
+  onSearchChange,
+  onSelectSeller,
+  onNoteChange,
+  onRunAction
+}: {
+  queue: AdminReviewQueue;
+  selectedReport: SellerReport | null;
+  selectedSellerId: string | null;
+  sellerSearch: string;
+  notes: NotesById;
+  busyAction: string | null;
+  onSearchChange: (value: string) => void;
+  onSelectSeller: (sellerId: string) => void;
+  onNoteChange: (id: string, value: string) => void;
+  onRunAction: (
+    actionKey: string,
+    handler: () => Promise<AdminReviewQueue>,
+    message: string,
+    noteId?: string
+  ) => Promise<void>;
+}) {
+  const [lane, setLane] = useState<SellerLaneId>("needs_decision");
+  const lanes = useMemo(() => buildSellerLanes(queue), [queue]);
+  const visibleLanes = useMemo(() => lanes.filter((item) => item.count > 0 || item.id === lane), [lane, lanes]);
+  const clearedSellerCount = queue.seller_dossiers.filter((seller) => sellerMatchesLane(queue, seller, "clear")).length;
+  const filteredSellers = useMemo(() => {
+    const query = sellerSearch.trim().toLowerCase();
+    return queue.seller_dossiers.filter((seller) => {
+      if (!sellerMatchesLane(queue, seller, lane)) return false;
+      if (!query) return true;
+      const application = queue.seller_applications.find((item) => item.seller_id === seller.seller_id);
+      return [
+        seller.seller_name,
+        seller.seller_id,
+        seller.verification_status,
+        seller.next_action,
+        application?.business_name,
+        application?.gst_number
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [lane, queue, sellerSearch]);
 
-function statusClass(value: string) {
-  if (["approved", "verified"].includes(value)) return "good";
-  if (["rejected", "restricted", "needs_revision"].includes(value)) return "bad";
-  if (["submitted", "pending_review", "under_review"].includes(value)) return "attention";
-  return "neutral";
-}
+  useEffect(() => {
+    if (!filteredSellers.length) return;
+    if (!selectedSellerId || !filteredSellers.some((seller) => seller.seller_id === selectedSellerId)) {
+      onSelectSeller(filteredSellers[0].seller_id);
+    }
+  }, [filteredSellers, onSelectSeller, selectedSellerId]);
 
-function labelize(value: string) {
-  return value.replace(/_/g, " ");
+  return (
+    <section className="seller-report-layout">
+      <aside className="seller-report-list-panel">
+        <div className="seller-report-panel-head">
+          <div>
+            <h3>Sellers needing action</h3>
+            <p>Completed sellers stay out of this queue.</p>
+          </div>
+          <span>{filteredSellers.length}</span>
+        </div>
+
+        <div className="seller-lane-list" aria-label="Seller lanes">
+          {visibleLanes.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={lane === item.id ? "active" : ""}
+              onClick={() => setLane(item.id)}
+            >
+              <span>{item.label}</span>
+              <em>{item.count}</em>
+            </button>
+          ))}
+        </div>
+
+        <label className="seller-report-search" aria-label="Search seller reports">
+          <Search size={15} />
+          <input
+            value={sellerSearch}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search seller, GST, status"
+          />
+        </label>
+
+        {clearedSellerCount > 0 && (
+          <p className="seller-cleared-note">
+            {clearedSellerCount} cleared seller{clearedSellerCount === 1 ? "" : "s"} moved to history.
+          </p>
+        )}
+
+        <div className="seller-report-list">
+          {filteredSellers.length ? (
+            filteredSellers.map((seller) => (
+              <SellerReportButton
+                key={seller.seller_id}
+                seller={seller}
+                laneLabel={sellerLaneLabel(queue, seller)}
+                selected={seller.seller_id === selectedSellerId}
+                onSelect={() => onSelectSeller(seller.seller_id)}
+              />
+            ))
+          ) : (
+            <EmptyPanel message="No seller report matches this search." compact />
+          )}
+        </div>
+      </aside>
+
+      <section className="seller-report-detail-panel">
+        {selectedReport ? (
+          <SellerReportDetail
+            report={selectedReport}
+            notes={notes}
+            busyAction={busyAction}
+            onNoteChange={onNoteChange}
+            onRunAction={onRunAction}
+          />
+        ) : (
+          <EmptyPanel message="Select a seller report to review submissions." />
+        )}
+      </section>
+    </section>
+  );
 }
 
 function formatBytes(value: number) {
