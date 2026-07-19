@@ -1,32 +1,45 @@
 # Judge Review Guide
 
-This guide explains how to inspect Sarthi as a working product instead of a scripted demo.
+This guide helps reviewers inspect Sarthi as a working product, not a scripted single-screen demo.
 
-## What To Look For
+## What To Evaluate
 
-Sarthi is strongest when evaluated through the full connected flow:
+Sarthi should be reviewed as a connected trust loop:
 
-1. Buyer browses a normal feed.
-2. Buyer resolves duplicate listings.
-3. Product detail shows trust state, Trust Receipt, size recommendation, and agent checks.
-4. Buyer asks Samvaad a grounded question.
-5. Checkout runs Offer Sach Check before COD confirmation.
-6. Buyer outcome updates memory.
-7. Seller sees aggregate evidence, not buyer memory.
-8. Admin verifies sellers and controls listing publication.
-
-## Local Run
-
-Backend:
-
-```powershell
-cd backend
-python -m pip install -r requirements.txt
-python -m app.seed
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```text
+Buyer browse
+  -> duplicate listing comparison
+  -> SKU proof and size guidance
+  -> checkout confidence
+  -> outcome learning
+  -> seller evidence tasks
+  -> admin review and controlled publishing
 ```
 
-Frontend:
+## Local Setup
+
+### Backend
+
+```powershell
+cd apps\api
+npm install
+npm run seed
+npm run dev
+```
+
+Backend URL:
+
+```text
+http://127.0.0.1:8000
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+### Frontend
 
 ```powershell
 cd frontend
@@ -34,76 +47,85 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL shown in the terminal.
-
-## Seeded Accounts
-
-Buyer:
+Open the Vite URL printed by the terminal, usually:
 
 ```text
-username: asha.buyer
-password: buyer-asha-pass
+http://localhost:5173
 ```
 
-Seller:
+## Demo Accounts
 
-```text
-username: seller.a
-password: seller-a-pass
-```
-
-Admin reviewer:
-
-```text
-username: reviewer.admin
-password: admin-reviewer-pass
-```
+| Role | Username | Password |
+| --- | --- | --- |
+| Buyer | `asha.buyer` | `buyer-asha-pass` |
+| Seller | `seller.a` | `seller-a-pass` |
+| Admin reviewer | `reviewer.admin` | `admin-reviewer-pass` |
 
 ## Recommended Review Path
 
-### Buyer Path
+### 1. Buyer Path
 
 1. Sign in as `asha.buyer`.
-2. Use the header to switch language and simple/detailed mode.
-3. Browse the feed.
-4. Select an eligible product cluster.
-5. Click duplicate-listing resolution.
-6. Continue to product detail.
-7. Inspect:
-   - Trust status.
-   - Trust Receipt.
-   - Sarthi decision trail.
-   - Size Oracle.
-   - Galti Mat Dohrao warning.
-   - Per-SKU evidence.
-8. Ask Samvaad a question about fit, fabric, seller choice, or offer urgency.
-9. Open the audit/proof log.
-10. Start COD checkout and inspect Offer Sach Check.
-11. Simulate kept or returned outcome.
+2. Browse the marketplace-style feed.
+3. Open a Sarthi-eligible product.
+4. Run duplicate-listing comparison.
+5. Inspect why one seller/variant is recommended and another is not.
+6. Open product detail and check:
+   - trust state;
+   - SKU Trust Passport;
+   - Size Oracle;
+   - Galti Mat Dohrao warning;
+   - review and evidence snippets;
+   - source freshness;
+   - audit drawer.
+7. Ask Sarthi a question about fit, fabric, seller choice, or offer urgency.
+8. Continue to checkout.
+9. Inspect Offer Sach Check and checkout confidence.
+10. Place or simulate an order and submit kept/returned feedback.
+11. Open Trust Center to inspect memory and privacy controls.
 
-### Seller Path
+### 2. Seller Path
 
 1. Sign in as `seller.a`.
-2. Review seller verification status.
-3. Inspect duplicate-listing metrics.
-4. Confirm only aggregate evidence is shown.
-5. Check seller action items.
-6. Review onboarding/document upload and listing draft areas.
+2. Check seller verification state and source health.
+3. Review listing quality, evidence gaps, and action items.
+4. Open proof/evidence workflow.
+5. Submit proof assets or verification documents.
+6. Create and submit a listing draft.
+7. Confirm the seller sees aggregate evidence only, not buyer private memory.
 
-### Admin Path
+### 3. Admin Path
 
 1. Sign in as `reviewer.admin`.
-2. Open review queue.
-3. Inspect seller applications, document evidence hashes, listing drafts, and audit events.
-4. Confirm buyer/seller users cannot access admin APIs.
+2. Open the review queue.
+3. Start from seller dossiers to see which seller needs attention first.
+4. Review active queue items across:
+   - seller applications;
+   - verification documents;
+   - proof assets;
+   - listing drafts.
+5. Inspect prescreen suggestions, risk score, SLA state, source evidence, and buyer impact.
+6. Approve, reject, or request revision.
+7. Confirm audit events update after reviewer action.
+8. Confirm listing publishing remains gated by seller verification.
 
-## Technical Validation
+## Evaluation Rubric Mapping
+
+| Rubric area | What to inspect in Sarthi |
+| --- | --- |
+| Working Prototype | Buyer, seller, and admin routes are connected to the Fastify API and MongoDB seed data. Judges can run the app and complete the main journeys with seeded accounts. |
+| Code Quality & Architecture | Frontend, API routes, services, typed contracts, tests, docs, and optional integrations are separated. The architecture doc matches the current Node/Fastify/MongoDB implementation. |
+| Usability & UX | Each role has a distinct workspace. Buyer gets simple next steps, seller gets evidence tasks, and admin gets a structured queue instead of raw text overload. |
+| Completeness | The prototype covers browse, compare, product proof, checkout confidence, outcome learning, seller evidence, admin review, audit traces, and controlled publishing. |
+
+## Technical Checks
 
 Backend:
 
 ```powershell
-cd backend
-python -m pytest
+cd apps\api
+npm run build
+npm run test
 ```
 
 Frontend:
@@ -113,44 +135,23 @@ cd frontend
 npm run build
 ```
 
-Current validated state:
+Repository hygiene:
 
-- Frontend production build passes.
-- Backend test suite passes with 58 tests.
+```powershell
+git diff --check
+```
 
-## Evaluation Criteria Mapping
+## API Areas To Spot Check
 
-### Working Prototype
-
-- Buyer, seller, and admin flows are API-backed.
-- Auth sessions and RBAC are enforced by backend.
-- Recommendations use services over seed data, not hardcoded answers.
-
-### Innovation And Creativity
-
-- Trust Receipt makes agentic AI inspectable.
-- Offer Sach Check attacks fake urgency at checkout.
-- Buyer memory improves future fit without exposing private data to sellers.
-
-### High Potential Impact
-
-- Reduces preventable returns and COD friction.
-- Helps buyers understand risk before spending.
-- Helps sellers improve evidence and listing quality.
-
-### Feasibility And Scalability
-
-- SQLite is current local source of truth.
-- Neo4j projection supports graph reasoning.
-- Data-source health and production connector requirements are disclosed.
-
-### Technical Excellence
-
-- Modular backend services.
-- Typed schemas and frontend API contracts.
-- Tests for auth, trust, privacy, seller, admin, scenarios, and production guards.
-- Audit traces and fact IDs available for decisions.
+- `GET /system/readiness` for integration and production disclosure.
+- `POST /compare` for duplicate listing recommendation.
+- `POST /agent/query` for grounded assistant response.
+- `POST /checkout/verify-offer` for offer truth.
+- `GET /buyers/:buyer_id/memory` and `DELETE /buyers/:buyer_id/memory` for privacy.
+- `GET /seller/me/evidence-coach` for seller evidence tasks.
+- `GET /admin/review-queue` for admin automation and reviewer queue.
+- `GET /audit/:trace_id` for decision proof.
 
 ## Important Disclosure
 
-The current data is deterministic synthetic data for build-phase evaluation. Production deployment requires official marketplace connectors for catalog, orders, returns, seller KYC, reviews, campaign pricing, inventory, and logistics.
+This prototype uses deterministic seeded commerce data. Optional Gemini, Atlas Vector Search, and Neo4j integrations can be configured, but Sarthi remains runnable with deterministic fallbacks. Production use requires official marketplace connectors and operational controls listed in [Product Readiness](PRODUCT_READINESS.md).

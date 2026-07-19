@@ -1,39 +1,53 @@
-# Open-Source Attribution
+# Attribution
 
-This file lists the main open-source packages used by Sarthi. Versions are taken from `frontend/package-lock.json`, `frontend/package.json`, and `backend/requirements.txt`; locally installed Python metadata was checked where available.
+This file lists the main open-source packages used by the current Sarthi prototype. Versions are taken from `frontend/package.json`, `frontend/package-lock.json`, `apps/api/package.json`, and `apps/api/package-lock.json`.
 
 ## Frontend
 
-| Package | Version used locally | License | Role | Source |
-| --- | ---: | --- | --- | --- |
-| React | 19.2.7 | MIT | UI library | https://github.com/facebook/react |
-| React DOM | 19.2.7 | MIT | Browser rendering | https://github.com/facebook/react |
-| Vite | 6.4.3 | MIT | Frontend dev server and build tooling | https://github.com/vitejs/vite |
-| TypeScript | 5.9.3 | Apache-2.0 | Static typing and frontend build checks | https://github.com/microsoft/TypeScript |
-| `@vitejs/plugin-react` | 4.7.0 | MIT | React integration for Vite | https://github.com/vitejs/vite-plugin-react |
-| `lucide-react` | 0.468.0 | ISC | UI icon set | https://github.com/lucide-icons/lucide |
-| `@types/react` | 19.2.17 | MIT | TypeScript React types | https://github.com/DefinitelyTyped/DefinitelyTyped |
-| `@types/react-dom` | 19.2.3 | MIT | TypeScript React DOM types | https://github.com/DefinitelyTyped/DefinitelyTyped |
+| Package | Version range | License | Role |
+| --- | --- | --- | --- |
+| React | `^19.0.0` | MIT | UI component framework. |
+| React DOM | `^19.0.0` | MIT | Browser rendering for React. |
+| React Router DOM | `^7.18.1` | MIT | Client-side routing and role workspaces. |
+| Vite | `^6.0.5` | MIT | Frontend dev server and production build. |
+| `@vitejs/plugin-react` | `^4.3.4` | MIT | React integration for Vite. |
+| TypeScript | `^5.7.2` | Apache-2.0 | Static typing and frontend build checks. |
+| Lucide React | `^0.468.0` | ISC | Icon set used across buyer, seller, admin, and checkout UI. |
 
 ## Backend
 
-| Package | Project pin | Locally observed version | License | Role | Source |
-| --- | ---: | ---: | --- | --- | --- |
-| FastAPI | 0.115.6 | 0.135.1 | MIT | HTTP API framework | https://github.com/fastapi/fastapi |
-| Uvicorn | 0.32.1 | 0.34.0 | BSD-3-Clause | ASGI server | https://github.com/encode/uvicorn |
-| Pydantic | 2.10.4 | 2.12.5 | MIT | Request/response validation | https://github.com/pydantic/pydantic |
-| Pytest | 8.3.4 | 8.4.1 | MIT | Backend test runner | https://github.com/pytest-dev/pytest |
-| `python-dotenv` | 1.0.1 | 1.1.1 | BSD-3-Clause | Local environment variable loading | https://github.com/theskumar/python-dotenv |
-| Neo4j Python Driver | 5.27.0 | Not installed in current global Python env | Apache-2.0, verify after install | Optional Neo4j graph connector | https://github.com/neo4j/neo4j-python-driver |
+| Package | Version range | License | Role |
+| --- | --- | --- | --- |
+| Fastify | `^5.2.1` | MIT | Node.js HTTP API framework. |
+| `@fastify/cors` | `^11.0.0` | MIT | CORS support for local frontend/API development. |
+| MongoDB Node.js Driver | `^6.12.0` | Apache-2.0 | MongoDB/MongoDB Atlas database access. |
+| Neo4j JavaScript Driver | `^5.28.3` | Apache-2.0 | Optional Neo4j graph projection runtime. |
+| Zod | `^3.24.1` | MIT | Runtime data validation patterns. |
+| dotenv | `^16.4.7` | BSD-2-Clause | Environment variable loading. |
+| tsx | `^4.19.2` | MIT | TypeScript execution for dev, seed, and tests. |
+| TypeScript | `^5.7.2` | Apache-2.0 | Backend type checking and build. |
+| `@types/node` | `^22.10.5` | MIT | Node.js TypeScript declarations. |
 
-## Project-Owned Assets
+## External Services
 
-| Asset | Ownership / Role |
-| --- | --- |
-| Synthetic catalog, buyer, seller, price, review, and outcome seed data | Project-created data for demonstration and tests. Not scraped from a marketplace. |
-| Product placeholder SVGs in `frontend/public` | Project-created local visual placeholders. |
-| Sarthi service, ranking, evidence, trust, admin, seller, auth, and UI code | Project implementation. |
+| Service | Status | Use |
+| --- | --- | --- |
+| Gemini API | Optional | Grounded answer generation, confidence phrasing, and embeddings when configured. |
+| MongoDB Atlas Vector Search | Optional | Semantic retrieval over evidence embeddings when configured. |
+| Neo4j | Optional | Graph projection for explainable relationship paths when configured. |
 
-## Submission Note
+## Assets And Data
 
-Before final public submission, run dependency installation in a clean environment and refresh this file from the generated lock files. The current backend tests ran in the host Python environment, which has newer FastAPI/Pydantic/Pytest versions than the pinned `backend/requirements.txt`.
+- Product and commerce records in the prototype are deterministic seed/demo data.
+- Seller documents and proof assets in the prototype are metadata records, not real uploaded production files.
+- UI copy, product framing, trust states, and documentation were created for this project.
+- No real buyer private data, seller KYC files, payment credentials, or marketplace production records should be committed.
+
+## Final Release Checklist
+
+Before a public production release:
+
+- run `npm install` in both `apps/api` and `frontend` from a clean machine;
+- refresh this file from lock files if dependency versions change;
+- add a repository `LICENSE` file if the project will accept external contributions;
+- verify licenses with the final dependency tree and any deployment platform requirements.
