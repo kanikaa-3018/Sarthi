@@ -71,7 +71,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Db) {
       },
       fallback: {
         title: "Reviewer AI smoke test",
-        summary: "Fallback reviewer automation is available. Gemini is not required for safe queue ranking.",
+        summary: "Fallback reviewer automation is available. A model provider is not required for safe queue ranking.",
         reasons: [
           "Source health can be inspected before a reviewer acts.",
           "Human approval remains required for seller, document, proof, and listing decisions."
