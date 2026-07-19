@@ -617,6 +617,20 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
     void loadPanel();
   }, []);
 
+  useEffect(() => {
+    if (topFeature !== "console") return;
+    const tab = new URLSearchParams(location.search).get("tab");
+    const nextTab = parseSellerWorkbenchTab(tab);
+    if (nextTab && nextTab !== workbenchTab) {
+      setWorkbenchTab(nextTab);
+    }
+  }, [location.search, topFeature, workbenchTab]);
+
+  function selectWorkbenchTab(tab: SellerWorkbenchTab) {
+    setWorkbenchTab(tab);
+    navigate(`/seller?tab=${tab}`);
+  }
+
   async function loadPanel(clusterId?: string) {
     setLoading(true);
     setError(null);
