@@ -40,8 +40,8 @@ try {
   console.warn([
     "Atlas Vector Search index was not created.",
     "Your current MongoDB server does not support createSearchIndexes/listSearchIndexes.",
-    "Use MongoDB Atlas for vector search, or set VECTOR_SEARCH_ENABLED=false for local demo.",
-    "Sarthi will continue with lexical fallback search."
+    "Use MongoDB Atlas for managed vector search, or continue locally with API-side Gemini embedding similarity.",
+    "Sarthi will continue without blocking the buyer/admin demo."
   ].join(" "));
 } finally {
   await closeMongo();

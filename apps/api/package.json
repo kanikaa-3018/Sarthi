@@ -4,13 +4,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
+    "dev": "node ./node_modules/tsx/dist/cli.mjs watch src/server.ts",
+    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "seed": "tsx src/scripts/seed.ts",
-    "vector:index": "tsx src/scripts/createVectorIndex.ts",
-    "test": "tsx --test src/tests/trust-rbac.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "seed": "node ./node_modules/tsx/dist/cli.mjs src/scripts/seed.ts",
+    "gemini:smoke": "node ./node_modules/tsx/dist/cli.mjs src/scripts/geminiSmoke.ts",
+    "vector:index": "node ./node_modules/tsx/dist/cli.mjs src/scripts/createVectorIndex.ts",
+    "test": "node ./node_modules/tsx/dist/cli.mjs --test src/tests/*.test.ts",
+    "typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",

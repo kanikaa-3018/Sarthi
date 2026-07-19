@@ -210,6 +210,14 @@ LLM_MODEL=gemini-3.1-flash-lite
 GEMINI_API_KEY=<your-gemini-key>
 ```
 
+On Windows, this helper writes the key to `apps/api/.env`, which is one of the exact paths the API reads:
+
+```powershell
+npm run setup:gemini
+```
+
+Restart the API after adding or changing the key. `/system/readiness` should then show `runtime_integrations.gemini.enabled: true`.
+
 For optional graph and vector retrieval:
 
 ```env
@@ -225,7 +233,7 @@ EMBEDDING_MODEL=gemini-embedding-001
 EMBEDDING_DIMENSIONS=768
 ```
 
-Local/community MongoDB cannot create Atlas Search indexes. Keep `VECTOR_SEARCH_ENABLED=false` unless `MONGODB_URI` points to MongoDB Atlas.
+Local/community MongoDB cannot create Atlas Search indexes. When `VECTOR_SEARCH_ENABLED=true` on local MongoDB, Sarthi stores Gemini embeddings and uses API-side cosine similarity. When `MONGODB_URI` points to MongoDB Atlas and the vector index exists, the same flow uses Atlas Vector Search.
 
 ### 2. Start Backend
 

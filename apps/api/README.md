@@ -24,12 +24,13 @@ MONGODB_DB=sarthi
 AUTH_SECRET=<strong-random-secret>
 ```
 
-For local-only testing, `MONGODB_URI=mongodb://127.0.0.1:27017` also works if MongoDB is running locally. Local/community MongoDB does not support Atlas Search commands such as `createSearchIndexes`, so keep `VECTOR_SEARCH_ENABLED=false` unless `MONGODB_URI` points to MongoDB Atlas.
+For local-only testing, `MONGODB_URI=mongodb://127.0.0.1:27017` also works if MongoDB is running locally. Local/community MongoDB does not support Atlas Search commands such as `createSearchIndexes`; when `VECTOR_SEARCH_ENABLED=true`, the API stores Gemini embeddings and uses local cosine similarity until MongoDB Atlas is configured.
 
 Optional runtime integrations:
 
 ```text
 LLM_PROVIDER=gemini
+LLM_MODEL=gemini-3.1-flash-lite
 GEMINI_API_KEY=<your-gemini-key>
 
 NEO4J_ENABLED=true
@@ -43,12 +44,20 @@ VECTOR_SEARCH_INDEX=sarthi_evidence_vector
 
 Without these values, the API keeps deterministic MongoDB-backed fallbacks active.
 
+The API reads `.env` from the repo root and `apps/api/.env`. From the repo root, run this helper to place Gemini config in the API env file:
+
+```powershell
+npm run setup:gemini
+```
+
+Restart the API after updating the key, then verify `/system/readiness`.
+
 ## Commands
 
 ```powershell
 npm install
 npm run seed
-npm run vector:index   # optional, only on MongoDB Atlas
+npm run vector:index   # optional Atlas index setup; local MongoDB keeps API-side embedding fallback
 npm run dev
 ```
 

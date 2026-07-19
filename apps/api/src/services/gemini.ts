@@ -17,12 +17,9 @@ let lastGenerateModel: string | null = null;
 let lastEmbeddingModel: string | null = null;
 
 const GENERATE_MODEL_FALLBACKS = [
-  "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
   "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-flash-lite-latest",
-  "gemini-flash-latest"
+  "gemini-2.5-flash"
 ];
 const EMBEDDING_MODEL_FALLBACKS = ["gemini-embedding-001"];
 const MODEL_ALIASES: Record<string, string> = {
@@ -42,6 +39,7 @@ export function geminiRuntimeStatus() {
     active_model: lastGenerateModel,
     embedding_model: env.embeddingModel,
     active_embedding_model: lastEmbeddingModel,
+    key_present: Boolean(env.geminiApiKey),
     status: configured
       ? geminiCircuitOpen()
         ? "temporarily_unavailable"
@@ -194,7 +192,7 @@ async function safeErrorText(response: Response) {
 
 function shouldTryNextModel(error: unknown) {
   const status = typeof (error as any)?.status === "number" ? (error as any).status : null;
-  return status === 404 || status === 429;
+  return status === 404;
 }
 
 function geminiCircuitOpen() {

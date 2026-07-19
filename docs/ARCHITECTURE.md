@@ -118,15 +118,15 @@ The final approve/reject/revision action remains human-in-loop.
 
 | Integration | Enabled by | Fallback |
 | --- | --- | --- |
-| Gemini | `LLM_PROVIDER=gemini`, `GEMINI_API_KEY` | Deterministic answer and confidence copy. |
+| Gemini | `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.1-flash-lite`, `GEMINI_API_KEY` | Deterministic answer and confidence copy. |
 | Gemini embeddings | `GEMINI_API_KEY`, embedding env values | Lexical retrieval or disabled retrieval. |
-| Atlas Vector Search | `VECTOR_SEARCH_ENABLED=true` on MongoDB Atlas | Lexical fallback and readiness warning. |
+| Atlas Vector Search / local embedding fallback | `VECTOR_SEARCH_ENABLED=true`; Atlas index optional for local demos | API-side cosine similarity on local MongoDB, lexical fallback if embeddings fail. |
 | Neo4j | `NEO4J_ENABLED=true` plus URI/credentials | MongoDB-backed graph path summaries. |
 
 ## Failure Behavior
 
 - If Gemini fails, return deterministic answer and record provider fallback.
-- If Vector Search is unavailable, use lexical evidence retrieval.
+- If Atlas Vector Search is unavailable, use local embedding similarity; if embeddings fail, use lexical evidence retrieval.
 - If Neo4j is disabled or unavailable, keep MongoDB-backed graph paths.
 - If seller verification is pending/restricted, pause strong buyer recommendations.
 - If source data is stale, show degraded trust state and block strong claims.

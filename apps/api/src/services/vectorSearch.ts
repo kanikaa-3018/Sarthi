@@ -3,7 +3,12 @@ import { env } from "../config/env.js";
 import { embedText, geminiConfigured } from "./gemini.js";
 
 export type SemanticEvidenceResult = {
-  source: "atlas_vector_search" | "lexical_fallback" | "lexical_fallback_after_vector_error" | "disabled_no_gemini_key";
+  source:
+    | "atlas_vector_search"
+    | "local_embedding_fallback"
+    | "lexical_fallback"
+    | "lexical_fallback_after_vector_error"
+    | "disabled_no_gemini_key";
   query: string;
   results: Array<{
     doc_id: string;
@@ -27,6 +32,8 @@ type EvidenceDoc = {
   fact_ids: string[];
 };
 
+const MAX_EMBEDDING_DOCS_PER_QUERY = 16;
+
 export async function semanticEvidenceSearch(db: Db, graph: any, query: string, limit = 5): Promise<SemanticEvidenceResult> {
   const docs = graphEvidenceDocuments(graph);
   if (!env.vectorSearchEnabled) {
@@ -37,17 +44,21 @@ export async function semanticEvidenceSearch(db: Db, graph: any, query: string, 
   }
 
   try {
+    const queryVector = await embedText(query, "RETRIEVAL_QUERY");
+    if (!queryVector?.length) {
+      return lexicalSearch(query, docs, "disabled_no_gemini_key", limit);
+    }
+    await ensureGraphEmbeddings(db, docs);
     const searchIndex = await searchIndexHealth(db);
     if (searchIndex.status !== "ready_for_queries") {
+      const localFallback = await localEmbeddingSearch(db, docs, queryVector, query, limit);
+      if (localFallback.results.length) {
+        return localFallback;
+      }
       return {
         ...lexicalSearch(query, docs, "lexical_fallback_after_vector_error", limit),
         error: searchIndex.error ?? `Vector search index status: ${searchIndex.status}`
       };
-    }
-    await ensureGraphEmbeddings(db, docs);
-    const queryVector = await embedText(query, "RETRIEVAL_QUERY");
-    if (!queryVector?.length) {
-      return lexicalSearch(query, docs, "disabled_no_gemini_key", limit);
     }
     const collection = db.collection(env.vectorSearchCollection);
     const rows = await collection.aggregate([
@@ -109,21 +120,25 @@ export async function vectorSearchHealth(db: Db) {
   const searchIndex = env.vectorSearchEnabled && geminiConfigured()
     ? await searchIndexHealth(db)
     : { status: null as null, error: null as string | null, index_exists: false };
+  const status = vectorRuntimeStatus(searchIndex.status);
   return {
     enabled: env.vectorSearchEnabled,
-    status: env.vectorSearchEnabled
-      ? geminiConfigured()
-        ? searchIndex.status ?? "ready_for_queries"
-        : "waiting_for_gemini_key"
-      : "disabled",
+    status,
+    atlas_status: searchIndex.status,
     collection: env.vectorSearchCollection,
     index: env.vectorSearchIndex,
     index_exists: searchIndex.index_exists,
     embedding_model: env.embeddingModel,
     embedding_dimensions: env.embeddingDimensions,
     embedded_documents: count,
-    error: searchIndex.error
+    error: status === "local_embedding_fallback" ? null : searchIndex.error
   };
+}
+
+function vectorRuntimeStatus(status: string | null) {
+  if (!env.vectorSearchEnabled) return "disabled";
+  if (!geminiConfigured()) return "waiting_for_gemini_key";
+  return status === "ready_for_queries" ? "ready_for_queries" : "local_embedding_fallback";
 }
 
 export function isAtlasSearchUnsupported(error: unknown) {
@@ -144,7 +159,7 @@ async function searchIndexHealth(db: Db) {
     if (isAtlasSearchUnsupported(error)) {
       return {
         status: "unsupported_mongodb",
-        error: "Current MongoDB server does not support Atlas Search indexes. Use MongoDB Atlas or set VECTOR_SEARCH_ENABLED=false.",
+        error: "Current MongoDB server does not support Atlas Search indexes. Using local Gemini embedding similarity until MongoDB Atlas is configured.",
         index_exists: false
       };
     }
@@ -200,7 +215,7 @@ function graphEvidenceDocuments(graph: any): EvidenceDoc[] {
 
 async function ensureGraphEmbeddings(db: Db, docs: EvidenceDoc[]) {
   const collection = db.collection(env.vectorSearchCollection);
-  for (const doc of docs.slice(0, 32)) {
+  for (const doc of docs.slice(0, MAX_EMBEDDING_DOCS_PER_QUERY)) {
     const existing = await collection.findOne({
       doc_id: doc.doc_id,
       embedding_model: env.embeddingModel,
@@ -223,6 +238,64 @@ async function ensureGraphEmbeddings(db: Db, docs: EvidenceDoc[]) {
       { upsert: true }
     );
   }
+}
+
+async function localEmbeddingSearch(db: Db, docs: EvidenceDoc[], queryVector: number[], query: string, limit: number): Promise<SemanticEvidenceResult> {
+  const docIds = docs.map((doc) => doc.doc_id);
+  const rows = await db.collection(env.vectorSearchCollection).find({
+    doc_id: { $in: docIds },
+    embedding_model: env.embeddingModel,
+    embedding_dimensions: env.embeddingDimensions
+  }, {
+    projection: {
+      _id: 0,
+      doc_id: 1,
+      node_id: 1,
+      type: 1,
+      title: 1,
+      text: 1,
+      fact_ids: 1,
+      embedding: 1
+    }
+  }).toArray();
+
+  const docsById = new Map(docs.map((doc) => [doc.doc_id, doc]));
+  const results = rows
+    .map((row: any) => {
+      const embedding = Array.isArray(row.embedding) ? row.embedding.map(Number).filter(Number.isFinite) : [];
+      const graphDoc = docsById.get(row.doc_id);
+      if (!embedding.length || !graphDoc) return null;
+      return {
+        doc_id: row.doc_id,
+        node_id: row.node_id ?? graphDoc.node_id,
+        type: row.type ?? graphDoc.type,
+        title: row.title ?? graphDoc.title,
+        text: row.text ?? graphDoc.text,
+        fact_ids: row.fact_ids ?? graphDoc.fact_ids,
+        score: Number(Math.max(0, cosineSimilarity(queryVector, embedding)).toFixed(3))
+      };
+    })
+    .filter(Boolean)
+    .sort((left: any, right: any) => right.score - left.score)
+    .slice(0, limit);
+
+  return { source: "local_embedding_fallback", query, results: results as SemanticEvidenceResult["results"] };
+}
+
+function cosineSimilarity(left: number[], right: number[]) {
+  const length = Math.min(left.length, right.length);
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let index = 0; index < length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    dot += a * b;
+    leftNorm += a * a;
+    rightNorm += b * b;
+  }
+  if (!leftNorm || !rightNorm) return 0;
+  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
 }
 
 function lexicalSearch(
