@@ -27,7 +27,7 @@ const MODEL_ALIASES: Record<string, string> = {
 };
 
 export function geminiConfigured() {
-  return env.llmProvider === "gemini" && Boolean(env.geminiApiKey);
+  return env.providerOrder.includes("gemini") && Boolean(env.geminiApiKey);
 }
 
 export function geminiRuntimeStatus() {
