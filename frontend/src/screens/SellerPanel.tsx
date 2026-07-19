@@ -733,23 +733,26 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
     }
   }
 
-  async function handleDocSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submitDocumentReference() {
     setDocSubmitting(true);
     setError(null);
     setDocSuccess(null);
     try {
       const ref = docRef.trim();
-      const name = docFileName.trim() || `${docType}.pdf`;
-      const base64 = docFileBase64 || "JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDIgMCBSCj4+CmVuZG9iag==";
+      const name = docFileName.trim();
+      const base64 = docFileBase64.trim();
+      if (!name || !base64) {
+        setError(copy.attachDocumentBeforeSubmit);
+        return;
+      }
       await submitSellerDocument({
         document_type: docType,
         reference: ref,
         file_name: name,
-        mime_type: name.endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+        mime_type: docMimeType || (name.endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
         content_base64: base64
       });
-      setDocSuccess(`Document "${labelize(docType)}" submitted successfully.`);
+      setDocSuccess(`${labelize(docType)}: ${copy.documentSubmitted}`);
       setDocRef("");
       setDocFileName("");
       setDocFileBase64("");
