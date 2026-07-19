@@ -1466,10 +1466,10 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
             <div className="seller-fix-body">
               <div className="seller-fix-warning">
                 <strong>
-                  Size-related returns are elevated for {activeFixListing.product.title.split("-")[0].trim()}.
+                  Buyers need clearer size proof for {activeFixListing.product.title.split("-")[0].trim()}.
                 </strong>
                 <span>
-                  Recommended action: correct chest measurement specifications for sizes L and XL.
+                  Update L and XL chest values. Future kept orders validate the change before trust improves.
                 </span>
               </div>
 
