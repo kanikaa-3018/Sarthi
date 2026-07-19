@@ -334,6 +334,21 @@ export function createListingDraft(payload: {
   });
 }
 
+export function updateListingDraft(draftId: string, payload: {
+  title: string;
+  category: string;
+  garment_type: string;
+  fabric: string;
+  color_family: string;
+  base_price: number;
+  image_url: string;
+}) {
+  return request<SellerOnboardingResponse>(`/seller/me/listing-drafts/${encodeURIComponent(draftId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function correctMeasurement(productId: string, payload: { l_chest: number; xl_chest: number }) {
   return request<{
     ok: boolean;
@@ -535,6 +550,13 @@ export function placeCheckoutOrder(payload: {
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export function markOrderDelivered(buyerId: string, contractId: string) {
+  return request<BuyerOrdersResponse>(
+    `/buyers/${encodeURIComponent(buyerId)}/orders/${encodeURIComponent(contractId)}/delivered`,
+    { method: "POST" }
+  );
 }
 
 export function createExpectationContract(payload: {

@@ -936,10 +936,18 @@ input:focus-visible {
   color: var(--text-primary);
   line-height: 1.4;
 }
-.response-conclusion strong {
+.response-conclusion span {
   color: var(--success);
   display: block;
-  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.response-conclusion strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 16px;
+  margin-bottom: 4px;
 }
 
 .response-reasons {
@@ -974,6 +982,39 @@ input:focus-visible {
   color: var(--warning);
   display: block;
   margin-bottom: 2px;
+}
+
+.response-proof-plan {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 10px 12px;
+}
+
+.response-proof-plan div {
+  min-width: 0;
+}
+
+.response-proof-plan span,
+.response-proof-plan strong {
+  display: block;
+}
+
+.response-proof-plan span {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.response-proof-plan strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .response-actions {

@@ -1431,6 +1431,8 @@ export type SellerEvidenceCoachTask = {
   first_seen_at: string;
   last_seen_at: string;
   fact_ids: string[];
+  rejected_proof_id?: string | null;
+  rejection_note?: string | null;
 };
 
 export type SellerEvidenceCoachResponse = {
@@ -1515,6 +1517,9 @@ export type ListingDraft = {
   created_at: string;
   updated_at: string;
   submitted_at: string | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
+  revision_acknowledged_at?: string | null;
 };
 
 export type SellerOnboardingResponse = {

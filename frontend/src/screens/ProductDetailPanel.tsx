@@ -8,11 +8,13 @@ import {
   CircleAlert,
   HelpCircle,
   Info,
+  RefreshCcw,
   Ruler,
   Send,
   Share2,
   ShieldCheck,
-  Truck
+  Truck,
+  X
 } from "lucide-react";
 import {
   askSarthi,
@@ -78,7 +80,12 @@ export function ProductDetailPanel({
   const [scoreRefreshReason, setScoreRefreshReason] = useState<"question" | "proof" | null>(null);
   const [receiptViewCount, setReceiptViewCount] = useState(1);
   const [activeSupportPanel, setActiveSupportPanel] = useState<"ask" | "proof" | null>(null);
+  const [proofSpotlightSource, setProofSpotlightSource] = useState<"agent" | "manual" | null>(null);
+  const [skuProofModalOpen, setSkuProofModalOpen] = useState(false);
+  const [proofHighlight, setProofHighlight] = useState(false);
   const scoreRefreshTimerRef = useRef<number | null>(null);
+  const proofHighlightTimerRef = useRef<number | null>(null);
+  const proofPanelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setContractError(null);
@@ -147,17 +154,35 @@ export function ProductDetailPanel({
     setReceiptViewCount(nextCount);
     return () => {
       if (scoreRefreshTimerRef.current !== null) window.clearTimeout(scoreRefreshTimerRef.current);
+      if (proofHighlightTimerRef.current !== null) window.clearTimeout(proofHighlightTimerRef.current);
     };
   }, [buyerId, productId]);
 
   useEffect(() => {
     setActiveSupportPanel(null);
+    setProofSpotlightSource(null);
+    setSkuProofModalOpen(false);
+    setProofHighlight(false);
   }, [productId]);
 
   useEffect(() => {
     setProofRequested(false);
     setProofRequestError(null);
   }, [productId, selectedVariantId]);
+
+  useEffect(() => {
+    if (!skuProofModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSkuProofModalOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [skuProofModalOpen]);
 
   if (!detail) {
     return (
@@ -249,9 +274,6 @@ export function ProductDetailPanel({
         selected_variant_id: selectedVariantId
       });
       setAnswer(response);
-      if (response.answer.primary_action?.variant_id) {
-        setSelectedVariantId(response.answer.primary_action.variant_id);
-      }
       void refreshTrustScore("question");
     } catch (err) {
       setQuestionError(
@@ -278,13 +300,25 @@ export function ProductDetailPanel({
   const proofActionLabel = proofRequestActionLabel(language, proofRequested, proofRequesting);
   const shouldOfferProofRequest = detail.trust_state.missing_data.length > 0 || !detail.trust_state.can_recommend;
 
-  async function refreshTrustScore(reason: "question" | "proof") {
-    if (!selectedVariantId) return;
+  function focusProofPanel(source: "agent" | "manual") {
+    setActiveSupportPanel("proof");
+    setProofSpotlightSource(source);
+    setProofHighlight(true);
+    if (proofHighlightTimerRef.current !== null) window.clearTimeout(proofHighlightTimerRef.current);
+    proofHighlightTimerRef.current = window.setTimeout(() => setProofHighlight(false), 2800);
+    window.setTimeout(() => {
+      proofPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
+  async function refreshTrustScore(reason: "question" | "proof", variantIdOverride?: string) {
+    const targetVariantId = variantIdOverride ?? selectedVariantId;
+    if (!targetVariantId) return;
     setScoreRefreshReason(reason);
     setScoreRefreshState("refreshing");
     setKeepConfidenceError(null);
     try {
-      const refreshed = await getKeepConfidence(buyerId, productId, selectedVariantId);
+      const refreshed = await getKeepConfidence(buyerId, productId, targetVariantId);
       setKeepConfidence(refreshed);
       setScoreRefreshState("updated");
       if (scoreRefreshTimerRef.current !== null) window.clearTimeout(scoreRefreshTimerRef.current);
@@ -293,6 +327,18 @@ export function ProductDetailPanel({
       setKeepConfidenceError(err instanceof Error ? err.message : "Could not refresh trust score");
       setScoreRefreshState("idle");
     }
+  }
+
+  function handleAgentPrimaryAction() {
+    const action = answer?.answer.primary_action;
+    const targetVariantId = action?.variant_id ?? selectedVariantId;
+    if (action?.variant_id && action.variant_id !== selectedVariantId) {
+      setSelectedVariantId(action.variant_id);
+    }
+    setActiveSupportPanel("proof");
+    setProofSpotlightSource("agent");
+    setSkuProofModalOpen(true);
+    void refreshTrustScore("proof", targetVariantId);
   }
 
   async function handleBuyWithContract() {
@@ -328,7 +374,7 @@ export function ProductDetailPanel({
         create_seller_signal: true
       });
       setProofRequested(true);
-      setActiveSupportPanel("proof");
+      focusProofPanel("manual");
       await refreshTrustScore("proof");
     } catch (err) {
       setProofRequestError(err instanceof Error ? err.message : "Could not ask seller proof");
@@ -469,7 +515,8 @@ export function ProductDetailPanel({
             {answer && (
               <div className="samvaad-response-card">
                 <div className="response-conclusion">
-                  <strong>{t(language, "evidenceAnswer")}</strong>
+                  <span>{t(language, "evidenceAnswer")}</span>
+                  <strong>{answer.answer.title}</strong>
                   <p>{answer.answer.summary}</p>
                 </div>
                 <div className="response-reasons">
@@ -480,6 +527,7 @@ export function ProductDetailPanel({
                     </div>
                   ))}
                 </div>
+                <AgentProofPlan answer={answer} />
                 {answer.answer.caution && (
                   <div className="response-caution">
                     <strong>{t(language, "caution")}</strong>
@@ -489,9 +537,7 @@ export function ProductDetailPanel({
                 <div className="response-actions">
                   <button
                     className="btn-action-primary"
-                    onClick={() => {
-                      if (answer.answer.primary_action?.variant_id) setSelectedVariantId(answer.answer.primary_action.variant_id);
-                    }}
+                    onClick={handleAgentPrimaryAction}
                   >
                     {answer.answer.primary_action?.label || t(language, "applySizeSelection")}
                   </button>
@@ -577,7 +623,13 @@ export function ProductDetailPanel({
             type="button"
             className={activeSupportPanel === "proof" ? "active" : ""}
             aria-expanded={activeSupportPanel === "proof"}
-            onClick={() => setActiveSupportPanel((panel) => panel === "proof" ? null : "proof")}
+            onClick={() => {
+              if (activeSupportPanel === "proof") {
+                setActiveSupportPanel(null);
+                return;
+              }
+              focusProofPanel("manual");
+            }}
           >
             <HelpCircle size={15} />
             {t(language, "seeProof")}
@@ -592,7 +644,12 @@ export function ProductDetailPanel({
       )}
 
       {activeSupportPanel === "proof" && (
-        <section className="detail-support-panel proof-panel" aria-label="Proof details">
+        <section
+          ref={proofPanelRef}
+          className={`detail-support-panel proof-panel${proofHighlight ? " proof-focus" : ""}`}
+          aria-label="Proof details"
+          tabIndex={-1}
+        >
           {showDetailedTrustReceipt ? (
             <TrustReceipt
               detail={detail}
@@ -630,6 +687,30 @@ export function ProductDetailPanel({
             </details>
           )}
         </section>
+      )}
+
+      {skuProofModalOpen && answer && (
+        <div className="sku-proof-dialog-backdrop" role="presentation">
+          <section className="sku-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="sku-proof-dialog-title">
+            <button
+              type="button"
+              className="sku-proof-dialog-close"
+              onClick={() => setSkuProofModalOpen(false)}
+              aria-label="Close SKU proof"
+            >
+              <X size={18} />
+            </button>
+            <SkuProofSpotlight
+              answer={answer}
+              detail={detail}
+              selectedVariant={selectedVariant}
+              confidence={keepConfidence}
+              source={proofSpotlightSource}
+              onRefresh={() => void refreshTrustScore("proof")}
+              onOpenAudit={onOpenAudit}
+            />
+          </section>
+        </div>
       )}
 
     </div>
@@ -983,6 +1064,103 @@ function proofMoreLabel(language: LanguageCode) {
   if (language === "hindi") return "और जानकारी";
   if (language === "hinglish") return "Aur details";
   return "More details";
+}
+
+function SkuProofSpotlight({
+  answer,
+  detail,
+  selectedVariant,
+  confidence,
+  source,
+  onRefresh,
+  onOpenAudit
+}: {
+  answer: AgentResponse;
+  detail: ProductDetailResponse;
+  selectedVariant: Variant;
+  confidence: KeepConfidenceResponse | null;
+  source: "agent" | "manual" | null;
+  onRefresh: () => void;
+  onOpenAudit: (traceId: string) => void;
+}) {
+  const attribute = labelize(answer.intent[0] ?? "proof");
+  const score = confidence ? Math.round(confidence.score * 100) : null;
+  const factLabel = answer.fact_ids.length ? `${answer.fact_ids.length} facts` : "Trace ready";
+  const firstGap = detail.trust_state.missing_data[0];
+  const gapLabel = firstGap ? `${labelize(firstGap)} gap` : "No major gap";
+  const title = source === "agent" ? "Proof matched to your question" : "SKU proof review";
+  const trustLabel = score === null ? "Checking" : `${score}/100`;
+
+  return (
+    <div className="sku-proof-spotlight" aria-live="polite">
+      <div className="sku-proof-spotlight-head">
+        <span><ShieldCheck size={18} /></span>
+        <div>
+          <strong id="sku-proof-dialog-title">{title}</strong>
+          <p>{detail.product.seller_name} proof is being checked against size {selectedVariant.size}, buyer outcomes, and missing seller evidence.</p>
+        </div>
+      </div>
+
+      <div className="sku-proof-decision-row">
+        <div>
+          <span>SKU</span>
+          <strong>{selectedVariant.size}</strong>
+          <small>Selected variant</small>
+        </div>
+        <div>
+          <span>Trust</span>
+          <strong>{trustLabel}</strong>
+          <small>After proof check</small>
+        </div>
+        <div>
+          <span>Evidence</span>
+          <strong>{factLabel}</strong>
+          <small>Grounded trail</small>
+        </div>
+      </div>
+
+      <div className="sku-proof-mini-flow" aria-label="Proof check path">
+        <span><b>1</b> Question: {attribute}</span>
+        <span><b>2</b> Seller and outcome facts matched</span>
+        <span><b>3</b> Buyer check: {gapLabel}</span>
+      </div>
+
+      <div className="sku-proof-actions">
+        <button type="button" onClick={onRefresh}>
+          <RefreshCcw size={14} />
+          Refresh proof check
+        </button>
+        <button type="button" onClick={() => onOpenAudit(answer.trace_id)}>
+          <HelpCircle size={14} />
+          Open source trace
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AgentProofPlan({ answer }: { answer: AgentResponse }) {
+  const attribute = labelize(answer.intent[0] ?? "proof");
+  const factCount = answer.fact_ids.length;
+  const provider = answer.agent?.provider ? labelize(answer.agent.provider) : "deterministic";
+  const action = answer.answer.primary_action?.label ?? "See proof";
+
+  return (
+    <div className="response-proof-plan" aria-label="Sarthi agent proof plan">
+      <div>
+        <span>Checked</span>
+        <strong>{attribute} facts</strong>
+      </div>
+      <div>
+        <span>Grounded by</span>
+        <strong>{factCount ? `${factCount} fact IDs` : provider}</strong>
+      </div>
+      <div>
+        <span>Next action</span>
+        <strong>{action}</strong>
+      </div>
+    </div>
+  );
 }
 
 function AgentReasoningTrace({

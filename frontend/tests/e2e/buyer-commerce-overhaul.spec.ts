@@ -72,6 +72,15 @@ test("saved check gives buyers a three-step path and a grounded-answer fallback"
   await expect(page.getByText("3. Choose safely")).toBeVisible();
   await expect(page.getByRole("form", { name: "Ask from verified facts" })).toBeVisible();
   await expect(page.getByText("Answers use verified product, seller, return, and proof records only.")).toBeVisible();
+  await expect(page.getByText("Saved product radar")).toBeVisible();
+  await expect(page.getByText("Evidence graph")).toBeVisible();
+
+  const factsForm = page.getByRole("form", { name: "Ask from verified facts" });
+  await factsForm.getByPlaceholder("Ask: should I buy this?").fill("Is fabric proof enough to buy?");
+  await factsForm.getByRole("button", { name: "Check" }).click();
+  await expect(page.locator(".buyer-decision-answer")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Verified answer").first()).toBeVisible();
+  await expect(page.locator(".buyer-decision-reasons span").first()).toBeVisible();
   await page.screenshot({ path: `${auditDir}/22-saved-ready-desktop.png`, fullPage: true });
 });
 

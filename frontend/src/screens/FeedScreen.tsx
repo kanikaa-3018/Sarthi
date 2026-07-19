@@ -10,7 +10,10 @@ import {
   MapPin,
   ShoppingCart,
   Eye,
+  ExternalLink,
   Heart,
+  ImageIcon,
+  FileText,
   PackageCheck,
   RotateCcw,
   FileCheck2,
@@ -26,6 +29,7 @@ import {
   getClusterKnowledgeGraph,
   getFeed,
   getFitProfiles,
+  markOrderDelivered,
   runRegretFirewall
 } from "../api/client";
 import { t, type LanguageCode } from "../i18n";
@@ -71,6 +75,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const routeMode = shopRouteMode(location.pathname);
   const routeSearch = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const routeVariantId = routeSearch.get("variant");
+  const routeProofOpen = routeMode === "saved" && routeSearch.get("proof") === "1";
   const hydratedSavedRouteRef = useRef<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
@@ -92,6 +97,8 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [regretDecision, setRegretDecision] = useState<RegretDecisionResponse | null>(null);
   const [decisionQuestion, setDecisionQuestion] = useState("");
   const [decisionLoading, setDecisionLoading] = useState(false);
+  const [manualDecisionLoading, setManualDecisionLoading] = useState(false);
+  const decisionRequestRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   
   const [step, setStep] = useState<BuyerShopStep>(routeMode);
@@ -156,6 +163,8 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setRegretDecision(null);
     setDecisionQuestion("");
     setDecisionLoading(false);
+    setManualDecisionLoading(false);
+    decisionRequestRef.current += 1;
     setError(null);
     setStep(shopRouteMode(window.location.pathname));
     
@@ -251,8 +260,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setRadarLoading(true);
     setRegretDecision(null);
     setDecisionQuestion("");
+    setManualDecisionLoading(false);
     setGraphLoading(true);
     setDecisionLoading(true);
+    const requestId = ++decisionRequestRef.current;
     setAutoScan({
       status: "scanning",
       clusterId: product.cluster_id,
@@ -328,6 +339,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     if (decisionOutcome.status === "fulfilled") {
       const decision = decisionOutcome.value;
       const result = compareFromDecision(decision);
+      if (requestId !== decisionRequestRef.current) return;
       setRegretDecision(decision);
       setComparison(result);
       if (options.openCompare) {
@@ -344,6 +356,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     }
 
     const message = decisionOutcome.reason instanceof Error ? decisionOutcome.reason.message : "Unable to check this product";
+    if (requestId !== decisionRequestRef.current) return;
     setAutoScan({
       status: "error",
       clusterId: product.cluster_id,
@@ -372,7 +385,8 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       setError("Open an item before asking Sarthi to check it.");
       return;
     }
-    setDecisionLoading(true);
+    setManualDecisionLoading(true);
+    const requestId = ++decisionRequestRef.current;
     setError(null);
     setWishlistedProduct(product);
     setSelectedClusterId(product.cluster_id);
@@ -383,6 +397,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         query: prompt,
         create_missing_proof_request: true
       });
+      if (requestId !== decisionRequestRef.current) return;
       setRegretDecision(decision);
       const result = compareFromDecision(decision);
       setComparison(result);
@@ -396,7 +411,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to answer this concern");
     } finally {
-      setDecisionLoading(false);
+      if (requestId === decisionRequestRef.current) setManualDecisionLoading(false);
     }
   }
 
@@ -405,6 +420,8 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     if (!prompt || !knowledgeGraph) return;
     setGraphAsking(true);
     setGraphError(null);
+    setGraphAnswer(null);
+    setGraphQuery(prompt);
     try {
       const response = await askKnowledgeGraph({
         buyer_id: buyerId,
@@ -422,6 +439,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
   async function handleRetryKnowledgeGraph() {
     if (!wishlistedProduct) return;
+    if (knowledgeGraph && graphQuery.trim() && graphError) {
+      await handleAskKnowledgeGraph(graphQuery);
+      return;
+    }
     setGraphLoading(true);
     setGraphError(null);
     try {
@@ -507,7 +528,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           graphError={graphError}
           regretDecision={regretDecision}
           decisionQuestion={decisionQuestion}
-          decisionLoading={decisionLoading}
+          decisionLoading={manualDecisionLoading}
           graphAnswer={graphAnswer}
           graphQuery={graphQuery}
           graphAsking={graphAsking}
@@ -515,6 +536,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           radarLoading={radarLoading}
           radarError={radarError}
           activeFitProfile={activeFitProfile}
+          openProofDetails={routeProofOpen}
           language={language}
           onBack={() => navigate("/shop")}
           onOpenProduct={(product, variantId) => handleViewProductDetail(product.product_id, variantId ?? null)}
@@ -906,11 +928,16 @@ function OrdersWorkspace({
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [feedbackOrderId, setFeedbackOrderId] = useState<string | null>(null);
+  const [deliveringOrderId, setDeliveringOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [orderFilter, setOrderFilter] = useState<"all" | "action" | "progress" | "complete">("all");
   const copy = ordersLearningCopy(language);
   const placedCount = orders.filter(isPlacedOrder).length;
   const learntCount = orders.filter(isLearntOrder).length;
+  const contractCount = orders.filter((order) => Boolean(order.contract_id)).length;
+  const selectedFeedbackOrder = feedbackOrderId
+    ? orders.find((order) => order.order_id === feedbackOrderId) ?? null
+    : null;
   const filteredOrders = orders.filter((order) => {
     if (orderFilter === "action") return order.can_submit_outcome;
     if (orderFilter === "progress") return isPlacedOrder(order);
@@ -921,6 +948,20 @@ function OrdersWorkspace({
   useEffect(() => {
     void loadOrders();
   }, [buyerId]);
+
+  useEffect(() => {
+    if (!selectedFeedbackOrder) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFeedbackOrderId(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selectedFeedbackOrder]);
 
   async function loadOrders() {
     setLoading(true);
@@ -936,6 +977,22 @@ function OrdersWorkspace({
     }
   }
 
+  async function handleMarkDelivered(order: BuyerOrderItem) {
+    if (!order.contract_id) return;
+    setDeliveringOrderId(order.order_id);
+    setError(null);
+    try {
+      const payload = await markOrderDelivered(buyerId, order.contract_id);
+      setOrders(payload.orders);
+      setPendingCount(payload.pending_feedback);
+      setOrderFilter("action");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not mark order delivered");
+    } finally {
+      setDeliveringOrderId(null);
+    }
+  }
+
   return (
     <section className="buyer-workspace-shell">
       <div className="buyer-workspace-header">
@@ -944,7 +1001,7 @@ function OrdersWorkspace({
         </button>
         <div>
           <span className="eyebrow">{t(language, "myOrders")}</span>
-          <h2>{pendingCount ? `${pendingCount} ${t(language, "feedbackPending")}` : t(language, "orders")}</h2>
+          <h2>{pendingCount ? `${pendingCount} ${copy.headerNeedsAnswer}` : copy.headerAllClear}</h2>
         </div>
       </div>
 
@@ -963,107 +1020,162 @@ function OrdersWorkspace({
         </div>
       ) : (
         <>
-          <div className="orders-learning-strip" aria-label={copy.learningStatus}>
-            <span>
-              <PackageCheck size={15} />
-              <b>{placedCount}</b>
-              {copy.placed}
-            </span>
-            <span className={pendingCount > 0 ? "pending" : ""}>
-              <AlertTriangle size={15} />
-              <b>{pendingCount}</b>
-              {copy.feedback}
-            </span>
-            <span className="learnt">
-              <ShieldCheck size={15} />
-              <b>{learntCount}</b>
-              {copy.learnt}
-            </span>
+          <div className="orders-desk-panel" aria-label={copy.learningStatus}>
+            <div className="orders-desk-copy">
+              <span className="eyebrow">{copy.contractDesk}</span>
+              <h3>{pendingCount ? `${pendingCount} ${copy.pendingTitle}` : copy.clearTitle}</h3>
+              <p>{copy.contractDeskBody}</p>
+            </div>
+            <div className="orders-desk-metrics">
+              <span className={pendingCount > 0 ? "attention" : ""}>
+                <b>{pendingCount}</b>
+                {copy.awaitingAnswer}
+              </span>
+              <span>
+                <b>{placedCount}</b>
+                {copy.inTransit}
+              </span>
+              <span>
+                <b>{learntCount}</b>
+                {copy.learnt}
+              </span>
+              <span>
+                <b>{contractCount}</b>
+                {copy.contracts}
+              </span>
+            </div>
           </div>
 
           <div className="buyer-filter-bar" role="group" aria-label="Filter orders">
-            <button type="button" className={orderFilter === "all" ? "active" : ""} onClick={() => setOrderFilter("all")}>All <b>{orders.length}</b></button>
-            <button type="button" className={orderFilter === "action" ? "active" : ""} onClick={() => setOrderFilter("action")}>Needs action <b>{pendingCount}</b></button>
-            <button type="button" className={orderFilter === "progress" ? "active" : ""} onClick={() => setOrderFilter("progress")}>In progress <b>{placedCount}</b></button>
-            <button type="button" className={orderFilter === "complete" ? "active" : ""} onClick={() => setOrderFilter("complete")}>Completed <b>{learntCount}</b></button>
+            <button type="button" className={orderFilter === "all" ? "active" : ""} onClick={() => setOrderFilter("all")}>{copy.allOrders} <b>{orders.length}</b></button>
+            <button type="button" className={orderFilter === "action" ? "active" : ""} onClick={() => setOrderFilter("action")}>{copy.needsAnswer} <b>{pendingCount}</b></button>
+            <button type="button" className={orderFilter === "progress" ? "active" : ""} onClick={() => setOrderFilter("progress")}>{copy.onTheWay} <b>{placedCount}</b></button>
+            <button type="button" className={orderFilter === "complete" ? "active" : ""} onClick={() => setOrderFilter("complete")}>{copy.closed} <b>{learntCount}</b></button>
           </div>
 
           <div className="orders-card-list">
-            {filteredOrders.map((order) => (
-              <article key={order.order_id} className={`order-product-card ${order.can_submit_outcome ? "pending" : ""}`}>
-                <div className="order-product-main">
-                  <img
-                    src={productImageSource(order.product)}
-                    alt={order.product.title}
-                    onError={(e) => { e.currentTarget.src = fallbackProductImage(order.product.color_family); }}
-                  />
-                  <div>
-                    <span>{new Date(order.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                    <strong>{order.product.title.split("-")[0].trim()}</strong>
-                    <small>{order.product.seller_name} | Size {order.variant.size} | Rs {order.variant.current_price}</small>
-                  </div>
-                  <div className={`order-status-pill ${orderStatusTone(order)}`}>
-                    {order.can_submit_outcome ? <PackageCheck size={14} /> : order.status === "returned" ? <RotateCcw size={14} /> : <ShieldCheck size={14} />}
-                    <span>{orderStatusLabel(order, language)}</span>
-                  </div>
-                </div>
+            {filteredOrders.map((order) => {
+              const contractState = orderContractSummary(order, language);
+              const tone = orderStatusTone(order);
+              return (
+                <article key={order.order_id} className={`order-product-card order-row-card ${order.can_submit_outcome ? "pending" : ""} ${tone}`}>
+                  <div className="order-row-layout">
+                    <div className="order-product-main">
+                      <img
+                        src={productImageSource(order.product)}
+                        alt={order.product.title}
+                        onError={(e) => { e.currentTarget.src = fallbackProductImage(order.product.color_family); }}
+                      />
+                      <div>
+                        <span>{new Date(order.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                        <strong>{order.product.title.split("-")[0].trim()}</strong>
+                        <small>{order.product.seller_name} | Size {order.variant.size} | Rs {order.variant.current_price}</small>
+                      </div>
+                    </div>
 
-                {order.return_reason && (
-                  <div className="order-return-reason">
-                    <AlertTriangle size={14} />
-                    <span>{labelize(order.return_reason)}</span>
-                  </div>
-                )}
+                    <div className={`order-contract-strip ${contractState.tone}`}>
+                      <span>{contractState.icon}</span>
+                      <div>
+                        <strong>{contractState.title}</strong>
+                        <p>{contractState.detail}</p>
+                      </div>
+                    </div>
 
-                {order.payment_mode && (
-                  <div className={`order-payment-reward ${order.payment_mode}`}>
-                    {order.payment_mode === "prepaid" ? <Gift size={14} /> : <ShieldCheck size={14} />}
-                    <span>{orderPaymentRewardLine(order, language)}</span>
+                    <div className="order-row-actions">
+                      <div className={`order-status-pill ${tone}`}>
+                        {order.can_submit_outcome ? <PackageCheck size={14} /> : order.status === "returned" ? <RotateCcw size={14} /> : <ShieldCheck size={14} />}
+                        <span>{orderStatusLabel(order, language)}</span>
+                      </div>
+                      <div className="order-actions">
+                        <button type="button" onClick={() => onViewProduct(order.product)}>
+                          <Eye size={14} />
+                          {copy.openItem}
+                        </button>
+                        {order.can_submit_outcome && (
+                          <button type="button" className="primary" onClick={() => setFeedbackOrderId(order.order_id)}>
+                            <PackageCheck size={14} />
+                            {copy.resolveNow}
+                          </button>
+                        )}
+                        {isPlacedOrder(order) && order.contract_id && (
+                          <button type="button" onClick={() => void handleMarkDelivered(order)} disabled={deliveringOrderId === order.order_id}>
+                            <PackageCheck size={14} />
+                            {deliveringOrderId === order.order_id ? copy.updatingDelivery : copy.markDelivered}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
 
-                {isPlacedOrder(order) && (
-                  <div className="order-next-step-line">
-                    <PackageCheck size={14} />
-                    <span>{copy.feedbackAfterDelivery}</span>
-                  </div>
-                )}
-
-                {feedbackOrderId === order.order_id ? (
-                  <div className="order-feedback-panel">
-                    <OutcomeScreen
-                      buyerId={buyerId}
-                      variantId={order.variant_id}
-                      contractId={order.contract_id}
-                      language={language}
-                      buyingForSomeoneElse={Boolean(order.buying_for_someone_else)}
-                      wearerLabel={order.wearer_label ?? undefined}
-                      onClose={() => {
-                        setFeedbackOrderId(null);
-                        void loadOrders();
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="order-actions">
-                    <button type="button" onClick={() => onViewProduct(order.product)}>
-                      <Eye size={14} />
-                      {t(language, "viewItem")}
-                    </button>
-                    {order.can_submit_outcome && (
-                      <button type="button" className="primary" onClick={() => setFeedbackOrderId(order.order_id)}>
+                  <div className="order-row-notes">
+                    {order.return_reason && (
+                      <span className="problem">
+                        <AlertTriangle size={14} />
+                        {copy.returnReason}: {orderReasonDisplay(order.return_reason, language)}
+                      </span>
+                    )}
+                    {order.payment_mode && (
+                      <span className={order.payment_mode === "prepaid" ? "positive" : ""}>
+                        {order.payment_mode === "prepaid" ? <Gift size={14} /> : <ShieldCheck size={14} />}
+                        {orderPaymentRewardLine(order, language)}
+                      </span>
+                    )}
+                    {isPlacedOrder(order) && (
+                      <span>
                         <PackageCheck size={14} />
-                        {t(language, "giveFeedback")}
-                      </button>
+                        {copy.feedbackAfterDelivery}
+                      </span>
+                    )}
+                    {order.buying_for_someone_else && (
+                      <span>
+                        <ShieldCheck size={14} />
+                        {copy.familyOrder.replace("{wearer}", order.wearer_label ?? copy.someoneElse)}
+                      </span>
                     )}
                   </div>
-                )}
-              </article>
-            ))}
+                </article>
+              );
+            })}
             {filteredOrders.length === 0 && (
-              <div className="workspace-filter-empty">No orders in this view.</div>
+              <div className="workspace-filter-empty">{copy.noOrdersInView}</div>
             )}
           </div>
+
+          {selectedFeedbackOrder && (
+            <div className="order-feedback-dialog-backdrop" role="presentation">
+              <section className="order-feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="order-feedback-title">
+                <div className="order-dialog-header">
+                  <div className="order-dialog-product">
+                    <img
+                      src={productImageSource(selectedFeedbackOrder.product)}
+                      alt={selectedFeedbackOrder.product.title}
+                      onError={(e) => { e.currentTarget.src = fallbackProductImage(selectedFeedbackOrder.product.color_family); }}
+                    />
+                    <div>
+                      <span className="eyebrow">{copy.dialogEyebrow}</span>
+                      <h3 id="order-feedback-title">{selectedFeedbackOrder.product.title.split("-")[0].trim()}</h3>
+                      <p>{selectedFeedbackOrder.product.seller_name} | Size {selectedFeedbackOrder.variant.size} | Rs {selectedFeedbackOrder.variant.current_price}</p>
+                    </div>
+                  </div>
+                  <button type="button" className="order-dialog-close" onClick={() => setFeedbackOrderId(null)} aria-label={copy.closeDialog}>
+                    <X size={18} />
+                  </button>
+                </div>
+                <OutcomeScreen
+                  buyerId={buyerId}
+                  variantId={selectedFeedbackOrder.variant_id}
+                  contractId={selectedFeedbackOrder.contract_id}
+                  language={language}
+                  buyingForSomeoneElse={Boolean(selectedFeedbackOrder.buying_for_someone_else)}
+                  wearerLabel={selectedFeedbackOrder.wearer_label ?? undefined}
+                  onClose={() => {
+                    setFeedbackOrderId(null);
+                    void loadOrders();
+                  }}
+                />
+              </section>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -1082,19 +1194,161 @@ function ordersLearningCopy(language: LanguageCode) {
   if (language === "hindi" || language === "hinglish") {
     return {
       learningStatus: "Order learning status",
-      placed: "placed",
-      feedback: "feedback due",
+      headerNeedsAnswer: "orders ka quick answer pending hai",
+      headerAllClear: "Orders are up to date",
+      contractDesk: "After-delivery answers",
+      pendingTitle: "orders need kept/returned status",
+      clearTitle: "All order answers are closed",
+      contractDeskBody: "Kept ya returned select karte hi Sarthi promise, return help, aur future trust signal update karta hai.",
+      awaitingAnswer: "need answer",
+      inTransit: "on the way",
       learnt: "learnt",
-      feedbackAfterDelivery: "Delivery ke baad feedback open hoga. Sarthi return aur fit learning tab update karega."
+      contracts: "contracts",
+      allOrders: "All",
+      needsAnswer: "Needs action",
+      onTheWay: "On the way",
+      closed: "Closed",
+      feedbackAfterDelivery: "Delivery ke baad return contract close hoga.",
+      openItem: "View",
+      resolveNow: "Close contract",
+      markDelivered: "Mark delivered",
+      updatingDelivery: "Updating",
+      returnReason: "Issue",
+      noOrdersInView: "No orders in this view.",
+      dialogEyebrow: "Return contract",
+      closeDialog: "Close feedback dialog",
+      familyOrder: "{wearer} ke liye order. Private size memory update nahi hogi.",
+      someoneElse: "Someone else",
+      contractReadyTitle: "Return contract ready",
+      contractReadyDetail: "One answer checks kept, return, exchange, and seller promise.",
+      contractWaitingTitle: "Contract locked",
+      contractWaitingDetail: "Delivery ke baad buyer outcome capture hoga.",
+      contractKeptTitle: "Contract fulfilled",
+      contractKeptDetail: "Kept outcome trust evidence me add ho gaya.",
+      contractBrokenTitle: "Contract gap captured",
+      contractBrokenDetail: "Return reason aggregate seller signal me gaya.",
+      contractMissingTitle: "No contract attached",
+      contractMissingDetail: "This order can still record outcome learning.",
+      keptLearntTitle: "Kept signal learnt",
+      keptLearntDetail: "Outcome helps future trust checks without exposing private memory.",
+      returnedLearntTitle: "Return signal learnt",
+      returnedLearntDetail: "Reason is counted only as aggregate seller feedback."
     };
   }
   return {
     learningStatus: "Order learning status",
-    placed: "placed",
-    feedback: "feedback due",
+    headerNeedsAnswer: "orders need a quick answer",
+    headerAllClear: "Orders are up to date",
+    contractDesk: "After-delivery answers",
+    pendingTitle: "orders need kept/returned status",
+    clearTitle: "All order answers are closed",
+    contractDeskBody: "Each answer checks the promise made before checkout, return options, and future trust evidence.",
+    awaitingAnswer: "need answer",
+    inTransit: "on the way",
     learnt: "learnt",
-    feedbackAfterDelivery: "Feedback opens after delivery. Sarthi updates return and fit learning then."
+    contracts: "contracts",
+    allOrders: "All",
+    needsAnswer: "Needs action",
+    onTheWay: "On the way",
+    closed: "Closed",
+    feedbackAfterDelivery: "Delivery pending. The return contract closes after one buyer answer.",
+    openItem: "View",
+    resolveNow: "Close contract",
+    markDelivered: "Mark delivered",
+    updatingDelivery: "Updating",
+    returnReason: "Issue",
+    noOrdersInView: "No orders in this view.",
+    dialogEyebrow: "Return contract",
+    closeDialog: "Close feedback dialog",
+    familyOrder: "Bought for {wearer}. Private size memory will stay untouched.",
+    someoneElse: "someone else",
+    contractReadyTitle: "Return contract ready",
+    contractReadyDetail: "One answer checks kept, return, exchange, and the seller promise.",
+    contractWaitingTitle: "Contract locked",
+    contractWaitingDetail: "Outcome capture opens after delivery.",
+    contractKeptTitle: "Contract fulfilled",
+    contractKeptDetail: "Kept outcome now strengthens SKU trust evidence.",
+    contractBrokenTitle: "Contract gap captured",
+    contractBrokenDetail: "Return reason is saved as aggregate seller feedback.",
+    contractMissingTitle: "No contract attached",
+    contractMissingDetail: "This order can still record outcome learning.",
+    keptLearntTitle: "Kept signal learnt",
+    keptLearntDetail: "Outcome helps future trust checks without exposing private memory.",
+    returnedLearntTitle: "Return signal learnt",
+    returnedLearntDetail: "Reason is counted only as aggregate seller feedback."
   };
+}
+
+function orderContractSummary(order: BuyerOrderItem, language: LanguageCode) {
+  const copy = ordersLearningCopy(language);
+  if (!order.contract_id) {
+    if (order.status === "returned" || order.status === "exchanged") {
+      return {
+        tone: "broken",
+        icon: <RotateCcw size={16} />,
+        title: copy.returnedLearntTitle,
+        detail: copy.returnedLearntDetail
+      };
+    }
+    if (order.status === "delivered_kept") {
+      return {
+        tone: "kept",
+        icon: <ShieldCheck size={16} />,
+        title: copy.keptLearntTitle,
+        detail: copy.keptLearntDetail
+      };
+    }
+    return {
+      tone: "muted",
+      icon: <FileCheck2 size={16} />,
+      title: copy.contractMissingTitle,
+      detail: copy.contractMissingDetail
+    };
+  }
+  if (order.can_submit_outcome || order.status === "delivered_needs_feedback") {
+    return {
+      tone: "attention",
+      icon: <ClipboardCheck size={16} />,
+      title: copy.contractReadyTitle,
+      detail: copy.contractReadyDetail
+    };
+  }
+  if (order.status === "returned" || order.status === "exchanged") {
+    return {
+      tone: "broken",
+      icon: <RotateCcw size={16} />,
+      title: copy.contractBrokenTitle,
+      detail: copy.contractBrokenDetail
+    };
+  }
+  if (order.status === "delivered_kept") {
+    return {
+      tone: "kept",
+      icon: <ShieldCheck size={16} />,
+      title: copy.contractKeptTitle,
+      detail: copy.contractKeptDetail
+    };
+  }
+  return {
+    tone: "waiting",
+    icon: <PackageCheck size={16} />,
+    title: copy.contractWaitingTitle,
+    detail: copy.contractWaitingDetail
+  };
+}
+
+function orderReasonDisplay(reason: string, language: LanguageCode) {
+  const normalized = reason as "too_small" | "too_large" | "color_different" | "fabric_different" | "damaged" | "delivery_late" | "wrong_item";
+  const labels: Record<typeof normalized, string> = {
+    too_small: language === "english" ? "Wrong size - small" : "Size small",
+    too_large: language === "english" ? "Wrong size - large" : "Size large",
+    color_different: language === "english" ? "Item looked different" : "Item alag dikha",
+    fabric_different: language === "english" ? "Quality or material issue" : "Quality/material issue",
+    damaged: language === "english" ? "Damaged or defective" : "Damaged/defective",
+    delivery_late: language === "english" ? "Delivery issue" : "Delivery issue",
+    wrong_item: language === "english" ? "Wrong item received" : "Wrong item"
+  };
+  return labels[normalized] ?? labelize(reason);
 }
 
 function orderPaymentRewardLine(order: BuyerOrderItem, language: LanguageCode) {
@@ -1147,6 +1401,7 @@ function ProofsWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [proofFilter, setProofFilter] = useState<"action" | "ready" | "all">("action");
+  const [selectedProofItem, setSelectedProofItem] = useState<BuyerProofLedgerItem | null>(null);
   const totalOpen = summary.waiting_seller + summary.admin_review + summary.needs_more_proof;
   const totalLift = items.reduce((sum, item) => sum + item.trust_impact.lift_points, 0);
   const copy = proofLedgerCopy(language);
@@ -1176,6 +1431,20 @@ function ProofsWorkspace({
       active = false;
     };
   }, [buyerId]);
+
+  useEffect(() => {
+    if (!selectedProofItem) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedProofItem(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selectedProofItem]);
 
   return (
     <section className="buyer-workspace-shell proof-ledger-shell">
@@ -1299,13 +1568,37 @@ function ProofsWorkspace({
               )}
               </details>
 
+              {item.proof_asset && (
+                <div className={`proof-media-strip ${item.status}`}>
+                  <div className="proof-media-thumb">
+                    <ProofAssetThumb proof={item.proof_asset} />
+                  </div>
+                  <div>
+                    <span>{copy.sellerProofAdded}</span>
+                    <strong>{item.proof_asset.title}</strong>
+                    <p>{proofMediaInlineHint(item, language)}</p>
+                  </div>
+                  <button type="button" onClick={() => setSelectedProofItem(item)}>
+                    <ImageIcon size={15} />
+                    {copy.reviewSellerProof}
+                  </button>
+                </div>
+              )}
+
               <div className="proof-ledger-actions">
                 <button type="button" onClick={() => onViewProduct(item.product)}>
                   {t(language, "viewItem")}
                 </button>
-                <button type="button" className="primary" onClick={() => onOpenProductProof(item.product)}>
-                  {copy.seeProof}
-                </button>
+                {item.proof_asset ? (
+                  <button type="button" className="primary proof-review-primary" onClick={() => setSelectedProofItem(item)}>
+                    <ImageIcon size={15} />
+                    {copy.reviewProof}
+                  </button>
+                ) : (
+                  <button type="button" className="primary" onClick={() => onOpenProductProof(item.product)}>
+                    {copy.seeProof}
+                  </button>
+                )}
               </div>
             </article>
           ))}
@@ -1313,10 +1606,143 @@ function ProofsWorkspace({
             <div className="workspace-filter-empty">No proof requests in this view.</div>
           )}
           </div>
+          {selectedProofItem && (
+            <ProofMediaDialog
+              item={selectedProofItem}
+              language={language}
+              onClose={() => setSelectedProofItem(null)}
+              onReconsider={() => {
+                const product = selectedProofItem.product;
+                setSelectedProofItem(null);
+                onViewProduct(product);
+              }}
+              onOpenProofTrail={() => {
+                const product = selectedProofItem.product;
+                setSelectedProofItem(null);
+                onOpenProductProof(product);
+              }}
+            />
+          )}
         </>
       )}
     </section>
   );
+}
+
+function ProofMediaDialog({
+  item,
+  language,
+  onClose,
+  onReconsider,
+  onOpenProofTrail
+}: {
+  item: BuyerProofLedgerItem;
+  language: LanguageCode;
+  onClose: () => void;
+  onReconsider: () => void;
+  onOpenProofTrail: () => void;
+}) {
+  const copy = proofLedgerCopy(language);
+  const proof = item.proof_asset;
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => {
+    setImageFailed(false);
+  }, [proof?.asset_url]);
+  if (!proof) return null;
+  const canRenderImage = !imageFailed && isRenderableProofImage(proof.asset_url);
+  const decision = proofMediaDecision(item, language);
+  const submittedAt = proof.submitted_at
+    ? new Date(proof.submitted_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+    : copy.pending;
+
+  return (
+    <div className="proof-media-dialog-backdrop" role="presentation">
+      <section className="proof-media-dialog" role="dialog" aria-modal="true" aria-labelledby="proof-media-title">
+        <div className={`proof-media-stage${canRenderImage ? "" : " reference"}`}>
+          {canRenderImage ? (
+            <img src={proof.asset_url} alt={proof.title} onError={() => setImageFailed(true)} />
+          ) : (
+            <div className="proof-media-file-preview">
+              <FileText size={34} />
+              <strong>{proofAssetReferenceLabel(proof.asset_url)}</strong>
+              <span>{copy.mediaReference}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="proof-media-panel">
+          <div className="proof-media-header">
+            <div>
+              <span className="eyebrow">{copy.sellerProof}</span>
+              <h3 id="proof-media-title">{proof.title}</h3>
+              <p>{proof.description}</p>
+            </div>
+            <button type="button" className="proof-media-close" onClick={onClose} aria-label={copy.closeProofPreview}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className={`proof-media-verdict ${decision.tone}`}>
+            <span>{decision.icon}</span>
+            <div>
+              <strong>{decision.title}</strong>
+              <p>{decision.body}</p>
+            </div>
+          </div>
+
+          <div className="proof-media-facts" aria-label={copy.proofSnapshot}>
+            <div>
+              <span>{copy.reviewerStatus}</span>
+              <strong>{proofLedgerStatusLabel(item.status, language)}</strong>
+            </div>
+            <div>
+              <span>{copy.proofQuality}</span>
+              <strong>{item.proof_quality.score}/100</strong>
+            </div>
+            <div>
+              <span>{copy.submitted}</span>
+              <strong>{submittedAt}</strong>
+            </div>
+            <div>
+              <span>{copy.trustScore}</span>
+              <strong>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</strong>
+            </div>
+          </div>
+
+          {proof.review_notes && (
+            <div className="proof-media-review-note">
+              <FileCheck2 size={15} />
+              <span>{proof.review_notes}</span>
+            </div>
+          )}
+
+          <div className="proof-media-actions">
+            <button type="button" className="primary" onClick={onReconsider}>
+              <Eye size={15} />
+              {copy.reconsiderItem}
+            </button>
+            <button type="button" onClick={onOpenProofTrail}>
+              <ExternalLink size={15} />
+              {copy.openProofTrail}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProofAssetThumb({ proof }: { proof: NonNullable<BuyerProofLedgerItem["proof_asset"]> }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => {
+    setImageFailed(false);
+  }, [proof.asset_url]);
+
+  if (!imageFailed && isRenderableProofImage(proof.asset_url)) {
+    return <img src={proof.asset_url} alt={proof.title} onError={() => setImageFailed(true)} />;
+  }
+
+  return <FileText size={20} />;
 }
 
 type ProofLedgerCopyKey =
@@ -1342,6 +1768,25 @@ type ProofLedgerCopyKey =
   | "nextSafeStep"
   | "details"
   | "seeProof"
+  | "reviewProof"
+  | "reviewSellerProof"
+  | "sellerProofAdded"
+  | "sellerProof"
+  | "reconsiderItem"
+  | "openProofTrail"
+  | "mediaReference"
+  | "closeProofPreview"
+  | "proofSnapshot"
+  | "reviewerStatus"
+  | "submitted"
+  | "proofPreviewApproved"
+  | "proofPreviewApprovedBody"
+  | "proofPreviewPending"
+  | "proofPreviewPendingBody"
+  | "proofPreviewRejected"
+  | "proofPreviewRejectedBody"
+  | "proofPreviewWaiting"
+  | "proofPreviewWaitingBody"
   | "proofApproved"
   | "adminChecking"
   | "needsClearerProof"
@@ -1388,6 +1833,25 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     nextSafeStep: "Next safe step",
     details: "Details",
     seeProof: "See proof",
+    reviewProof: "Review proof",
+    reviewSellerProof: "Review seller proof",
+    sellerProofAdded: "Seller proof added",
+    sellerProof: "Seller proof",
+    reconsiderItem: "Reconsider item",
+    openProofTrail: "Open proof trail",
+    mediaReference: "Proof file reference",
+    closeProofPreview: "Close proof preview",
+    proofSnapshot: "Proof snapshot",
+    reviewerStatus: "Reviewer status",
+    submitted: "Submitted",
+    proofPreviewApproved: "Proof is ready to use",
+    proofPreviewApprovedBody: "This proof has passed review. Re-open the item and decide with the updated evidence.",
+    proofPreviewPending: "Useful preview, not final yet",
+    proofPreviewPendingBody: "Seller has added proof, but admin review is still pending. Use it as context before checkout.",
+    proofPreviewRejected: "Do not rely on this proof yet",
+    proofPreviewRejectedBody: "Reviewer asked for clearer evidence. Prefer another item or wait for the seller to fix it.",
+    proofPreviewWaiting: "Proof is still waiting",
+    proofPreviewWaitingBody: "There is no seller media to review yet. Keep this as a proof request, not a buying signal.",
     proofApproved: "Proof approved",
     adminChecking: "Admin checking",
     needsClearerProof: "Need clearer proof",
@@ -1433,6 +1897,25 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     nextSafeStep: "Next safe step",
     details: "Details",
     seeProof: "See proof",
+    reviewProof: "Review proof",
+    reviewSellerProof: "Seller proof dekho",
+    sellerProofAdded: "Seller proof added",
+    sellerProof: "Seller proof",
+    reconsiderItem: "Item reconsider karo",
+    openProofTrail: "Proof trail kholo",
+    mediaReference: "Proof file reference",
+    closeProofPreview: "Proof preview close karo",
+    proofSnapshot: "Proof snapshot",
+    reviewerStatus: "Reviewer status",
+    submitted: "Submitted",
+    proofPreviewApproved: "Proof use kar sakte ho",
+    proofPreviewApprovedBody: "Reviewer ne approve kiya hai. Item dubara open karke updated evidence ke saath decide karo.",
+    proofPreviewPending: "Useful preview, final nahi",
+    proofPreviewPendingBody: "Seller ne proof add kiya hai, par admin review pending hai. Checkout se pehle context ke tarah use karo.",
+    proofPreviewRejected: "Is proof par abhi rely mat karo",
+    proofPreviewRejectedBody: "Reviewer ne clearer evidence manga hai. Seller fix kare ya doosra item dekho.",
+    proofPreviewWaiting: "Proof ka wait hai",
+    proofPreviewWaitingBody: "Abhi seller media nahi hai. Isse buying signal nahi, proof request samjho.",
     proofApproved: "Proof approved",
     adminChecking: "Admin check kar raha hai",
     needsClearerProof: "Clearer proof chahiye",
@@ -1478,6 +1961,25 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     nextSafeStep: "Next safe step",
     details: "Details",
     seeProof: "See proof",
+    reviewProof: "Review proof",
+    reviewSellerProof: "Review seller proof",
+    sellerProofAdded: "Seller proof added",
+    sellerProof: "Seller proof",
+    reconsiderItem: "Reconsider item",
+    openProofTrail: "Open proof trail",
+    mediaReference: "Proof file reference",
+    closeProofPreview: "Close proof preview",
+    proofSnapshot: "Proof snapshot",
+    reviewerStatus: "Reviewer status",
+    submitted: "Submitted",
+    proofPreviewApproved: "Proof is ready to use",
+    proofPreviewApprovedBody: "Reviewer ne approve kiya hai. Item dubara open karke updated evidence ke saath decide karo.",
+    proofPreviewPending: "Useful preview, final nahi",
+    proofPreviewPendingBody: "Seller has added proof, but admin review pending hai. Checkout se pehle context ke tarah use karo.",
+    proofPreviewRejected: "Do not rely on this yet",
+    proofPreviewRejectedBody: "Reviewer asked for clearer evidence. Seller fix kare ya another item dekho.",
+    proofPreviewWaiting: "Proof is still waiting",
+    proofPreviewWaitingBody: "Seller media abhi nahi hai. This is a proof request, not a buying signal.",
     proofApproved: "Proof approved",
     adminChecking: "Admin checking",
     needsClearerProof: "Clearer proof chahiye",
@@ -1600,6 +2102,67 @@ function proofTimelineLabel(index: number, fallback: string, language: LanguageC
   if (index === 1) return copy.sellerSubmitted;
   if (index === 2) return copy.adminApproved;
   return fallback;
+}
+
+function proofMediaInlineHint(item: BuyerProofLedgerItem, language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (item.status === "approved") return copy.proofPreviewApprovedBody;
+  if (item.status === "admin_review") return copy.proofPreviewPendingBody;
+  if (item.status === "needs_more_proof") return copy.proofPreviewRejectedBody;
+  return copy.proofPreviewWaitingBody;
+}
+
+function proofMediaDecision(item: BuyerProofLedgerItem, language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (item.status === "approved") {
+    return {
+      tone: "approved",
+      icon: <ShieldCheck size={18} />,
+      title: copy.proofPreviewApproved,
+      body: copy.proofPreviewApprovedBody
+    };
+  }
+  if (item.status === "admin_review") {
+    return {
+      tone: "pending",
+      icon: <FileCheck2 size={18} />,
+      title: copy.proofPreviewPending,
+      body: copy.proofPreviewPendingBody
+    };
+  }
+  if (item.status === "needs_more_proof") {
+    return {
+      tone: "rejected",
+      icon: <AlertTriangle size={18} />,
+      title: copy.proofPreviewRejected,
+      body: copy.proofPreviewRejectedBody
+    };
+  }
+  return {
+    tone: "waiting",
+    icon: <FileText size={18} />,
+    title: copy.proofPreviewWaiting,
+    body: copy.proofPreviewWaitingBody
+  };
+}
+
+function isRenderableProofImage(value: string) {
+  const source = value.trim();
+  return source.startsWith("data:image/")
+    || /^https?:\/\/.+\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(source)
+    || source.includes("images.unsplash.com");
+}
+
+function proofAssetReferenceLabel(value: string) {
+  if (value.startsWith("seeded://")) return value.replace("seeded://", "");
+  if (value.startsWith("seller-asset://")) return value.replace("seller-asset://", "");
+  if (value.startsWith("data:application/pdf")) return "uploaded PDF";
+  try {
+    const url = new URL(value);
+    return url.hostname;
+  } catch {
+    return value || "seller proof file";
+  }
 }
 
 function orderStatusLabel(order: BuyerOrderItem, language: LanguageCode) {

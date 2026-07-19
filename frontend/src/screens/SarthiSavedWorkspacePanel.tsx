@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileSearch, MessageCircle, ShieldCheck, Store, TrendingDown } from "lucide-react";
 import type {
   ClusterKnowledgeGraph,
@@ -36,6 +36,7 @@ export function SarthiSavedWorkspacePanel({
   radarLoading,
   radarError,
   activeFitProfile,
+  openProofDetails,
   language,
   onBack,
   onOpenProduct,
@@ -64,6 +65,7 @@ export function SarthiSavedWorkspacePanel({
   radarLoading: boolean;
   radarError: string | null;
   activeFitProfile: FitProfile | null;
+  openProofDetails: boolean;
   language: LanguageCode;
   onBack: () => void;
   onOpenProduct: (product: Product, variantId?: string | null) => void;
@@ -76,6 +78,10 @@ export function SarthiSavedWorkspacePanel({
   onRetryGraph: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  useEffect(() => {
+    if (openProofDetails) setDetailsOpen(true);
+  }, [openProofDetails, savedProduct.product_id]);
+
   const resolvedMatchIds = (
     knowledgeGraph?.summary.similarity?.candidates ??
     wishlistRadar?.similarity?.candidates ??
@@ -269,9 +275,20 @@ export function SarthiSavedWorkspacePanel({
             />
           </div>
           <button type="submit" disabled={decisionLoading}>
+            {decisionLoading && <span className="buyer-inline-spinner" aria-hidden="true" />}
             {decisionLoading ? t(language, "checkingEllipsis") : t(language, "check")}
           </button>
         </form>
+
+        {(decisionLoading || regretDecision) && (
+          <DecisionAnswerPanel
+            decision={regretDecision}
+            loading={decisionLoading}
+            language={language}
+            onOpenProof={onOpenProof}
+            onOpenProduct={onOpenProduct}
+          />
+        )}
 
         {detailsOpen && (
           <section className="buyer-simple-details" aria-label={t(language, "seeProof")}>
@@ -338,6 +355,119 @@ export function SarthiSavedWorkspacePanel({
         )}
       </main>
     </div>
+  );
+}
+
+function DecisionAnswerPanel({
+  decision,
+  loading,
+  language,
+  onOpenProof,
+  onOpenProduct
+}: {
+  decision: RegretDecisionResponse | null;
+  loading: boolean;
+  language: LanguageCode;
+  onOpenProof: (traceId: string) => void;
+  onOpenProduct: (product: Product, variantId?: string | null) => void;
+}) {
+  if (loading && !decision) {
+    return (
+      <section className="buyer-decision-answer is-loading" aria-live="polite" aria-busy="true">
+        <div className="buyer-decision-answer-head">
+          <div>
+            <span className="eyebrow">Verified answer</span>
+            <h3>Checking verified records</h3>
+            <p>Sarthi is checking seller, proof, returns, price, and fit records.</p>
+          </div>
+          <span className="buyer-answer-spinner" aria-hidden="true" />
+        </div>
+        <div className="buyer-answer-skeleton" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </section>
+    );
+  }
+
+  if (!decision) return null;
+
+  const candidate = decision.ranking.candidates.find((item) => item.variant_id === decision.selected.variant.variant_id) ??
+    decision.ranking.candidates[0] ??
+    null;
+  const score = candidate ? trustScorePercent(candidate) : null;
+  const passport = decision.sku_truth_passport;
+  const proofGap = decision.missing_proof;
+  const proofRequest = decision.proof_request;
+  const reasons = [
+    passport.truth_summary.buyer_guidance,
+    `${passport.outcome_evidence.delivered_orders_90d} ${t(language, "recentOrders").toLowerCase()}, ${Math.round(passport.outcome_evidence.return_rate * 100)}% ${t(language, "returnRisk").toLowerCase()}.`,
+    `Fit: ${passport.fit.recommended_size} (${passport.fit.confidence}).`,
+    proofGap ? `${labelize(proofGap.attribute)} proof: ${proofGap.summary}` : "No major proof gap is blocking this answer."
+  ].filter(Boolean).slice(0, 3);
+  const tone = decision.decision.confidence === "high" ? "safe" : decision.decision.confidence === "blocked" ? "blocked" : "watch";
+
+  return (
+    <section className={`buyer-decision-answer ${tone}`} aria-live="polite">
+      <div className="buyer-decision-answer-head">
+        <div>
+          <span className="eyebrow">Verified answer</span>
+          <h3>{decision.decision.label}</h3>
+          <p>{decision.decision.summary}</p>
+        </div>
+        <div className="buyer-decision-score">
+          <strong>{score ?? "--"}</strong>
+          <span>{decision.decision.confidence}</span>
+        </div>
+      </div>
+
+      <div className="buyer-decision-proof-status">
+        {proofRequest ? (
+          <>
+            <FileSearch size={16} />
+            <div>
+              <strong>{labelize(proofRequest.attribute)} proof requested</strong>
+              <span>{labelize(proofRequest.status)} / {proofRequest.request_count} buyer {proofRequest.request_count === 1 ? "ask" : "asks"}</span>
+            </div>
+          </>
+        ) : proofGap ? (
+          <>
+            <AlertTriangle size={16} />
+            <div>
+              <strong>{labelize(proofGap.attribute)} proof is still weak</strong>
+              <span>{proofGap.title}</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <ShieldCheck size={16} />
+            <div>
+              <strong>Proof is usable for this answer</strong>
+              <span>{passport.fact_ids.length} facts checked before recommending.</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="buyer-decision-reasons">
+        {reasons.map((reason) => (
+          <span key={reason}>
+            <CheckCircle2 size={13} />
+            {reason}
+          </span>
+        ))}
+      </div>
+
+      <div className="buyer-decision-actions">
+        <button type="button" className="primary" onClick={() => onOpenProduct(decision.selected.product, decision.selected.variant.variant_id)}>
+          {decision.decision.primary_action || "View product"}
+        </button>
+        <button type="button" onClick={() => onOpenProof(decision.trace_id)}>
+          {t(language, "seeProof")}
+        </button>
+      </div>
+    </section>
   );
 }
 
