@@ -279,7 +279,12 @@ export type KnowledgeGraphChatResponse = {
     provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
   };
   retrieval?: {
-    source: "atlas_vector_search" | "lexical_fallback" | "lexical_fallback_after_vector_error" | "disabled_no_gemini_key";
+    source:
+      | "atlas_vector_search"
+      | "local_embedding_fallback"
+      | "lexical_fallback"
+      | "lexical_fallback_after_vector_error"
+      | "disabled_no_gemini_key";
     result_count: number;
     error?: string;
   };
@@ -485,20 +490,25 @@ export type SourceHealth = {
   sources: DataSourceStatus[];
 };
 
+export type GeminiRuntimeStatus = {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  active_model: string | null;
+  embedding_model: string;
+  active_embedding_model: string | null;
+  key_present: boolean;
+  status: "disabled" | "configured" | "temporarily_unavailable";
+  last_error: string | null;
+};
+
 export type SystemReadiness = {
   app_env: string;
   data_mode: string;
   user_disclosure: string;
   source_health: SourceHealth;
   runtime_integrations?: {
-    gemini: {
-      enabled: boolean;
-      provider: string;
-      model: string;
-      embedding_model: string;
-      status: "disabled" | "configured" | "temporarily_unavailable";
-      last_error: string | null;
-    };
+    gemini: GeminiRuntimeStatus;
     neo4j: {
       enabled: boolean;
       status: "disabled" | "connected" | "unavailable";
@@ -506,7 +516,8 @@ export type SystemReadiness = {
     };
     atlas_vector_search: {
       enabled: boolean;
-      status: "disabled" | "ready_for_queries" | "waiting_for_gemini_key" | "index_missing" | "unsupported_mongodb" | "unavailable";
+      status: "disabled" | "ready_for_queries" | "waiting_for_gemini_key" | "local_embedding_fallback";
+      atlas_status?: "ready_for_queries" | "index_missing" | "unsupported_mongodb" | "unavailable" | null;
       collection: string;
       index: string;
       index_exists?: boolean;
@@ -525,6 +536,39 @@ export type SystemReadiness = {
   }>;
   production_blockers: string[];
   can_compete_without_blockers: boolean;
+};
+
+export type AdminAiHealth = {
+  gemini: GeminiRuntimeStatus;
+  fallback: {
+    enabled: boolean;
+    active: boolean;
+    reason: string;
+  };
+  source_health: {
+    overall_status: SourceHealth["overall_status"];
+    blocking: boolean;
+    checked_sources: number;
+  };
+  contracts: Array<{
+    task: string;
+    schema: string;
+    status: "covered" | "missing";
+  }>;
+};
+
+export type AdminAiHealthTest = {
+  ok: boolean;
+  provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  answer: {
+    title: string;
+    summary: string;
+    reasons: string[];
+    caution: string | null;
+    source: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  };
+  checked_at: string;
+  required_shape: string[];
 };
 
 export type SellerVerification = {

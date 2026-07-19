@@ -1,5 +1,7 @@
 import type {
   AgentResponse,
+  AdminAiHealth,
+  AdminAiHealthTest,
   AdminReviewQueue,
   AuthSession,
   AuditTrace,
@@ -77,9 +79,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers
   });
   if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await response.text()}`);
+    throw new Error(await readApiError(response));
   }
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+async function readApiError(response: Response) {
+  const fallback = `Request failed (${response.status})`;
+  const text = await response.text();
+  if (!text) return fallback;
+
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown; message?: unknown; error?: unknown };
+    if (typeof payload.detail === "string" && payload.detail.trim()) return payload.detail;
+    if (typeof payload.message === "string" && payload.message.trim()) return payload.message;
+    if (typeof payload.error === "string" && payload.error.trim()) return payload.error;
+  } catch {
+    return text.length > 180 ? `${text.slice(0, 177)}...` : text;
+  }
+
+  return fallback;
 }
 
 export async function login(username: string, password: string) {
@@ -204,6 +224,17 @@ export function getSellerOnboarding() {
 
 export function getAdminReviewQueue() {
   return request<AdminReviewQueue>("/admin/review-queue");
+}
+
+export function getAdminAiHealth() {
+  return request<AdminAiHealth>("/admin/ai-health");
+}
+
+export function runAdminAiHealthTest(query?: string) {
+  return request<AdminAiHealthTest>("/admin/ai-health/test", {
+    method: "POST",
+    body: JSON.stringify({ query })
+  });
 }
 
 export function approveSellerApplication(applicationId: string, notes: string) {

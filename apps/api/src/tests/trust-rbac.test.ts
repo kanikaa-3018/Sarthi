@@ -2,8 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import type { Db } from "mongodb";
-import { assertBuyer, assertSeller } from "../middleware/auth.js";
+import { assertBuyer, assertSeller, requireRole } from "../middleware/auth.js";
 import { aggregateConfidenceScore } from "../services/confidenceScoring.js";
+import { tokenHash } from "../services/crypto.js";
 import { trustState } from "../services/domain.js";
 import { assertSellerOwnsProduct, correctSellerMeasurement, createListingDraft, submitSellerDocument, submitSellerEvidence } from "../services/sellerOperations.js";
 
@@ -195,6 +196,39 @@ describe("trust abstention gates", () => {
 });
 
 describe("RBAC ownership checks", () => {
+  it("stops unauthenticated role checks with 401 before route logic", async () => {
+    await assert.rejects(
+      () => requireRole(dbWith({ sessions: [], accounts: [] }), { headers: {} } as any, {} as any, "seller"),
+      (error: any) => error.statusCode === 401 && /Authentication required/.test(error.message)
+    );
+  });
+
+  it("stops wrong-role access with 403 before route logic", async () => {
+    const token = "buyer-token";
+    const db = dbWith({
+      auth_sessions: [{
+        token_hash: tokenHash(token),
+        revoked_at: null,
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        account_id: "acct_buyer"
+      }],
+      accounts: [{
+        account_id: "acct_buyer",
+        username: "buyer",
+        display_name: "Buyer",
+        role: "buyer",
+        buyer_id: "buyer_asha",
+        seller_id: null,
+        disabled: 0
+      }]
+    });
+
+    await assert.rejects(
+      () => requireRole(db, { headers: { authorization: `Bearer ${token}` } } as any, {} as any, "seller"),
+      (error: any) => error.statusCode === 403 && /seller role required/.test(error.message)
+    );
+  });
+
   it("allows a buyer to read only their own buyer scope", () => {
     assert.doesNotThrow(() => assertBuyer({ role: "buyer", buyer_id: "buyer_asha" }, "buyer_asha"));
   });

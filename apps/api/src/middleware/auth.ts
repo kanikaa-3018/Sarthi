@@ -39,7 +39,7 @@ export async function accountForRequest(db: Db, request: FastifyRequest) {
 export async function requireAccount(db: Db, request: FastifyRequest, reply: FastifyReply) {
   const account = await accountForRequest(db, request);
   if (!account) {
-    return reply.code(401).send({ detail: "Authentication required" });
+    throwHttpError("Authentication required", 401);
   }
   return account;
 }
@@ -47,7 +47,7 @@ export async function requireAccount(db: Db, request: FastifyRequest, reply: Fas
 export async function requireRole(db: Db, request: FastifyRequest, reply: FastifyReply, role: AuthAccount["role"]) {
   const account = await requireAccount(db, request, reply);
   if (!account || account.role !== role) {
-    return reply.code(403).send({ detail: `${role} role required` });
+    throwHttpError(`${role} role required`, 403);
   }
   return account;
 }
@@ -66,4 +66,10 @@ export function assertSeller(account: any, sellerId: string) {
     (error as any).statusCode = 403;
     throw error;
   }
+}
+
+function throwHttpError(message: string, statusCode: number): never {
+  const error = new Error(message);
+  (error as any).statusCode = statusCode;
+  throw error;
 }

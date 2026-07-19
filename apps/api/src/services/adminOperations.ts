@@ -4,6 +4,7 @@ import { sourceHealth } from "./domain.js";
 import { generateGroundedAgentAnswer } from "./agent.js";
 import { id } from "./crypto.js";
 import { withoutId } from "./format.js";
+import { llmCacheKey, readLlmCache, writeLlmCache } from "./llmCache.js";
 import { nowIso } from "./time.js";
 
 const REQUIRED_SELLER_DOCUMENTS = ["gst_certificate", "address_proof", "bank_proof"];
@@ -30,11 +31,11 @@ export async function adminQueue(db: Db) {
       seller_name: sellerMap.get(app.seller_id)?.name ?? app.business_name,
       verification_status: profileMap.get(app.seller_id)?.verification_status ?? null
     };
-    return { ...row, prescreen: await adminPrescreenSuggestion("seller_application", row) };
+    return { ...row, prescreen: await adminPrescreenSuggestion(db, "seller_application", row) };
   }));
   const verificationDocuments = await Promise.all(documents.map(async (doc: any) => {
     const row = { ...withoutId(doc), seller_name: sellerMap.get(doc.seller_id)?.name ?? "" };
-    return { ...row, prescreen: await adminPrescreenSuggestion("verification_document", row) };
+    return { ...row, prescreen: await adminPrescreenSuggestion(db, "verification_document", row) };
   }));
   const listingDrafts = await Promise.all(drafts.map(async (draft: any) => {
     const row = {
@@ -42,7 +43,7 @@ export async function adminQueue(db: Db) {
       seller_name: sellerMap.get(draft.seller_id)?.name ?? "",
       verification_status: profileMap.get(draft.seller_id)?.verification_status ?? null
     };
-    return { ...row, prescreen: await adminPrescreenSuggestion("listing_draft", row) };
+    return { ...row, prescreen: await adminPrescreenSuggestion(db, "listing_draft", row) };
   }));
   const sellerProofAssets = await Promise.all(proofAssets.map(async (asset: any) => {
     const product = productMap.get(asset.product_id);
@@ -58,7 +59,7 @@ export async function adminQueue(db: Db) {
         status: { $in: ["open", "submitted"] }
       })
     };
-    return { ...row, prescreen: await adminPrescreenSuggestion("proof_asset", row) };
+    return { ...row, prescreen: await adminPrescreenSuggestion(db, "proof_asset", row) };
   }));
   const activeQueue = buildActiveReviewQueue(sellerApplications, verificationDocuments, listingDrafts, sellerProofAssets);
   const sellerDossiers = buildSellerDossiers({
@@ -71,7 +72,7 @@ export async function adminQueue(db: Db) {
     activeQueue
   });
   const summary = buildAdminSummary(activeQueue, sellerApplications, verificationDocuments, listingDrafts, sellerProofAssets, health);
-  const automationPlan = await buildAdminAutomationPlan(summary, activeQueue, sellerDossiers);
+  const automationPlan = await buildAdminAutomationPlan(db, summary, activeQueue, sellerDossiers);
   return {
     summary,
     source_health: health,
@@ -89,258 +90,250 @@ export async function adminQueue(db: Db) {
 export async function approveSellerApplication(db: Db, account: any, applicationId: string, notes: string) {
   const c = collections(db);
   const appDoc = await c.sellerApplications.findOne({ application_id: applicationId });
-  if (appDoc) {
-    const missingDocuments = await missingRequiredDocuments(db, appDoc.seller_id);
-    if (missingDocuments.length) {
-      throwBadRequest(`Approve required documents first: ${missingDocuments.map(labelize).join(", ")}.`);
-    }
-    await Promise.all([
-      c.sellerApplications.updateOne({ application_id: applicationId }, { $set: { status: "approved" } }),
-      c.sellerProfiles.updateOne(
-        { seller_id: appDoc.seller_id },
-        { $set: { verification_status: "verified", gst_status: "verified", kyc_status: "verified", data_access_level: "aggregate_only", last_verified_at: nowIso() } }
-      ),
-      recordAdminEvent(db, account, "seller_application_approved", "seller_application", applicationId, appDoc.seller_id, "approved", notes)
-    ]);
+  if (!appDoc) throwNotFound("Seller application not found");
+  const missingDocuments = await missingRequiredDocuments(db, appDoc.seller_id);
+  if (missingDocuments.length) {
+    throwBadRequest(`Approve required documents first: ${missingDocuments.map(labelize).join(", ")}.`);
   }
+  await Promise.all([
+    c.sellerApplications.updateOne({ application_id: applicationId }, { $set: { status: "approved" } }),
+    c.sellerProfiles.updateOne(
+      { seller_id: appDoc.seller_id },
+      { $set: { verification_status: "verified", gst_status: "verified", kyc_status: "verified", data_access_level: "aggregate_only", last_verified_at: nowIso() } }
+    ),
+    recordAdminEvent(db, account, "seller_application_approved", "seller_application", applicationId, appDoc.seller_id, "approved", notes)
+  ]);
   return adminQueue(db);
 }
 
 export async function approveSellerDocument(db: Db, account: any, documentId: string, notes: string) {
   const c = collections(db);
   const document = await c.sellerVerificationDocuments.findOne({ document_id: documentId });
-  if (document) {
-    await Promise.all([
-      c.sellerVerificationDocuments.updateOne(
-        { document_id: documentId },
-        { $set: { status: "approved", reviewed_at: nowIso(), notes } }
-      ),
-      updateProfileAfterDocumentDecision(db, document.seller_id, document.document_type, "approved"),
-      recordAdminEvent(db, account, "seller_document_approved", "verification_document", documentId, document.seller_id, "approved", notes)
-    ]);
-    await maybePromoteSellerVerification(db, document.seller_id, account, notes);
-  }
+  if (!document) throwNotFound("Verification document not found");
+  await Promise.all([
+    c.sellerVerificationDocuments.updateOne(
+      { document_id: documentId },
+      { $set: { status: "approved", reviewed_at: nowIso(), notes } }
+    ),
+    updateProfileAfterDocumentDecision(db, document.seller_id, document.document_type, "approved"),
+    recordAdminEvent(db, account, "seller_document_approved", "verification_document", documentId, document.seller_id, "approved", notes)
+  ]);
+  await maybePromoteSellerVerification(db, document.seller_id, account, notes);
   return adminQueue(db);
 }
 
 export async function rejectSellerDocument(db: Db, account: any, documentId: string, notes: string) {
   const c = collections(db);
   const document = await c.sellerVerificationDocuments.findOne({ document_id: documentId });
-  if (document) {
-    await Promise.all([
-      c.sellerVerificationDocuments.updateOne(
-        { document_id: documentId },
-        { $set: { status: "rejected", reviewed_at: nowIso(), notes } }
-      ),
-      updateProfileAfterDocumentDecision(db, document.seller_id, document.document_type, "rejected"),
-      recordAdminEvent(db, account, "seller_document_rejected", "verification_document", documentId, document.seller_id, "rejected", notes)
-    ]);
-  }
+  if (!document) throwNotFound("Verification document not found");
+  await Promise.all([
+    c.sellerVerificationDocuments.updateOne(
+      { document_id: documentId },
+      { $set: { status: "rejected", reviewed_at: nowIso(), notes } }
+    ),
+    updateProfileAfterDocumentDecision(db, document.seller_id, document.document_type, "rejected"),
+    recordAdminEvent(db, account, "seller_document_rejected", "verification_document", documentId, document.seller_id, "rejected", notes)
+  ]);
   return adminQueue(db);
 }
 
 export async function rejectSellerApplication(db: Db, account: any, applicationId: string, notes: string) {
   const c = collections(db);
   const appDoc = await c.sellerApplications.findOne({ application_id: applicationId });
-  if (appDoc) {
-    await Promise.all([
-      c.sellerApplications.updateOne({ application_id: applicationId }, { $set: { status: "rejected" } }),
-      c.sellerProfiles.updateOne({ seller_id: appDoc.seller_id }, { $set: { verification_status: "restricted", restricted_reason: notes } }),
-      recordAdminEvent(db, account, "seller_application_rejected", "seller_application", applicationId, appDoc.seller_id, "rejected", notes)
-    ]);
-  }
+  if (!appDoc) throwNotFound("Seller application not found");
+  await Promise.all([
+    c.sellerApplications.updateOne({ application_id: applicationId }, { $set: { status: "rejected" } }),
+    c.sellerProfiles.updateOne({ seller_id: appDoc.seller_id }, { $set: { verification_status: "restricted", restricted_reason: notes } }),
+    recordAdminEvent(db, account, "seller_application_rejected", "seller_application", applicationId, appDoc.seller_id, "rejected", notes)
+  ]);
   return adminQueue(db);
 }
 
 export async function approveListingDraft(db: Db, account: any, draftId: string, notes: string) {
   const c = collections(db);
   const draft = await c.listingDrafts.findOne({ draft_id: draftId });
-  if (draft) {
-    if (draft.status === "approved") {
-      await recordAdminEvent(db, account, "listing_draft_approval_skipped", "listing_draft", draftId, draft.seller_id, "already_approved", notes);
-      return adminQueue(db);
-    }
-    const product_id = id("product");
-    const cluster_id = draft.target_cluster_id ?? id("cluster");
-    const variant_id = `${product_id}_xl`;
-    const catalogFactId = id("fact_catalog");
-    const priceFactId = id("fact_price");
-    const inventoryFactId = id("fact_inventory");
-    const seller = await c.sellers.findOne({ seller_id: draft.seller_id });
-    const existingCluster = await c.clusters.findOne({ cluster_id });
-    if (!existingCluster) {
-      await c.clusters.insertOne({
-        cluster_id,
-        label: `${draft.color_family} ${draft.garment_type}`.replace(/\s+/g, " ").trim(),
-        category: draft.category
-      });
-    }
-    await Promise.all([
-      c.products.insertOne({
-        product_id,
-        cluster_id,
-        seller_id: draft.seller_id,
-        title: draft.title,
-        category: draft.category,
-        garment_type: draft.garment_type,
-        fabric: draft.fabric,
-        color_family: draft.color_family,
-        base_price: draft.base_price,
-        image_url: draft.image_url,
-        rating: 4.0,
-        rating_count: 0,
-        commerce_badge: "New seller",
-        delivery_text: "Delivery after seller confirmation",
-        is_sarthi_eligible: 1,
-        seller_name: seller?.name,
-        taxonomy_attributes: [
-          { field_name: "category", display_name: "Category", value: draft.category },
-          { field_name: "generic_name", display_name: "Generic Name", value: draft.garment_type },
-          { field_name: "fabric", display_name: "Fabric", value: draft.fabric },
-          { field_name: "color", display_name: "Color", value: draft.color_family }
-        ],
-        source_refs: {
-          listing_draft_id: draftId,
-          approved_by: account.account_id
-        }
-      }),
-      c.variants.insertOne({ variant_id, product_id, size: "XL", current_price: draft.base_price, stock: 10 }),
-      c.facts.insertMany([
-        {
-          fact_id: catalogFactId,
-          source_table: "products",
-          source_id: product_id,
-          source_type: "catalog_listing",
-          summary: `${draft.title} was approved into buyer catalog after admin review.`,
-          created_at: nowIso(),
-          expires_at: null
-        },
-        {
-          fact_id: priceFactId,
-          source_table: "price_events",
-          source_id: variant_id,
-          source_type: "seller_price",
-          summary: `Approved listing price is Rs ${draft.base_price}.`,
-          created_at: nowIso(),
-          expires_at: null
-        },
-        {
-          fact_id: inventoryFactId,
-          source_table: "inventory_snapshots",
-          source_id: variant_id,
-          source_type: "seller_inventory",
-          summary: "New approved listing starts with 10 units available.",
-          created_at: nowIso(),
-          expires_at: null
-        }
-      ]),
-      c.priceEvents.insertOne({
-        variant_id,
-        price: draft.base_price,
-        event_type: "listing_approved",
-        created_at: nowIso(),
-        fact_id: priceFactId
-      }),
-      c.inventorySnapshots.insertOne({
-        variant_id,
-        available_to_promise: 10,
-        sales_velocity_24h: 0,
-        captured_at: nowIso(),
-        fact_id: inventoryFactId
-      })
-    ]);
-    await c.listingDrafts.updateOne(
-      { draft_id: draftId },
-      { $set: { status: "approved", readiness_status: "evidence_building", updated_at: nowIso() } }
-    );
-    await recordAdminEvent(db, account, "listing_draft_approved", "listing_draft", draftId, draft.seller_id, "approved", notes);
+  if (!draft) throwNotFound("Listing draft not found");
+  if (draft.status === "approved") {
+    await recordAdminEvent(db, account, "listing_draft_approval_skipped", "listing_draft", draftId, draft.seller_id, "already_approved", notes);
+    return adminQueue(db);
   }
+  const product_id = id("product");
+  const cluster_id = draft.target_cluster_id ?? id("cluster");
+  const variant_id = `${product_id}_xl`;
+  const catalogFactId = id("fact_catalog");
+  const priceFactId = id("fact_price");
+  const inventoryFactId = id("fact_inventory");
+  const seller = await c.sellers.findOne({ seller_id: draft.seller_id });
+  const existingCluster = await c.clusters.findOne({ cluster_id });
+  if (!existingCluster) {
+    await c.clusters.insertOne({
+      cluster_id,
+      label: `${draft.color_family} ${draft.garment_type}`.replace(/\s+/g, " ").trim(),
+      category: draft.category
+    });
+  }
+  await Promise.all([
+    c.products.insertOne({
+      product_id,
+      cluster_id,
+      seller_id: draft.seller_id,
+      title: draft.title,
+      category: draft.category,
+      garment_type: draft.garment_type,
+      fabric: draft.fabric,
+      color_family: draft.color_family,
+      base_price: draft.base_price,
+      image_url: draft.image_url,
+      rating: 4.0,
+      rating_count: 0,
+      commerce_badge: "New seller",
+      delivery_text: "Delivery after seller confirmation",
+      is_sarthi_eligible: 1,
+      seller_name: seller?.name,
+      taxonomy_attributes: [
+        { field_name: "category", display_name: "Category", value: draft.category },
+        { field_name: "generic_name", display_name: "Generic Name", value: draft.garment_type },
+        { field_name: "fabric", display_name: "Fabric", value: draft.fabric },
+        { field_name: "color", display_name: "Color", value: draft.color_family }
+      ],
+      source_refs: {
+        listing_draft_id: draftId,
+        approved_by: account.account_id
+      }
+    }),
+    c.variants.insertOne({ variant_id, product_id, size: "XL", current_price: draft.base_price, stock: 10 }),
+    c.facts.insertMany([
+      {
+        fact_id: catalogFactId,
+        source_table: "products",
+        source_id: product_id,
+        source_type: "catalog_listing",
+        summary: `${draft.title} was approved into buyer catalog after admin review.`,
+        created_at: nowIso(),
+        expires_at: null
+      },
+      {
+        fact_id: priceFactId,
+        source_table: "price_events",
+        source_id: variant_id,
+        source_type: "seller_price",
+        summary: `Approved listing price is Rs ${draft.base_price}.`,
+        created_at: nowIso(),
+        expires_at: null
+      },
+      {
+        fact_id: inventoryFactId,
+        source_table: "inventory_snapshots",
+        source_id: variant_id,
+        source_type: "seller_inventory",
+        summary: "New approved listing starts with 10 units available.",
+        created_at: nowIso(),
+        expires_at: null
+      }
+    ]),
+    c.priceEvents.insertOne({
+      variant_id,
+      price: draft.base_price,
+      event_type: "listing_approved",
+      created_at: nowIso(),
+      fact_id: priceFactId
+    }),
+    c.inventorySnapshots.insertOne({
+      variant_id,
+      available_to_promise: 10,
+      sales_velocity_24h: 0,
+      captured_at: nowIso(),
+      fact_id: inventoryFactId
+    })
+  ]);
+  await c.listingDrafts.updateOne(
+    { draft_id: draftId },
+    { $set: { status: "approved", readiness_status: "evidence_building", updated_at: nowIso() } }
+  );
+  await recordAdminEvent(db, account, "listing_draft_approved", "listing_draft", draftId, draft.seller_id, "approved", notes);
   return adminQueue(db);
 }
 
 export async function requestListingRevision(db: Db, account: any, draftId: string, notes: string) {
   const c = collections(db);
   const draft = await c.listingDrafts.findOne({ draft_id: draftId });
-  if (draft) {
-    await Promise.all([
-      c.listingDrafts.updateOne({ draft_id: draftId }, { $set: { status: "needs_revision", updated_at: nowIso() } }),
-      recordAdminEvent(db, account, "listing_revision_requested", "listing_draft", draftId, draft.seller_id, "revision", notes)
-    ]);
-  }
+  if (!draft) throwNotFound("Listing draft not found");
+  await Promise.all([
+    c.listingDrafts.updateOne({ draft_id: draftId }, { $set: { status: "needs_revision", updated_at: nowIso() } }),
+    recordAdminEvent(db, account, "listing_revision_requested", "listing_draft", draftId, draft.seller_id, "revision", notes)
+  ]);
   return adminQueue(db);
 }
 
 export async function approveSellerEvidenceAsset(db: Db, account: any, proofId: string, notes: string) {
   const c = collections(db);
   const asset = await c.sellerEvidenceAssets.findOne({ proof_id: proofId });
-  if (asset) {
-    await Promise.all([
-      c.sellerEvidenceAssets.updateOne(
-        { proof_id: proofId },
-        { $set: { status: "verified", reviewed_at: nowIso(), review_notes: notes } }
-      ),
-      c.proofRequests.updateMany(
-        {
-          seller_id: asset.seller_id,
-          product_id: asset.product_id,
-          attribute: asset.attribute,
-          resolution_proof_id: proofId,
-          status: { $in: ["open", "submitted"] }
-        },
-        { $set: { status: "resolved", resolved_at: nowIso(), updated_at: nowIso() } }
-      ),
-      c.facts.updateOne(
-        { fact_id: asset.fact_id },
-        { $set: { summary: `${labelize(asset.attribute)} proof approved by reviewer.` } }
-      ),
-      asset.proof_type === "measurement_chart"
-        ? c.variants.updateMany(
-          { product_id: asset.product_id, measurement_proof_id: proofId },
-          { $set: { measurement_status: "verified", measurement_reviewed_at: nowIso() } }
-        )
-        : Promise.resolve(),
-      recordAdminEvent(db, account, "seller_proof_approved", "seller_evidence_asset", proofId, asset.seller_id, "approved", notes)
-    ]);
-  }
+  if (!asset) throwNotFound("Seller proof asset not found");
+  await Promise.all([
+    c.sellerEvidenceAssets.updateOne(
+      { proof_id: proofId },
+      { $set: { status: "verified", reviewed_at: nowIso(), review_notes: notes } }
+    ),
+    c.proofRequests.updateMany(
+      {
+        seller_id: asset.seller_id,
+        product_id: asset.product_id,
+        attribute: asset.attribute,
+        resolution_proof_id: proofId,
+        status: { $in: ["open", "submitted"] }
+      },
+      { $set: { status: "resolved", resolved_at: nowIso(), updated_at: nowIso() } }
+    ),
+    c.facts.updateOne(
+      { fact_id: asset.fact_id },
+      { $set: { summary: `${labelize(asset.attribute)} proof approved by reviewer.` } }
+    ),
+    asset.proof_type === "measurement_chart"
+      ? c.variants.updateMany(
+        { product_id: asset.product_id, measurement_proof_id: proofId },
+        { $set: { measurement_status: "verified", measurement_reviewed_at: nowIso() } }
+      )
+      : Promise.resolve(),
+    recordAdminEvent(db, account, "seller_proof_approved", "seller_evidence_asset", proofId, asset.seller_id, "approved", notes)
+  ]);
   return adminQueue(db);
 }
 
 export async function rejectSellerEvidenceAsset(db: Db, account: any, proofId: string, notes: string) {
   const c = collections(db);
   const asset = await c.sellerEvidenceAssets.findOne({ proof_id: proofId });
-  if (asset) {
-    await Promise.all([
-      c.sellerEvidenceAssets.updateOne(
-        { proof_id: proofId },
-        { $set: { status: "rejected", reviewed_at: nowIso(), review_notes: notes } }
-      ),
-      c.proofRequests.updateMany(
-        {
-          seller_id: asset.seller_id,
-          product_id: asset.product_id,
-          attribute: asset.attribute,
-          resolution_proof_id: proofId,
-          status: "submitted"
-        },
-        {
-          $set: {
-            status: "open",
-            updated_at: nowIso(),
-            rejected_proof_id: proofId,
-            rejection_notes: notes,
-            resolution_proof_id: null
-          }
+  if (!asset) throwNotFound("Seller proof asset not found");
+  await Promise.all([
+    c.sellerEvidenceAssets.updateOne(
+      { proof_id: proofId },
+      { $set: { status: "rejected", reviewed_at: nowIso(), review_notes: notes } }
+    ),
+    c.proofRequests.updateMany(
+      {
+        seller_id: asset.seller_id,
+        product_id: asset.product_id,
+        attribute: asset.attribute,
+        resolution_proof_id: proofId,
+        status: "submitted"
+      },
+      {
+        $set: {
+          status: "open",
+          updated_at: nowIso(),
+          rejected_proof_id: proofId,
+          rejection_notes: notes,
+          resolution_proof_id: null
         }
-      ),
-      asset.proof_type === "measurement_chart"
-        ? c.variants.updateMany(
-          { product_id: asset.product_id, measurement_proof_id: proofId },
-          { $set: { measurement_status: "rejected", measurement_reviewed_at: nowIso(), measurement_rejection_notes: notes } }
-        )
-        : Promise.resolve(),
-      recordAdminEvent(db, account, "seller_proof_rejected", "seller_evidence_asset", proofId, asset.seller_id, "rejected", notes)
-    ]);
-  }
+      }
+    ),
+    asset.proof_type === "measurement_chart"
+      ? c.variants.updateMany(
+        { product_id: asset.product_id, measurement_proof_id: proofId },
+        { $set: { measurement_status: "rejected", measurement_reviewed_at: nowIso(), measurement_rejection_notes: notes } }
+      )
+      : Promise.resolve(),
+    recordAdminEvent(db, account, "seller_proof_rejected", "seller_evidence_asset", proofId, asset.seller_id, "rejected", notes)
+  ]);
   return adminQueue(db);
 }
 
@@ -401,8 +394,16 @@ async function maybePromoteSellerVerification(db: Db, sellerId: string, account:
 
 type AdminPrescreenItemType = "seller_application" | "verification_document" | "listing_draft" | "proof_asset";
 
-async function adminPrescreenSuggestion(itemType: AdminPrescreenItemType, item: any) {
+async function adminPrescreenSuggestion(db: Db, itemType: AdminPrescreenItemType, item: any) {
   const deterministic = deterministicAdminPrescreen(itemType, item);
+  if (!needsLiveAdminPrescreen(itemType, item)) {
+    return { ...deterministic, agent_provider: "deterministic_fallback" };
+  }
+  const cacheKey = llmCacheKey("admin_prescreen", adminPrescreenCachePayload(itemType, item, deterministic));
+  const cached = await readLlmCache(db, cacheKey);
+  if (cached) {
+    return { ...deterministic, ...cached };
+  }
   const grounded = await generateGroundedAgentAnswer({
     task: "admin_prescreen",
     query: `Pre-screen ${itemType} ${deterministic.queue_item_id}`,
@@ -419,12 +420,48 @@ async function adminPrescreenSuggestion(itemType: AdminPrescreenItemType, item: 
       caution: deterministic.route_to === "senior_reviewer" ? "Route to senior reviewer before accepting." : null
     }
   });
-  return {
+  const prescreen = {
     ...deterministic,
     observe: grounded.title || deterministic.observe,
     reason: grounded.summary || deterministic.reason,
     learn: grounded.reasons?.[1] ?? deterministic.learn,
     agent_provider: grounded.source
+  };
+  if (grounded.source === "gemini") {
+    await writeLlmCache(db, cacheKey, "admin_prescreen", {
+      observe: prescreen.observe,
+      reason: prescreen.reason,
+      learn: prescreen.learn,
+      agent_provider: prescreen.agent_provider
+    });
+  }
+  return prescreen;
+}
+
+function needsLiveAdminPrescreen(itemType: AdminPrescreenItemType, item: any) {
+  if (itemType === "seller_application") return item.status === "pending_review";
+  if (itemType === "verification_document") return ["submitted", "under_review"].includes(item.status);
+  if (itemType === "listing_draft") return item.status === "submitted";
+  if (itemType === "proof_asset") return item.status === "submitted";
+  return false;
+}
+
+function adminPrescreenCachePayload(itemType: AdminPrescreenItemType, item: any, deterministic: any) {
+  return {
+    item_type: itemType,
+    item_id: deterministic.queue_item_id,
+    seller_id: item.seller_id,
+    status: item.status,
+    updated_at: item.updated_at ?? item.submitted_at ?? item.created_at ?? item.reviewed_at ?? null,
+    verification_status: item.verification_status ?? null,
+    document_type: item.document_type ?? null,
+    proof_type: item.proof_type ?? null,
+    attribute: item.attribute ?? null,
+    draft_readiness: item.readiness_status ?? null,
+    open_request_count: item.open_request_count ?? null,
+    risk_score: deterministic.risk_score,
+    suggested_action: deterministic.suggested_action,
+    checks: deterministic.checks.map((check: any) => [check.label, check.status])
   };
 }
 
@@ -762,8 +799,14 @@ function buildAdminSummary(activeQueue: any[], applications: any[], documents: a
   };
 }
 
-async function buildAdminAutomationPlan(summary: any, activeQueue: any[], sellerDossiers: any[]) {
+async function buildAdminAutomationPlan(db: Db, summary: any, activeQueue: any[], sellerDossiers: any[]) {
   const fallback = deterministicAutomationPlan(summary, activeQueue, sellerDossiers);
+  const cachePayload = adminAutomationCachePayload(summary, activeQueue, sellerDossiers, fallback);
+  const cacheKey = llmCacheKey("admin_automation", cachePayload);
+  const cached = await readLlmCache(db, cacheKey);
+  if (cached) {
+    return { ...fallback, ...cached };
+  }
   const grounded = await generateGroundedAgentAnswer({
     task: "admin_automation",
     query: "Create a short admin review triage plan",
@@ -800,7 +843,7 @@ async function buildAdminAutomationPlan(summary: any, activeQueue: any[], seller
       caution: fallback.caution
     }
   });
-  return {
+  const plan = {
     headline: grounded.title || fallback.headline,
     summary: grounded.summary || fallback.summary,
     next_steps: grounded.reasons?.length ? grounded.reasons.slice(0, 4) : fallback.next_steps,
@@ -809,6 +852,50 @@ async function buildAdminAutomationPlan(summary: any, activeQueue: any[], seller
     can_batch_count: fallback.can_batch_count,
     caution: grounded.caution ?? fallback.caution,
     agent_provider: grounded.source
+  };
+  if (grounded.source === "gemini") {
+    await writeLlmCache(db, cacheKey, "admin_automation", {
+      headline: plan.headline,
+      summary: plan.summary,
+      next_steps: plan.next_steps,
+      caution: plan.caution,
+      agent_provider: plan.agent_provider
+    });
+  }
+  return plan;
+}
+
+function adminAutomationCachePayload(summary: any, activeQueue: any[], sellerDossiers: any[], fallback: any) {
+  return {
+    summary: {
+      active_count: summary.active_count,
+      blocked_items: summary.blocked_items,
+      breached_sla_count: summary.breached_sla_count,
+      suggested_actions: summary.suggested_actions,
+      source_status: summary.source_status,
+      source_blocking: summary.source_blocking
+    },
+    first_queue_item_id: fallback.first_queue_item_id,
+    queue: activeQueue.slice(0, 8).map((item) => ({
+      id: item.queue_item_id,
+      type: item.item_type,
+      seller_id: item.seller_id,
+      status: item.status,
+      risk_score: item.risk_score,
+      suggested_action: item.suggested_action,
+      route_to: item.route_to,
+      blocker: item.blocker,
+      sla_state: item.sla_state
+    })),
+    sellers: sellerDossiers
+      .filter((seller) => seller.open_review_items > 0 || seller.pending_documents.length)
+      .slice(0, 8)
+      .map((seller) => ({
+        seller_id: seller.seller_id,
+        verification_status: seller.verification_status,
+        open_review_items: seller.open_review_items,
+        pending_documents: seller.pending_documents
+      }))
   };
 }
 
@@ -970,6 +1057,12 @@ function latestIso(values: Array<string | null | undefined>) {
 function throwBadRequest(message: string): never {
   const error = new Error(message);
   (error as any).statusCode = 400;
+  throw error;
+}
+
+function throwNotFound(message: string): never {
+  const error = new Error(message);
+  (error as any).statusCode = 404;
   throw error;
 }
 
