@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import crypto from "node:crypto";
 
-export const API_BASE = "http://127.0.0.1:8000";
+export const API_BASE = process.env.E2E_API_BASE ?? "http://127.0.0.1:58001";
 
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
 
