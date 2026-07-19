@@ -1480,7 +1480,7 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
                   </div>
                   <strong>Measurements corrected!</strong>
                   <p>
-                    Sarthi saved this as a pending correction. Buyer trust will improve only after future kept outcomes validate the change.
+                    Saved as a pending correction. Buyer trust improves only after future kept outcomes validate the change.
                   </p>
                   <button
                     type="button"
