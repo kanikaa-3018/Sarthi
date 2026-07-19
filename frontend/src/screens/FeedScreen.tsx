@@ -3,17 +3,26 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { 
   Search, 
   ShieldCheck, 
-  Star, 
-  Truck, 
   AlertTriangle,
   X,
-  Heart,
   BookmarkCheck,
-  Ruler
+  ClipboardCheck,
+  MapPin,
+  ShoppingCart,
+  Eye,
+  Heart,
+  PackageCheck,
+  RotateCcw,
+  FileCheck2,
+  Gift,
+  ArrowRight
 } from "lucide-react";
 import {
   askKnowledgeGraph,
   createWishlistIntent,
+  getBuyerOrders,
+  getBuyerProofs,
+  getBuyerWishlist,
   getClusterKnowledgeGraph,
   getFeed,
   getFitProfiles,
@@ -28,14 +37,17 @@ import type {
   KnowledgeGraphChatResponse,
   Product,
   RegretDecisionResponse,
-  WishlistRadarEvent
+  BuyerProofLedgerItem,
+  BuyerOrderItem,
+  BuyerWishlistItem,
+  WishlistRadarEvent,
+  Variant
 } from "../types/api";
 import { CompareSheet } from "./CompareSheet";
-import { CheckoutSheet } from "./CheckoutSheet";
 import { AuditDrawer } from "./AuditDrawer";
 import { ProductDetailPanel } from "./ProductDetailPanel";
-import { SarthiLensPanel } from "./SarthiLensPanel";
 import { SarthiSavedWorkspacePanel } from "./SarthiSavedWorkspacePanel";
+import { OutcomeScreen } from "./OutcomeScreen";
 
 type Props = {
   buyerId: string;
@@ -50,25 +62,26 @@ type AutoScanState =
   | { status: "ready"; clusterId: string; title: string; listingCount: number; result: CompareResponse }
   | { status: "error"; clusterId: string; title: string; message: string };
 
+type BuyerShopStep = "feed" | "detail" | "saved" | "wishlist" | "orders" | "proofs";
+
 export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ productId?: string }>();
   const routeMode = shopRouteMode(location.pathname);
-  const routeVariantId = useMemo(() => new URLSearchParams(location.search).get("variant"), [location.search]);
+  const routeSearch = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const routeVariantId = routeSearch.get("variant");
   const hydratedSavedRouteRef = useRef<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
   const [wishlistedProduct, setWishlistedProduct] = useState<Product | null>(null);
-  const [fitProfiles, setFitProfiles] = useState<FitProfile[]>([]);
   const [activeFitProfile, setActiveFitProfile] = useState<FitProfile | null>(null);
   const [wishlistRadar, setWishlistRadar] = useState<WishlistRadarEvent | null>(null);
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarError, setRadarError] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-  const [activeExpectationContract, setActiveExpectationContract] = useState<ExpectationContract | null>(null);
   const [auditTraceId, setAuditTraceId] = useState<string | null>(null);
   const [knowledgeGraph, setKnowledgeGraph] = useState<ClusterKnowledgeGraph | null>(null);
   const [graphAnswer, setGraphAnswer] = useState<KnowledgeGraphChatResponse | null>(null);
@@ -81,12 +94,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [decisionLoading, setDecisionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Buyer flow step: "feed" | "detail" | "saved"
-  const [step, setStep] = useState<"feed" | "detail" | "saved">(routeMode);
+  const [step, setStep] = useState<BuyerShopStep>(routeMode);
   
   // Overlay/Sheet visibility
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
   
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
@@ -99,11 +110,9 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setComparison(null);
     setSelectedProductId(null);
     setSelectedVariantId(null);
-    setActiveExpectationContract(null);
     setAuditTraceId(null);
     setAutoScan({ status: "idle" });
     setWishlistedProduct(null);
-    setFitProfiles([]);
     setActiveFitProfile(null);
     setWishlistRadar(null);
     setRadarLoading(false);
@@ -128,7 +137,6 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           setError(feedOutcome.reason instanceof Error ? feedOutcome.reason.message : "Unable to load catalog");
         }
         if (profileOutcome.status === "fulfilled") {
-          setFitProfiles(profileOutcome.value.profiles);
           setActiveFitProfile(profileOutcome.value.active_profile);
         }
       })
@@ -158,6 +166,14 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       setStep("feed");
       return;
     }
+    if (routeMode === "wishlist" || routeMode === "orders") {
+      setStep(routeMode);
+      return;
+    }
+    if (routeMode === "proofs") {
+      setStep("proofs");
+      return;
+    }
     if (!routeProductId || products.length === 0) return;
 
     const routeProduct = products.find((product) => product.product_id === routeProductId);
@@ -185,19 +201,17 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   function handleViewProductDetail(prodId: string, varId?: string | null) {
     setSelectedProductId(prodId);
     setSelectedVariantId(varId ?? null);
-    setActiveExpectationContract(null);
     setStep("detail");
     setCompareSheetOpen(false);
     navigate(`/shop/product/${encodeURIComponent(prodId)}${varId ? `?variant=${encodeURIComponent(varId)}` : ""}`);
   }
 
-  async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean } = {}) {
-    if (options.syncRoute !== false) {
+  async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean; openCompare?: boolean } = {}) {
+    if (options.syncRoute === true) {
       navigate(`/shop/saved/${encodeURIComponent(product.product_id)}`);
     }
     setWishlistedProduct(product);
     setSelectedClusterId(product.cluster_id);
-    setActiveExpectationContract(null);
     setKnowledgeGraph(null);
     setGraphAnswer(null);
     setGraphQuery("");
@@ -254,6 +268,9 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       const result = compareFromDecision(decision);
       setRegretDecision(decision);
       setComparison(result);
+      if (options.openCompare) {
+        setCompareSheetOpen(true);
+      }
       setAutoScan({
         status: "ready",
         clusterId: product.cluster_id,
@@ -273,15 +290,34 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
   }
 
-  async function handleAskDecision(question: string) {
+  async function handleSaveToWishlist(product: Product) {
+    await handleWishlistProduct(product);
+    navigate("/shop/wishlist");
+  }
+
+  async function handleOpenProofForProduct(product: Product) {
+    await handleWishlistProduct(product);
+    openSavedProofLayer(product);
+  }
+
+  async function handleAskDecision(question: string, product = wishlistedProduct) {
     const prompt = question.trim();
-    if (!prompt || !wishlistedProduct) return;
+    if (!prompt) {
+      setError("Ask a simple buying question first.");
+      return;
+    }
+    if (!product) {
+      setError("Open an item before asking Sarthi to check it.");
+      return;
+    }
     setDecisionLoading(true);
     setError(null);
+    setWishlistedProduct(product);
+    setSelectedClusterId(product.cluster_id);
     try {
       const decision = await runRegretFirewall({
         buyer_id: buyerId,
-        product_id: wishlistedProduct.product_id,
+        product_id: product.product_id,
         query: prompt,
         create_missing_proof_request: true
       });
@@ -322,18 +358,32 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     }
   }
 
-  function handleOpenCheckout(variantId: string, contract: ExpectationContract) {
-    setSelectedVariantId(variantId);
-    setActiveExpectationContract(contract);
-    setCheckoutOpen(true);
+  async function handleRetryKnowledgeGraph() {
+    if (!wishlistedProduct) return;
+    setGraphLoading(true);
+    setGraphError(null);
+    try {
+      const graph = await getClusterKnowledgeGraph(buyerId, wishlistedProduct.cluster_id, wishlistedProduct.product_id);
+      setKnowledgeGraph(graph);
+      setGraphQuery((current) => current || graph.chat_suggestions[0] || "");
+    } catch (err) {
+      setGraphError(err instanceof Error ? err.message : "Unable to build evidence map");
+    } finally {
+      setGraphLoading(false);
+    }
   }
 
-function openAutoScanResult(result: CompareResponse) {
-    setComparison(result);
-    setSelectedClusterId(autoScan.status === "ready" ? autoScan.clusterId : activeClusterId);
-    setSelectedProductId(result.selected_product_id);
-    setSelectedVariantId(result.ranking.winner);
-    setCompareSheetOpen(true);
+  function handleOpenCheckout(variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant }) {
+    setSelectedVariantId(variantId);
+    navigate(`/shop/checkout/${encodeURIComponent(item.product.product_id)}/${encodeURIComponent(variantId)}`, {
+      state: { contract, item }
+    });
+  }
+
+  function openSavedProofLayer(product = wishlistedProduct) {
+    if (!product) return;
+    setStep("saved");
+    navigate(`/shop/saved/${encodeURIComponent(product.product_id)}?proof=1`);
   }
 
   return (
@@ -350,28 +400,39 @@ function openAutoScanResult(result: CompareResponse) {
           onCategoryChange={setSelectedCategory}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          autoScan={autoScan}
           wishlistedProduct={wishlistedProduct}
-          activeFitProfile={activeFitProfile}
-          fitProfileCount={fitProfiles.length}
-          knowledgeGraph={knowledgeGraph}
-          graphLoading={graphLoading}
-          graphError={graphError}
-          regretDecision={regretDecision}
-          decisionQuestion={decisionQuestion}
-          decisionLoading={decisionLoading}
-          hasBuyerIntent={Boolean(searchTerm.trim()) || selectedCategory !== "All" || Boolean(wishlistedProduct)}
+          language={language}
           onQuickSearch={setSearchTerm}
           onProductOpen={(product) => handleViewProductDetail(product.product_id, null)}
           onWishlistProduct={handleWishlistProduct}
-          onOpenAutoScan={openAutoScanResult}
-          onOpenGraph={() => setStep("saved")}
-          onDecisionQuestionChange={setDecisionQuestion}
-          onAskDecision={handleAskDecision}
-          onOpenAutoScanProof={(traceId) => {
-            setAuditTraceId(traceId);
-            setAuditDrawerOpen(true);
-          }}
+          onSaveProduct={handleSaveToWishlist}
+          onOpenSavedItem={(product) => openSavedProofLayer(product)}
+          onOpenOrders={() => navigate("/shop/orders")}
+        />
+      ) : step === "wishlist" ? (
+        <WishlistWorkspace
+          buyerId={buyerId}
+          products={products}
+          language={language}
+          onBack={() => navigate("/shop")}
+          onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
+          onCheckTrust={(product) => handleWishlistProduct(product, { openCompare: true })}
+          onOpenProof={handleOpenProofForProduct}
+        />
+      ) : step === "orders" ? (
+        <OrdersWorkspace
+          buyerId={buyerId}
+          language={language}
+          onBack={() => navigate("/shop")}
+          onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
+        />
+      ) : step === "proofs" ? (
+        <ProofsWorkspace
+          buyerId={buyerId}
+          language={language}
+          onBack={() => navigate("/shop")}
+          onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
+          onOpenProductProof={(product) => handleOpenProofForProduct(product)}
         />
       ) : step === "saved" && wishlistedProduct ? (
         <SarthiSavedWorkspacePanel
@@ -392,7 +453,9 @@ function openAutoScanResult(result: CompareResponse) {
           radarLoading={radarLoading}
           radarError={radarError}
           activeFitProfile={activeFitProfile}
+          language={language}
           onBack={() => navigate("/shop")}
+          onOpenProduct={(product, variantId) => handleViewProductDetail(product.product_id, variantId ?? null)}
           onOpenResult={(res) => {
             setComparison(res);
             setCompareSheetOpen(true);
@@ -405,6 +468,7 @@ function openAutoScanResult(result: CompareResponse) {
           onAskDecision={handleAskDecision}
           onQueryChange={setGraphQuery}
           onAskGraph={handleAskKnowledgeGraph}
+          onRetryGraph={handleRetryKnowledgeGraph}
         />
       ) : (
         selectedProductId && (
@@ -432,8 +496,8 @@ function openAutoScanResult(result: CompareResponse) {
           <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-success">Evidence-picked match</span>
-                <h3 className="sheet-title">Listings Resolved</h3>
+                <span className="eyebrow sheet-eyebrow-success">{t(language, "evidencePickedMatch")}</span>
+                <h3 className="sheet-title">{t(language, "listingsResolved")}</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setCompareSheetOpen(false)}>
                 <X size={16} />
@@ -455,44 +519,14 @@ function openAutoScanResult(result: CompareResponse) {
         </div>
       )}
 
-      {/* Screen 4 & 5: Modal Checkout and Outcome loop */}
-      {checkoutOpen && selectedVariantId && (
-        <div className="bottom-sheet-overlay" onClick={() => setCheckoutOpen(false)}>
-          <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
-            <div className="bottom-sheet-header">
-              <div>
-                <span className="eyebrow sheet-eyebrow-secondary">Secure Checkout</span>
-                <h3 className="sheet-title">Offer Sach Check</h3>
-              </div>
-              <button className="bottom-sheet-close" onClick={() => setCheckoutOpen(false)}>
-                <X size={16} />
-              </button>
-            </div>
-            
-            <CheckoutSheet
-              buyerId={buyerId}
-              variantId={selectedVariantId}
-              expectationContract={activeExpectationContract}
-              onOpenAudit={(traceId) => {
-                setAuditTraceId(traceId);
-                setAuditDrawerOpen(true);
-              }}
-              onClose={() => setCheckoutOpen(false)}
-              language={language}
-              experienceMode={experienceMode}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Diagnostic Audit Drawer */}
       {auditDrawerOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setAuditDrawerOpen(false)}>
           <div className="bottom-sheet-content audit-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-primary">Pre-purchase Diagnostic Logs</span>
-                <h3 className="sheet-title">How the score was decided</h3>
+                <span className="eyebrow sheet-eyebrow-primary">{t(language, "prePurchaseDiagnosticLogs")}</span>
+                <h3 className="sheet-title">{t(language, "howScoreWasDecided")}</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setAuditDrawerOpen(false)}>
                 <X size={16} />
@@ -502,6 +536,7 @@ function openAutoScanResult(result: CompareResponse) {
             <AuditDrawer
               traceId={auditTraceId}
               onClose={() => setAuditDrawerOpen(false)}
+              language={language}
             />
           </div>
         </div>
@@ -514,14 +549,14 @@ function openAutoScanResult(result: CompareResponse) {
         >
           <ShieldCheck size={16} />
           <div className="sarthi-toast-content">
-            <span>Saved-product radar is ready.</span>
-            <button
-              type="button"
-              onClick={() => navigate(`/shop/saved/${encodeURIComponent(wishlistedProduct.product_id)}`)}
-              className="sarthi-toast-action"
-            >
-              Open
-            </button>
+            <span>{t(language, "savedRadarReady")}</span>
+              <button
+                type="button"
+                onClick={() => openSavedProofLayer(wishlistedProduct)}
+                className="sarthi-toast-action"
+              >
+              {t(language, "seeProof")}
+              </button>
           </div>
         </div>
       )}
@@ -531,10 +566,10 @@ function openAutoScanResult(result: CompareResponse) {
         <button
           type="button"
           className="sarthi-floating-trigger"
-          onClick={() => navigate(`/shop/saved/${encodeURIComponent(wishlistedProduct.product_id)}`)}
+          onClick={() => openSavedProofLayer(wishlistedProduct)}
         >
           <ShieldCheck size={18} className={autoScan.status === "scanning" ? "spin-icon" : ""} />
-          <span>Radar</span>
+          <span>{t(language, "radar")}</span>
           {autoScan.status === "ready" && (
             <span className="floating-ready-count">1</span>
           )}
@@ -561,10 +596,834 @@ function compareFromDecision(decision: RegretDecisionResponse): CompareResponse 
   };
 }
 
-function shopRouteMode(pathname: string): "feed" | "detail" | "saved" {
+function shopRouteMode(pathname: string): BuyerShopStep {
+  if (pathname.includes("/shop/wishlist")) return "wishlist";
+  if (pathname.includes("/shop/orders")) return "orders";
+  if (pathname.includes("/shop/proofs")) return "proofs";
   if (pathname.includes("/shop/product/")) return "detail";
   if (pathname.includes("/shop/saved/")) return "saved";
   return "feed";
+}
+
+function WishlistWorkspace({
+  buyerId,
+  products,
+  language,
+  onBack,
+  onViewProduct,
+  onCheckTrust,
+  onOpenProof
+}: {
+  buyerId: string;
+  products: Product[];
+  language: LanguageCode;
+  onBack: () => void;
+  onViewProduct: (product: Product) => void;
+  onCheckTrust: (product: Product) => void;
+  onOpenProof: (product: Product) => void;
+}) {
+  const [items, setItems] = useState<BuyerWishlistItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    getBuyerWishlist(buyerId)
+      .then((payload) => {
+        if (active) setItems(payload.items);
+      })
+      .catch((err: Error) => {
+        if (active) setError(err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [buyerId]);
+
+  return (
+    <section className="buyer-workspace-shell">
+      <div className="buyer-workspace-header">
+        <button type="button" onClick={onBack}>
+          {t(language, "shop")}
+        </button>
+        <div>
+          <span className="eyebrow">{t(language, "wishlist")}</span>
+          <h2>{items.length ? `${items.length} ${t(language, "saved")}` : t(language, "wishlist")}</h2>
+        </div>
+      </div>
+
+      {error && <div className="notice error">{error}</div>}
+      {loading ? (
+        <div className="workspace-empty-state">{t(language, "checkingEllipsis")}</div>
+      ) : items.length === 0 ? (
+        <div className="workspace-empty-state">
+          <Heart size={28} />
+          <strong>{t(language, "noWishlistYet")}</strong>
+          <button type="button" onClick={onBack}>{t(language, "shopNow")}</button>
+        </div>
+      ) : (
+        <div className="wishlist-card-grid">
+          {items.map((item) => {
+            const event = item.radar;
+            const savedProduct = item.product
+              ?? event?.candidates.find((candidate) => candidate.is_saved_product)?.product
+              ?? products.find((product) => product.product_id === event?.selected_product_id)
+              ?? event?.candidates[0]?.product;
+            const recommended = event?.candidates.find((candidate) => candidate.is_recommended) ?? event?.candidates[0];
+            if (!savedProduct) return null;
+            const actionProduct = recommended?.product ?? savedProduct;
+            const needsTrustCheck = !event || event.status === "needs_one_check";
+            return (
+              <article key={item.intent.intent_id} className="wishlist-product-card">
+                <div className="wishlist-product-top">
+                  <img
+                    src={productImageSource(savedProduct)}
+                    alt={savedProduct.title}
+                    onError={(e) => { e.currentTarget.src = fallbackProductImage(savedProduct.color_family); }}
+                  />
+                  <div>
+                    <span>{savedProduct.seller_name}</span>
+                    <strong>{savedProduct.title.split("-")[0].trim()}</strong>
+                    <small>Rs {savedProduct.base_price}</small>
+                  </div>
+                  <div className="wishlist-score-pill">
+                    <strong>{event ? Math.floor(event.recommended_score * 100) : "--"}</strong>
+                    <span>/100</span>
+                  </div>
+                </div>
+
+                <div className={`wishlist-status-line ${event?.status ?? "needs_one_check"}`}>
+                  <ShieldCheck size={15} />
+                  <strong>{event?.headline ?? t(language, "trustCheckReady")}</strong>
+                </div>
+
+                {recommended && (
+                  <div className="wishlist-recommendation-mini">
+                    <img
+                      src={productImageSource(recommended.product)}
+                      alt={recommended.product.title}
+                      onError={(e) => { e.currentTarget.src = fallbackProductImage(recommended.product.color_family); }}
+                    />
+                    <div>
+                      <span>{t(language, "bestMatchForYou")}</span>
+                      <strong>{recommended.product.seller_name}</strong>
+                    </div>
+                  </div>
+                )}
+
+                <div className="wishlist-actions">
+                  <button type="button" className="primary" onClick={() => onViewProduct(actionProduct)}>
+                    <Eye size={14} />
+                    {t(language, "viewItem")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => needsTrustCheck ? onCheckTrust(savedProduct) : onOpenProof(savedProduct)}
+                  >
+                    {needsTrustCheck ? <ShieldCheck size={14} /> : <FileCheck2 size={14} />}
+                    {needsTrustCheck ? t(language, "checkTrust") : t(language, "proof")}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OrdersWorkspace({
+  buyerId,
+  language,
+  onBack,
+  onViewProduct
+}: {
+  buyerId: string;
+  language: LanguageCode;
+  onBack: () => void;
+  onViewProduct: (product: Product) => void;
+}) {
+  const [orders, setOrders] = useState<BuyerOrderItem[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [feedbackOrderId, setFeedbackOrderId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const copy = ordersLearningCopy(language);
+  const placedCount = orders.filter(isPlacedOrder).length;
+  const learntCount = orders.filter(isLearntOrder).length;
+
+  useEffect(() => {
+    void loadOrders();
+  }, [buyerId]);
+
+  async function loadOrders() {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await getBuyerOrders(buyerId);
+      setOrders(payload.orders);
+      setPendingCount(payload.pending_feedback);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load orders");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="buyer-workspace-shell">
+      <div className="buyer-workspace-header">
+        <button type="button" onClick={onBack}>
+          {t(language, "shop")}
+        </button>
+        <div>
+          <span className="eyebrow">{t(language, "myOrders")}</span>
+          <h2>{pendingCount ? `${pendingCount} ${t(language, "feedbackPending")}` : t(language, "orders")}</h2>
+        </div>
+      </div>
+
+      {error && <div className="notice error">{error}</div>}
+      {loading ? (
+        <div className="workspace-empty-state">{t(language, "checkingEllipsis")}</div>
+      ) : orders.length === 0 ? (
+        <div className="workspace-empty-state">
+          <PackageCheck size={28} />
+          <strong>{t(language, "noOrdersYet")}</strong>
+          <button type="button" onClick={onBack}>{t(language, "shopNow")}</button>
+        </div>
+      ) : (
+        <>
+          <div className="orders-learning-strip" aria-label={copy.learningStatus}>
+            <span>
+              <PackageCheck size={15} />
+              <b>{placedCount}</b>
+              {copy.placed}
+            </span>
+            <span className={pendingCount > 0 ? "pending" : ""}>
+              <AlertTriangle size={15} />
+              <b>{pendingCount}</b>
+              {copy.feedback}
+            </span>
+            <span className="learnt">
+              <ShieldCheck size={15} />
+              <b>{learntCount}</b>
+              {copy.learnt}
+            </span>
+          </div>
+
+          <div className="orders-card-list">
+            {orders.map((order) => (
+              <article key={order.order_id} className={`order-product-card ${order.can_submit_outcome ? "pending" : ""}`}>
+                <div className="order-product-main">
+                  <img
+                    src={productImageSource(order.product)}
+                    alt={order.product.title}
+                    onError={(e) => { e.currentTarget.src = fallbackProductImage(order.product.color_family); }}
+                  />
+                  <div>
+                    <span>{new Date(order.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                    <strong>{order.product.title.split("-")[0].trim()}</strong>
+                    <small>{order.product.seller_name} | Size {order.variant.size} | Rs {order.variant.current_price}</small>
+                  </div>
+                  <div className={`order-status-pill ${orderStatusTone(order)}`}>
+                    {order.can_submit_outcome ? <PackageCheck size={14} /> : order.status === "returned" ? <RotateCcw size={14} /> : <ShieldCheck size={14} />}
+                    <span>{orderStatusLabel(order, language)}</span>
+                  </div>
+                </div>
+
+                {order.return_reason && (
+                  <div className="order-return-reason">
+                    <AlertTriangle size={14} />
+                    <span>{labelize(order.return_reason)}</span>
+                  </div>
+                )}
+
+                {order.payment_mode && (
+                  <div className={`order-payment-reward ${order.payment_mode}`}>
+                    {order.payment_mode === "prepaid" ? <Gift size={14} /> : <ShieldCheck size={14} />}
+                    <span>{orderPaymentRewardLine(order, language)}</span>
+                  </div>
+                )}
+
+                {isPlacedOrder(order) && (
+                  <div className="order-next-step-line">
+                    <PackageCheck size={14} />
+                    <span>{copy.feedbackAfterDelivery}</span>
+                  </div>
+                )}
+
+                {feedbackOrderId === order.order_id ? (
+                  <div className="order-feedback-panel">
+                    <OutcomeScreen
+                      buyerId={buyerId}
+                      variantId={order.variant_id}
+                      contractId={order.contract_id}
+                      language={language}
+                      buyingForSomeoneElse={Boolean(order.buying_for_someone_else)}
+                      wearerLabel={order.wearer_label ?? undefined}
+                      onClose={() => {
+                        setFeedbackOrderId(null);
+                        void loadOrders();
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="order-actions">
+                    <button type="button" onClick={() => onViewProduct(order.product)}>
+                      <Eye size={14} />
+                      {t(language, "viewItem")}
+                    </button>
+                    {order.can_submit_outcome && (
+                      <button type="button" className="primary" onClick={() => setFeedbackOrderId(order.order_id)}>
+                        <PackageCheck size={14} />
+                        {t(language, "giveFeedback")}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function isPlacedOrder(order: BuyerOrderItem) {
+  return order.status === "placed" || order.status === "placed_pending_feedback";
+}
+
+function isLearntOrder(order: BuyerOrderItem) {
+  return order.status === "delivered_kept" || order.status === "returned" || order.status === "exchanged" || order.status === "rto";
+}
+
+function ordersLearningCopy(language: LanguageCode) {
+  if (language === "hindi" || language === "hinglish") {
+    return {
+      learningStatus: "Order learning status",
+      placed: "placed",
+      feedback: "feedback due",
+      learnt: "learnt",
+      feedbackAfterDelivery: "Delivery ke baad feedback open hoga. Sarthi return aur fit learning tab update karega."
+    };
+  }
+  return {
+    learningStatus: "Order learning status",
+    placed: "placed",
+    feedback: "feedback due",
+    learnt: "learnt",
+    feedbackAfterDelivery: "Feedback opens after delivery. Sarthi updates return and fit learning then."
+  };
+}
+
+function orderPaymentRewardLine(order: BuyerOrderItem, language: LanguageCode) {
+  const points = order.payment_reward_points ?? 0;
+  const value = order.payment_reward_value_rupees ?? 0;
+  const savings = order.payment_offer_savings_rupees ?? 0;
+  if (order.payment_mode === "prepaid" && points > 0) {
+    if (language === "hindi") {
+      return `${points} सार्थी पॉइंट्स खुले - Rs ${value} अगले ऑर्डर में, कुल फायदा Rs ${savings}`;
+    }
+    if (language === "hinglish") {
+      return `${points} Sarthi points unlocked - Rs ${value} next order value, total benefit Rs ${savings}`;
+    }
+    return `${points} Sarthi points unlocked - Rs ${value} next order value, Rs ${savings} total benefit`;
+  }
+  if (order.payment_mode === "prepaid") {
+    return language === "hindi"
+      ? "Prepaid चुना गया - डिलीवरी के बाद रिवार्ड अपडेट होगा।"
+      : language === "hinglish"
+        ? "Prepaid selected - reward delivery ke baad update hoga."
+        : "Prepaid selected - reward updates after delivery.";
+  }
+  return language === "hindi"
+    ? "COD चुना गया - सार्थी ने भरोसा पहले रखा।"
+    : language === "hinglish"
+      ? "COD selected - Sarthi ne trust ko pehle rakha."
+      : "COD selected - Sarthi kept trust first.";
+}
+
+function ProofsWorkspace({
+  buyerId,
+  language,
+  onBack,
+  onViewProduct,
+  onOpenProductProof
+}: {
+  buyerId: string;
+  language: LanguageCode;
+  onBack: () => void;
+  onViewProduct: (product: Product) => void;
+  onOpenProductProof: (product: Product) => void;
+}) {
+  const [items, setItems] = useState<BuyerProofLedgerItem[]>([]);
+  const [summary, setSummary] = useState({
+    waiting_seller: 0,
+    admin_review: 0,
+    approved: 0,
+    needs_more_proof: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const totalOpen = summary.waiting_seller + summary.admin_review + summary.needs_more_proof;
+  const totalLift = items.reduce((sum, item) => sum + item.trust_impact.lift_points, 0);
+  const copy = proofLedgerCopy(language);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    getBuyerProofs(buyerId)
+      .then((payload) => {
+        if (!active) return;
+        setItems(payload.items);
+        setSummary(payload.summary);
+      })
+      .catch((err: Error) => {
+        if (active) setError(err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [buyerId]);
+
+  return (
+    <section className="buyer-workspace-shell proof-ledger-shell">
+      <div className="buyer-workspace-header">
+        <button type="button" onClick={onBack}>
+          {t(language, "shop")}
+        </button>
+        <div>
+          <span className="eyebrow">{copy.proofTracker}</span>
+          <h2>{items.length ? copy.proofsYouAskedFor : copy.myProofChecks}</h2>
+          <p>{copy.trackerSummary}</p>
+        </div>
+      </div>
+
+      <div className="proof-tracker-hero" aria-label="Proof check summary">
+        <div className={totalOpen > 0 ? "needs-action" : "all-clear"}>
+          <span>{copy.openChecks}</span>
+          <strong>{totalOpen}</strong>
+          <small>{copy.sellerOrAdminPending}</small>
+        </div>
+        <div className="approved">
+          <span>{copy.approvedProof}</span>
+          <strong>{summary.approved}</strong>
+          <small>{copy.canHelpNow}</small>
+        </div>
+        <div className="lift">
+          <span>{copy.possibleTrustLift}</span>
+          <strong>+{totalLift}</strong>
+          <small>{copy.estimatedPoints}</small>
+        </div>
+      </div>
+
+      {error && <div className="notice error">{error}</div>}
+      {loading ? (
+        <div className="workspace-empty-state">{copy.checkingProofStatus}</div>
+      ) : items.length === 0 ? (
+        <div className="workspace-empty-state">
+          <ClipboardCheck size={28} />
+          <strong>{copy.noProofChecks}</strong>
+          <p>{copy.askQuestionOrSave}</p>
+          <button type="button" onClick={onBack}>{t(language, "shopNow")}</button>
+        </div>
+      ) : (
+        <div className="proof-ledger-list proof-tracker-list">
+          {items.map((item) => (
+            <article key={item.request.request_id} className={`proof-ledger-card proof-tracker-card ${item.status}`}>
+              <div className="proof-card-topline">
+                <div className="proof-ledger-product">
+                  <img
+                    src={productImageSource(item.product)}
+                    alt={item.product.title}
+                    onError={(e) => { e.currentTarget.src = fallbackProductImage(item.product.color_family); }}
+                  />
+                  <div>
+                    <span>{item.product.seller_name}</span>
+                    <strong>{item.product.title.split("-")[0].trim()}</strong>
+                    <small>
+                      {proofAttributeLabel(item.request.attribute, language)} {copy.proof} - {item.request.request_count} {copy.buyerAsks}
+                    </small>
+                  </div>
+                </div>
+                <span className={`proof-decision-pill ${item.status}`}>
+                  {proofLedgerStatusLabel(item.status, language)}
+                </span>
+              </div>
+
+              <div className="proof-safe-action">
+                <div>
+                  <span>{copy.nextSafeStep}</span>
+                  <strong>{proofNextSafeAction(item.status, language)}</strong>
+                  <p>{proofLedgerSummary(item.status, item.trust_impact.lift_points, language)}</p>
+                </div>
+                <div className={`proof-trust-score ${item.trust_impact.lift_points > 0 ? "lift" : "waiting"}`}>
+                  <span>{copy.trustScore}</span>
+                  <strong>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</strong>
+                  <em>+{item.trust_impact.lift_points} pts</em>
+                </div>
+              </div>
+
+              <details className="proof-ledger-more">
+                <summary>{copy.details}: {proofQualityVerdict(item.proof_quality.score, item.status, language)}</summary>
+                <div className="proof-quality-card">
+                  <div className="proof-quality-head">
+                    <span>{copy.proofQuality}</span>
+                    <strong>{item.proof_quality.score}/100</strong>
+                  </div>
+                  <div className="proof-quality-checks">
+                    {item.proof_quality.checks.slice(0, 3).map((check) => (
+                      <span key={check.key} className={check.passed ? "pass" : "wait"}>
+                        {check.passed ? "OK" : "!"} {proofQualityCheckLabel(check.key, language)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="proof-ledger-timeline">
+                  {item.timeline.map((step, index) => (
+                    <div key={step.label} className={step.done ? "done" : ""}>
+                      <span />
+                      <strong>{proofTimelineLabel(index, step.label, language)}</strong>
+                      <small>{step.at ? new Date(step.at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : copy.pending}</small>
+                    </div>
+                  ))}
+                </div>
+
+                {item.proof_asset && (
+                  <div className="proof-ledger-asset">
+                    <strong>{item.proof_asset.title}</strong>
+                  <p>{item.proof_asset.description}</p>
+                </div>
+              )}
+              </details>
+
+              <div className="proof-ledger-actions">
+                <button type="button" onClick={() => onViewProduct(item.product)}>
+                  {t(language, "viewItem")}
+                </button>
+                <button type="button" className="primary" onClick={() => onOpenProductProof(item.product)}>
+                  {copy.seeProof}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type ProofLedgerCopyKey =
+  | "proofTracker"
+  | "proofsYouAskedFor"
+  | "myProofChecks"
+  | "trackerSummary"
+  | "openChecks"
+  | "sellerOrAdminPending"
+  | "approvedProof"
+  | "canHelpNow"
+  | "possibleTrustLift"
+  | "estimatedPoints"
+  | "checkingProofStatus"
+  | "noProofChecks"
+  | "askQuestionOrSave"
+  | "proof"
+  | "buyerAsks"
+  | "trustImpact"
+  | "trustScore"
+  | "proofQuality"
+  | "pending"
+  | "nextSafeStep"
+  | "details"
+  | "seeProof"
+  | "proofApproved"
+  | "adminChecking"
+  | "needsClearerProof"
+  | "waitingSeller"
+  | "safeToUseProof"
+  | "waitForReviewAction"
+  | "askClearerProofAction"
+  | "waitForSellerAction"
+  | "proofCanHelp"
+  | "sellerResponded"
+  | "currentProofWeak"
+  | "sellerNotAnswered"
+  | "trustCanImprove"
+  | "trustWaits"
+  | "strongProof"
+  | "usefulButPending"
+  | "weakProof"
+  | "noProofYet"
+  | "buyerAsked"
+  | "sellerSubmitted"
+  | "adminApproved";
+
+const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>> = {
+  english: {
+    proofTracker: "Proof tracker",
+    proofsYouAskedFor: "Proofs you asked for",
+    myProofChecks: "My proof checks",
+    trackerSummary: "Track seller proof, admin review, and how much trust can improve.",
+    openChecks: "Open checks",
+    sellerOrAdminPending: "Seller or admin action pending",
+    approvedProof: "Approved proof",
+    canHelpNow: "Can help your decision now",
+    possibleTrustLift: "Possible trust lift",
+    estimatedPoints: "Estimated points from proof checks",
+    checkingProofStatus: "Checking proof status...",
+    noProofChecks: "No proof checks yet",
+    askQuestionOrSave: "Ask a product question or save an item. Sarthi will track seller proof here.",
+    proof: "proof",
+    buyerAsks: "buyer asks",
+    trustImpact: "Trust impact",
+    trustScore: "Trust score",
+    proofQuality: "Proof quality",
+    pending: "Pending",
+    nextSafeStep: "Next safe step",
+    details: "Details",
+    seeProof: "See proof",
+    proofApproved: "Proof approved",
+    adminChecking: "Admin checking",
+    needsClearerProof: "Need clearer proof",
+    waitingSeller: "Waiting for seller",
+    safeToUseProof: "Use this proof before checkout.",
+    waitForReviewAction: "Wait for admin review before trusting it.",
+    askClearerProofAction: "Ask seller for clearer proof.",
+    waitForSellerAction: "No proof yet. Prefer COD or another item.",
+    proofCanHelp: "This proof can help you decide now.",
+    sellerResponded: "Seller replied. Reviewer is checking it before trust improves.",
+    currentProofWeak: "Current proof was not clear enough. Seller must improve it.",
+    sellerNotAnswered: "Seller has not answered this proof request yet.",
+    trustCanImprove: "{attribute} proof can improve trust by {lift} points.",
+    trustWaits: "Trust lift waits until useful proof is approved.",
+    strongProof: "Strong proof",
+    usefulButPending: "Useful, but still pending",
+    weakProof: "Weak proof",
+    noProofYet: "No proof yet",
+    buyerAsked: "Buyer asked",
+    sellerSubmitted: "Seller submitted",
+    adminApproved: "Admin approved"
+  },
+  hindi: {
+    proofTracker: "Proof tracker",
+    proofsYouAskedFor: "Aapke proof checks",
+    myProofChecks: "Mere proof checks",
+    trackerSummary: "Seller proof, admin review, aur trust improvement yahan track hota hai.",
+    openChecks: "Open checks",
+    sellerOrAdminPending: "Seller ya admin action pending",
+    approvedProof: "Approved proof",
+    canHelpNow: "Ab decision me help karega",
+    possibleTrustLift: "Trust lift",
+    estimatedPoints: "Proof checks se estimated points",
+    checkingProofStatus: "Proof status check ho raha hai...",
+    noProofChecks: "Abhi proof check nahi hai",
+    askQuestionOrSave: "Product question poochho ya item save karo. Sarthi seller proof yahan track karega.",
+    proof: "proof",
+    buyerAsks: "buyer asks",
+    trustImpact: "Trust impact",
+    trustScore: "Trust score",
+    proofQuality: "Proof quality",
+    pending: "Pending",
+    nextSafeStep: "Next safe step",
+    details: "Details",
+    seeProof: "See proof",
+    proofApproved: "Proof approved",
+    adminChecking: "Admin check kar raha hai",
+    needsClearerProof: "Clearer proof chahiye",
+    waitingSeller: "Seller ka wait",
+    safeToUseProof: "Checkout se pehle ye proof dekh lo.",
+    waitForReviewAction: "Admin review ke baad hi is proof par bharosa karo.",
+    askClearerProofAction: "Seller se clearer proof maango.",
+    waitForSellerAction: "Abhi proof nahi hai. COD ya doosra item safer hai.",
+    proofCanHelp: "Ye proof ab decision me help kar sakta hai.",
+    sellerResponded: "Seller ne reply kiya. Reviewer check kar raha hai.",
+    currentProofWeak: "Current proof clear nahi tha. Seller ko improve karna hoga.",
+    sellerNotAnswered: "Seller ne abhi proof request ka answer nahi diya.",
+    trustCanImprove: "{attribute} proof se trust {lift} points improve ho sakta hai.",
+    trustWaits: "Useful proof approve hone tak trust lift wait karega.",
+    strongProof: "Strong proof",
+    usefulButPending: "Useful, par pending",
+    weakProof: "Weak proof",
+    noProofYet: "Abhi proof nahi",
+    buyerAsked: "Buyer asked",
+    sellerSubmitted: "Seller submitted",
+    adminApproved: "Admin approved"
+  },
+  hinglish: {
+    proofTracker: "Proof tracker",
+    proofsYouAskedFor: "Proofs you asked for",
+    myProofChecks: "My proof checks",
+    trackerSummary: "Seller proof, admin review, aur trust improvement yahan track hota hai.",
+    openChecks: "Open checks",
+    sellerOrAdminPending: "Seller ya admin action pending",
+    approvedProof: "Approved proof",
+    canHelpNow: "Decision me ab help karega",
+    possibleTrustLift: "Possible trust lift",
+    estimatedPoints: "Estimated points from proof checks",
+    checkingProofStatus: "Proof status check ho raha hai...",
+    noProofChecks: "Abhi proof checks nahi hain",
+    askQuestionOrSave: "Product question poochho ya item save karo. Sarthi seller proof yahan track karega.",
+    proof: "proof",
+    buyerAsks: "buyer asks",
+    trustImpact: "Trust impact",
+    trustScore: "Trust score",
+    proofQuality: "Proof quality",
+    pending: "Pending",
+    nextSafeStep: "Next safe step",
+    details: "Details",
+    seeProof: "See proof",
+    proofApproved: "Proof approved",
+    adminChecking: "Admin checking",
+    needsClearerProof: "Clearer proof chahiye",
+    waitingSeller: "Waiting for seller",
+    safeToUseProof: "Checkout se pehle ye proof dekh lo.",
+    waitForReviewAction: "Admin review ke baad hi is proof par bharosa karo.",
+    askClearerProofAction: "Seller se clearer proof maango.",
+    waitForSellerAction: "Abhi proof nahi hai. COD ya doosra item safer hai.",
+    proofCanHelp: "Ye proof decision me help kar sakta hai.",
+    sellerResponded: "Seller replied. Reviewer check kar raha hai.",
+    currentProofWeak: "Current proof clear nahi tha. Seller must improve it.",
+    sellerNotAnswered: "Seller ne abhi answer nahi diya.",
+    trustCanImprove: "{attribute} proof trust ko {lift} points improve kar sakta hai.",
+    trustWaits: "Useful proof approve hone tak trust lift wait karega.",
+    strongProof: "Strong proof",
+    usefulButPending: "Useful, but pending",
+    weakProof: "Weak proof",
+    noProofYet: "No proof yet",
+    buyerAsked: "Buyer asked",
+    sellerSubmitted: "Seller submitted",
+    adminApproved: "Admin approved"
+  }
+};
+
+const PROOF_ATTRIBUTE_LABELS: Record<LanguageCode, Record<string, string>> = {
+  english: {
+    transparency: "Transparency",
+    fabric: "Fabric",
+    color: "Color",
+    size: "Size",
+    packaging: "Packaging",
+    offer: "Offer"
+  },
+  hindi: {
+    transparency: "Transparency",
+    fabric: "Fabric",
+    color: "Color",
+    size: "Size",
+    packaging: "Packaging",
+    offer: "Offer"
+  },
+  hinglish: {
+    transparency: "Transparency",
+    fabric: "Fabric",
+    color: "Color",
+    size: "Size",
+    packaging: "Packaging",
+    offer: "Offer"
+  }
+};
+
+const PROOF_QUALITY_CHECKS: Record<LanguageCode, Record<string, string>> = {
+  english: {
+    asset_present: "Proof file added",
+    matches_attribute: "Matches this doubt",
+    clear_description: "Clear explanation",
+    reviewed: "Reviewer checked"
+  },
+  hindi: {
+    asset_present: "Proof file added",
+    matches_attribute: "Same doubt ka proof",
+    clear_description: "Clear explanation",
+    reviewed: "Reviewer checked"
+  },
+  hinglish: {
+    asset_present: "Proof file added",
+    matches_attribute: "Same doubt ka proof",
+    clear_description: "Clear explanation",
+    reviewed: "Reviewer checked"
+  }
+};
+
+function proofLedgerCopy(language: LanguageCode) {
+  return PROOF_LEDGER_COPY[language] ?? PROOF_LEDGER_COPY.english;
+}
+
+function proofAttributeLabel(attribute: string, language: LanguageCode) {
+  return PROOF_ATTRIBUTE_LABELS[language]?.[attribute] ?? labelize(attribute);
+}
+
+function proofQualityCheckLabel(key: string, language: LanguageCode) {
+  return PROOF_QUALITY_CHECKS[language]?.[key] ?? labelize(key);
+}
+
+function proofLedgerStatusLabel(status: BuyerProofLedgerItem["status"], language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved") return copy.proofApproved;
+  if (status === "admin_review") return copy.adminChecking;
+  if (status === "needs_more_proof") return copy.needsClearerProof;
+  return copy.waitingSeller;
+}
+
+function proofLedgerSummary(status: BuyerProofLedgerItem["status"], liftPoints: number, language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved") return `${copy.proofCanHelp} +${liftPoints}`;
+  if (status === "admin_review") return copy.sellerResponded;
+  if (status === "needs_more_proof") return copy.currentProofWeak;
+  return copy.sellerNotAnswered;
+}
+
+function proofNextSafeAction(status: BuyerProofLedgerItem["status"], language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved") return copy.safeToUseProof;
+  if (status === "admin_review") return copy.waitForReviewAction;
+  if (status === "needs_more_proof") return copy.askClearerProofAction;
+  return copy.waitForSellerAction;
+}
+
+function proofQualityVerdict(score: number, status: BuyerProofLedgerItem["status"], language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (status === "approved" || score >= 82) return copy.strongProof;
+  if (score >= 55) return copy.usefulButPending;
+  if (score > 0) return copy.weakProof;
+  return copy.noProofYet;
+}
+
+function proofTimelineLabel(index: number, fallback: string, language: LanguageCode) {
+  const copy = proofLedgerCopy(language);
+  if (index === 0) return copy.buyerAsked;
+  if (index === 1) return copy.sellerSubmitted;
+  if (index === 2) return copy.adminApproved;
+  return fallback;
+}
+
+function orderStatusLabel(order: BuyerOrderItem, language: LanguageCode) {
+  if (order.status === "placed" || order.status === "placed_pending_feedback") return t(language, "orderPlaced");
+  if (order.can_submit_outcome || order.status === "delivered_needs_feedback") return t(language, "deliveredPending");
+  if (order.status === "delivered_kept") return t(language, "keptIt");
+  if (order.status === "returned") return t(language, "returnedIt");
+  if (order.status === "rto") return "RTO";
+  if (order.status === "exchanged") return t(language, "exchanged");
+  return labelize(order.status);
+}
+
+function orderStatusTone(order: BuyerOrderItem) {
+  if (order.status === "placed" || order.status === "placed_pending_feedback") return "watch";
+  if (order.can_submit_outcome || order.status === "delivered_needs_feedback") return "pending";
+  if (order.status === "returned") return "returned";
+  if (order.status === "rto") return "watch";
+  return "kept";
 }
 
 // Marketplace Feed Component (Responsive Grid view)
@@ -576,25 +1435,14 @@ function MarketplaceHome({
   onCategoryChange,
   searchTerm,
   onSearchChange,
-  autoScan,
   wishlistedProduct,
-  activeFitProfile,
-  fitProfileCount,
-  knowledgeGraph,
-  graphLoading,
-  graphError,
-  regretDecision,
-  decisionQuestion,
-  decisionLoading,
-  hasBuyerIntent,
+  language,
   onQuickSearch,
   onProductOpen,
   onWishlistProduct,
-  onOpenAutoScan,
-  onOpenGraph,
-  onDecisionQuestionChange,
-  onAskDecision,
-  onOpenAutoScanProof
+  onSaveProduct,
+  onOpenSavedItem,
+  onOpenOrders
 }: {
   products: Product[];
   allProducts: Product[];
@@ -603,200 +1451,210 @@ function MarketplaceHome({
   onCategoryChange: (category: string) => void;
   searchTerm: string;
   onSearchChange: (value: string) => void;
-  autoScan: AutoScanState;
   wishlistedProduct: Product | null;
-  activeFitProfile: FitProfile | null;
-  fitProfileCount: number;
-  knowledgeGraph: ClusterKnowledgeGraph | null;
-  graphLoading: boolean;
-  graphError: string | null;
-  regretDecision: RegretDecisionResponse | null;
-  decisionQuestion: string;
-  decisionLoading: boolean;
-  hasBuyerIntent: boolean;
+  language: LanguageCode;
   onQuickSearch: (value: string) => void;
   onProductOpen: (product: Product) => void;
-  onWishlistProduct: (product: Product) => void;
-  onOpenAutoScan: (result: CompareResponse) => void;
-  onOpenGraph: () => void;
-  onDecisionQuestionChange: (value: string) => void;
-  onAskDecision: (question: string) => void;
-  onOpenAutoScanProof: (traceId: string) => void;
+  onWishlistProduct: (product: Product, options?: { openCompare?: boolean }) => void;
+  onSaveProduct: (product: Product) => void;
+  onOpenSavedItem: (product: Product) => void;
+  onOpenOrders: () => void;
 }) {
-  const quickSearches = ["cotton kurti", "kurta set", "office palazzo", "work bag"];
-  const savedSimilarProducts = wishlistedProduct
-    ? clusterProducts(allProducts, wishlistedProduct.cluster_id).slice(0, 4)
-    : [];
+  const quickSearches = [
+    { label: t(language, "quickSearchCottonKurti"), value: "cotton kurti" },
+    { label: t(language, "quickSearchKurtaSet"), value: "kurta set" },
+    { label: t(language, "quickSearchOfficePalazzo"), value: "office palazzo" },
+    { label: t(language, "quickSearchWorkBag"), value: "work bag" }
+  ];
+  const visibleCategories = categories.slice(0, 7);
   const possibleComparableCount = new Set(
     products.filter((product) => product.is_sarthi_eligible).map((product) => product.cluster_id)
   ).size;
+  const safeProductCount = products.filter((product) => product.buyer_trust?.can_recommend).length;
+  const proofGapCount = products.filter((product) =>
+    (product.buyer_trust?.open_proof_count ?? 0) > 0 || (product.buyer_trust?.missing_data?.length ?? 0) > 0
+  ).length;
+  const agentStartProduct = products.find((product) => product.is_sarthi_eligible && product.buyer_trust?.can_recommend)
+    ?? products.find((product) => product.is_sarthi_eligible)
+    ?? products[0]
+    ?? null;
   const trimmedSearch = searchTerm.trim();
   const shelfTitle = trimmedSearch
-    ? `Results for "${trimmedSearch}"`
+    ? `${t(language, "resultsFor")} "${trimmedSearch}"`
     : selectedCategory !== "All"
-      ? `${selectedCategory} products`
-      : "Popular products";
-  const sarthiNudgeCopy = hasBuyerIntent
-    ? `${possibleComparableCount} product groups are ready for trust check.`
-    : "";
+      ? `${selectedCategory} ${t(language, "products")}`
+      : t(language, "popularProducts");
 
   return (
     <div className="marketplace-home buyer-shop-shell">
-      <section className="buyer-shop-hero" aria-labelledby="buyer-shop-title">
-        <div className="buyer-shop-copy">
-          <span className="eyebrow">Catalog</span>
-          <h2 id="buyer-shop-title">Find. Check. Buy safely.</h2>
-          <p>
-            Seller, size, returns, price and proof checked before payment.
-          </p>
-        </div>
-        <div className="shop-trust-row" aria-label="Sarthi trust checks">
-          <span><ShieldCheck size={14} /> Seller proof</span>
-          <span><Ruler size={14} /> {activeFitProfile ? `${activeFitProfile.label} fit` : "Size fit"}</span>
-          <span><AlertTriangle size={14} /> Return risk</span>
-        </div>
-      </section>
-
-      <section className="shop-search-card" aria-label="Search catalog">
-        <div className="shop-search-input">
-          <Search size={18} />
-          <input
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search product or seller"
-          />
-        </div>
-
-        <div className="quick-search-row" aria-label="Quick searches">
-          <span>Popular</span>
-          <div>
-            {quickSearches.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => onQuickSearch(item)}
-              >
-                {item}
-              </button>
-            ))}
+      <section className="marketplace-toolbar" aria-label={t(language, "searchCatalog")}>
+        <div className="marketplace-top-row">
+          <div className="marketplace-location">
+            <MapPin size={16} />
+            <div>
+              <span>{t(language, "deliverTo")}</span>
+              <strong>{t(language, "buyerHome")}</strong>
+            </div>
           </div>
+          <label className="marketplace-search-bar">
+            <Search size={18} />
+            <input
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder={t(language, "searchProductOrSeller")}
+            />
+          </label>
+          <button className="marketplace-cart-button" type="button" aria-label={t(language, "myOrders")} onClick={onOpenOrders}>
+            <ShoppingCart size={17} />
+            <span>{t(language, "orders")}</span>
+          </button>
         </div>
 
-        <div className="category-chip-row" aria-label="Product categories">
-          {categories.map((cat) => (
+        <div className="marketplace-category-row" aria-label={t(language, "productCategories")}>
+          <span>{t(language, "allCategories")}</span>
+          {visibleCategories.map((cat) => (
             <button
               key={cat}
               type="button"
               onClick={() => onCategoryChange(cat)}
               className={cat === selectedCategory ? "active" : ""}
             >
-              {cat}
+              {cat === "All" ? t(language, "all") : cat}
+            </button>
+          ))}
+        </div>
+        <div className="marketplace-quick-row" aria-label={t(language, "quickSearches")}>
+          {quickSearches.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => onQuickSearch(item.value)}
+              className={item.value === trimmedSearch.toLowerCase() ? "active" : ""}
+            >
+              {item.label}
             </button>
           ))}
         </div>
       </section>
 
-      {(hasBuyerIntent || wishlistedProduct) && (
-        <div className="sarthi-nudge-strip" aria-live="polite">
-          <span className="sarthi-nudge-icon">
-            <ShieldCheck size={17} />
-          </span>
-          <div>
-            <strong>{wishlistedProduct ? "Trust check ready" : "Save to check trust"}</strong>
-            <p>
-              {wishlistedProduct
-                ? `${wishlistedProduct.title.split("-")[0].trim()} is ready.`
-                : sarthiNudgeCopy}
-              {activeFitProfile ? ` Fit context: ${activeFitProfile.label}.` : ""}
-            </p>
-          </div>
-          <span>{fitProfileCount ? `${fitProfileCount} profiles` : `${possibleComparableCount} groups`}</span>
-        </div>
-      )}
+      <BuyerAgentPlan
+        productCount={products.length}
+        safeProductCount={safeProductCount}
+        proofGapCount={proofGapCount}
+        savedProduct={wishlistedProduct}
+        startProduct={agentStartProduct}
+        language={language}
+        onStartSearch={() => onQuickSearch("cotton kurti")}
+        onRunCheck={(product) => onWishlistProduct(product, { openCompare: true })}
+        onOpenSavedItem={onOpenSavedItem}
+      />
+
+      <div className="marketplace-trust-strip" aria-live="polite">
+        <span><ShieldCheck size={15} /> {t(language, "sarthiTrustOn")}</span>
+        <strong>{wishlistedProduct ? t(language, "trustCheckReady") : feedTrustStripMessage(possibleComparableCount, language)}</strong>
+      </div>
 
       <div className="shop-section-heading">
         <div>
-          <span className="eyebrow">Catalog</span>
           <h3>{shelfTitle}</h3>
         </div>
-        <span>{products.length} options</span>
+        <span>{products.length} {t(language, "options")}</span>
       </div>
 
       {products.length > 0 && (
         <div className="web-product-grid">
           {products.map((p) => {
-            const strikePrice = Math.round(p.base_price * 1.35);
             const isSaved = wishlistedProduct?.product_id === p.product_id;
+            const trustBadge = productTrustBadge(p, isSaved, allProducts, language);
             return (
               <article
                 key={p.product_id}
                 className={`buyer-product-card ${isSaved ? "saved" : ""}`}
               >
                 <div className="buyer-product-image">
-                  <img
-                    src={p.image_url || fallbackProductImage(p.color_family)}
-                    alt={p.title}
-                    onError={(e) => { e.currentTarget.src = fallbackProductImage(p.color_family); }}
-                  />
-                  {p.commerce_badge && (
-                    <span className="product-badge commerce">{p.commerce_badge}</span>
-                  )}
-                  {p.is_sarthi_eligible ? (
-                    <span className="product-badge mapped">Checkable</span>
-                  ) : (
-                    <span className="product-badge catalog">Catalog only</span>
-                  )}
+                  <button
+                    type="button"
+                    className="buyer-product-open-area"
+                    onClick={() => onProductOpen(p)}
+                    aria-label={`${t(language, "view")} ${p.title}`}
+                  >
+                    <img
+                      src={productImageSource(p)}
+                      alt={p.title}
+                      onError={(e) => { e.currentTarget.src = fallbackProductImage(p.color_family); }}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className={`product-trust-badge ${trustBadge.tone}`}
+                    onClick={() => {
+                      if (trustBadge.action === "check") {
+                        void onWishlistProduct(p, { openCompare: true });
+                      } else {
+                        onProductOpen(p);
+                      }
+                    }}
+                    title={t(language, "tapTrustBadge")}
+                  >
+                    {isSaved ? <BookmarkCheck size={13} /> : trustBadge.tone === "proof" ? <FileCheck2 size={13} /> : trustBadge.tone === "watch" ? <AlertTriangle size={13} /> : <ShieldCheck size={13} />}
+                    <span>{trustBadge.label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`buyer-save-icon ${isSaved ? "saved" : ""}`}
+                    onClick={() => void onSaveProduct(p)}
+                    aria-label={isSaved ? t(language, "saved") : t(language, "saveItem")}
+                  >
+                    <Heart size={16} />
+                  </button>
                 </div>
-                <div className="buyer-product-body">
-                  <strong className="buyer-product-title">
-                    {p.title.split("-")[0].trim()}
-                  </strong>
-                  <div className="buyer-product-seller-row">
+                  <div className="buyer-product-body">
+                  <div className="buyer-card-kicker">
                     <span>{p.seller_name}</span>
-                    {p.is_sarthi_eligible ? (
-                      <strong>{clusterListingCount(allProducts, p.cluster_id)} mapped</strong>
-                    ) : null}
+                    <span>{p.rating.toFixed(1)} ({p.rating_count})</span>
                   </div>
-
-                  <div className="product-rating-row">
-                    <span>
-                      {p.rating.toFixed(1)}
-                      <Star size={9} fill="currentColor" />
-                    </span>
-                    <small>{p.rating_count.toLocaleString("en-IN")} reviews</small>
-                  </div>
-
+                  <button
+                    type="button"
+                    className="buyer-product-title"
+                    onClick={() => onProductOpen(p)}
+                  >
+                    {p.title.split("-")[0].trim()}
+                  </button>
                   <div className="product-price-row">
                     <strong>Rs {p.base_price}</strong>
-                    <span>Rs {strikePrice}</span>
-                    <small>35% off</small>
+                    {p.commerce_badge && <span>{p.commerce_badge}</span>}
                   </div>
-
-                  <div className="product-delivery-row">
-                    <Truck size={12} />
-                    <span>{p.delivery_text || "Free delivery"}</span>
+                  <div className="buyer-delivery-row">
+                    <PackageCheck size={12} />
+                    <span>{p.delivery_text}</span>
                   </div>
-
-                  <div className="buyer-product-actions">
+                  <div className={`product-trust-phrase ${trustBadge.tone}`}>
+                    {trustBadge.tone === "safe" ? <ShieldCheck size={13} /> : <AlertTriangle size={13} />}
+                    <span>{trustBadge.phrase}</span>
+                  </div>
+                  <div className="buyer-product-actions compact">
                     <button
                       type="button"
+                      className="secondary"
                       onClick={() => onProductOpen(p)}
-                      className="buyer-view-btn"
+                      aria-label={`${t(language, "viewItem")}: ${p.title}`}
                     >
-                      View
+                      <Eye size={14} />
+                      <span>{t(language, "viewItem")}</span>
                     </button>
                     <button
                       type="button"
+                      className="primary"
                       onClick={() => {
-                        if (p.is_sarthi_eligible) {
-                          void onWishlistProduct(p);
+                        if (trustBadge.action === "check") {
+                          void onWishlistProduct(p, { openCompare: true });
+                        } else {
+                          onProductOpen(p);
                         }
                       }}
-                      disabled={!p.is_sarthi_eligible}
-                      className={`buyer-save-btn ${isSaved ? "saved" : ""}`}
                     >
-                      {isSaved ? <BookmarkCheck size={13} /> : <Heart size={13} />}
-                      <span>{isSaved ? "Saved" : p.is_sarthi_eligible ? "Check" : "Catalog"}</span>
+                      <ShieldCheck size={14} />
+                      <span>{trustBadge.actionLabel}</span>
                     </button>
                   </div>
                 </div>
@@ -808,48 +1666,196 @@ function MarketplaceHome({
 
       {products.length === 0 && (
         <div className="catalog-empty-state">
-          <strong>No matching products found</strong>
-          <p>Try a broader search like kurti, saree, bag, or bedsheet.</p>
+          <strong>{t(language, "noMatchingProductsFound")}</strong>
+          <p>{t(language, "broaderSearchTip")}</p>
         </div>
       )}
     </div>
   );
 }
 
-function proofCount(result: CompareResponse) {
-  return new Set([
-    ...result.ranking.fact_ids,
-    ...result.fit.fact_ids,
-    ...result.graph_path.fact_ids
-  ]).size;
+function BuyerAgentPlan({
+  productCount,
+  safeProductCount,
+  proofGapCount,
+  savedProduct,
+  startProduct,
+  language,
+  onStartSearch,
+  onRunCheck,
+  onOpenSavedItem
+}: {
+  productCount: number;
+  safeProductCount: number;
+  proofGapCount: number;
+  savedProduct: Product | null;
+  startProduct: Product | null;
+  language: LanguageCode;
+  onStartSearch: () => void;
+  onRunCheck: (product: Product) => void;
+  onOpenSavedItem: (product: Product) => void;
+}) {
+  const copy = buyerAgentPlanCopy(language);
+  const signals = [
+    {
+      icon: <ShieldCheck size={16} />,
+      value: safeProductCount > 0 ? `${safeProductCount} ${copy.safePicks}` : `${productCount} ${copy.options}`
+    },
+    {
+      icon: <FileCheck2 size={16} />,
+      value: proofGapCount > 0 ? `${proofGapCount} ${copy.proofChecks}` : copy.proofReady
+    }
+  ];
+
+  return (
+    <section className="buyer-agent-plan" aria-label={copy.title}>
+      <div className="buyer-agent-plan-copy">
+        <span className="eyebrow">{copy.eyebrow}</span>
+        <h2>{copy.title}</h2>
+        <p>{copy.body}</p>
+      </div>
+      <div className="buyer-agent-plan-steps">
+        {signals.map((step) => (
+          <span key={step.value}>
+            {step.icon}
+            <b>{step.value}</b>
+          </span>
+        ))}
+      </div>
+      <button
+        type="button"
+        className={savedProduct ? "primary" : ""}
+        onClick={() => savedProduct ? onOpenSavedItem(savedProduct) : startProduct ? onRunCheck(startProduct) : onStartSearch()}
+      >
+        {savedProduct ? copy.openSaved : startProduct ? copy.runCheck : copy.start}
+        <ArrowRight size={15} />
+      </button>
+    </section>
+  );
 }
 
-function evidenceGapLabel(count: number) {
-  if (count === 0) return "Proof complete";
-  if (count === 1) return "1 proof gap";
-  return `${count} proof gaps`;
+function buyerAgentPlanCopy(language: LanguageCode) {
+  if (language === "hindi") {
+    return {
+      eyebrow: "Buyer safety",
+      title: "Shop with proof",
+      body: "Product pasand karo. Sarthi seller aur proof check karke simple next step dikhata hai.",
+      safePicks: "safe picks",
+      proofChecks: "proof checks",
+      options: "options",
+      proofReady: "proof ready",
+      openSaved: "Open saved check",
+      runCheck: "Safety check",
+      start: "Find trusted items"
+    };
+  }
+  if (language === "hinglish") {
+    return {
+      eyebrow: "Buyer safety",
+      title: "Shop with proof",
+      body: "Product pasand karo. Sarthi seller aur proof check karke simple next step dikhata hai.",
+      safePicks: "safe picks",
+      proofChecks: "proof checks",
+      options: "options",
+      proofReady: "proof ready",
+      openSaved: "Open saved check",
+      runCheck: "Safety check",
+      start: "Find trusted items"
+    };
+  }
+  return {
+    eyebrow: "Buyer safety",
+    title: "Shop with proof",
+    body: "Pick a product. Sarthi checks seller and proof signals, then shows one clear next step.",
+    safePicks: "safe picks",
+    proofChecks: "proof checks",
+    options: "options",
+    proofReady: "proof ready",
+    openSaved: "Open saved check",
+    runCheck: "Safety check",
+    start: "Find trusted items"
+  };
+}
+
+function productTrustBadge(product: Product, isSaved: boolean, products: Product[], language: LanguageCode) {
+  const listingCount = clusterListingCount(products, product.cluster_id);
+  const safetyAction = safetyCheckActionLabel(language);
+  if (isSaved) {
+    return {
+      label: t(language, "trustCheckReady"),
+      phrase: `${listingCount} ${t(language, "similarSellers")}`,
+      actionLabel: t(language, "open"),
+      tone: "safe" as const,
+      action: "check" as const
+    };
+  }
+  if (!product.is_sarthi_eligible) {
+    return {
+      label: t(language, "browseOnly"),
+      phrase: t(language, "catalogOnly"),
+      actionLabel: t(language, "viewItem"),
+      tone: "proof" as const,
+      action: "view" as const
+    };
+  }
+  const trust = product.buyer_trust;
+  if (!trust) {
+    return {
+      label: t(language, "recommendationPaused"),
+      phrase: `${listingCount} ${t(language, "similarSellers")}`,
+      actionLabel: `${t(language, "checkTrust")} (${listingCount})`,
+      tone: "watch" as const,
+      action: "check" as const
+    };
+  }
+  const ordersLine = trust.delivered_orders_90d > 0
+    ? `${trust.delivered_orders_90d} ${t(language, "ordersChecked")}`
+    : t(language, "notEnoughProof");
+  if (trust.can_recommend) {
+    return {
+      label: trust.status === "specific_caution" ? t(language, "checkOnce") : t(language, "recommendationReady"),
+      phrase: trust.status === "specific_caution" ? trust.headline : ordersLine,
+      actionLabel: safetyAction,
+      tone: trust.status === "specific_caution" ? "watch" as const : "safe" as const,
+      action: "check" as const
+    };
+  }
+  const blockedPhrase = trust.open_proof_count > 0
+    ? t(language, "sellerProofAsked")
+    : trust.status === "seller_verification_pending"
+      ? t(language, "sellerPendingShort")
+      : trust.status === "data_degraded"
+        ? t(language, "freshDataMissing")
+        : ordersLine;
+  return {
+    label: trust.status === "limited_evidence" ? t(language, "notEnoughProof") : t(language, "recommendationBlocked"),
+    phrase: blockedPhrase,
+    actionLabel: safetyAction,
+    tone: "proof" as const,
+    action: "check" as const
+  };
+}
+
+function feedTrustStripMessage(count: number, language: LanguageCode) {
+  void count;
+  if (language === "hindi") return "Seller, returns aur proof buy se pehle check hote hain";
+  if (language === "hinglish") return "Seller, returns aur proof buy se pehle check hote hain";
+  return "Seller, returns and proof checked before you buy";
+}
+
+function safetyCheckActionLabel(language: LanguageCode) {
+  if (language === "hindi") return "Safety";
+  if (language === "hinglish") return "Safety";
+  return "Safety";
 }
 
 function clusterListingCount(products: Product[], clusterId: string) {
   return products.filter((product) => product.cluster_id === clusterId).length;
 }
 
-function clusterProducts(products: Product[], clusterId: string) {
-  return products.filter((product) => product.cluster_id === clusterId && product.is_sarthi_eligible);
-}
-
 function productForVariant(variantId: string, products: Product[]) {
   const productId = variantProductId(variantId);
   return products.find((product) => product.product_id === productId) ?? null;
-}
-
-function candidateForProduct(result: CompareResponse, product: Product) {
-  return result.ranking.candidates.find((candidate) => variantProductId(candidate.variant_id) === product.product_id) ?? null;
-}
-
-function candidateRank(result: CompareResponse, product: Product) {
-  const rank = result.ranking.candidates.findIndex((candidate) => variantProductId(candidate.variant_id) === product.product_id);
-  return rank === -1 ? 999 : rank;
 }
 
 function variantProductId(variantId: string) {
@@ -868,4 +1874,12 @@ function fallbackProductImage(color: string) {
   if (color === "pink") return "/product-pink.svg";
   if (color === "maroon") return "/product-maroon.svg";
   return "/product-blue.svg";
+}
+
+function productImageSource(product: Pick<Product, "image_url" | "color_family">) {
+  const source = product.image_url?.trim() ?? "";
+  if (!source || source.includes("placehold.co") || source.includes("text=")) {
+    return fallbackProductImage(product.color_family);
+  }
+  return source;
 }
