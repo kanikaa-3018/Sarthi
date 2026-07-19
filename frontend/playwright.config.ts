@@ -1,5 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const apiPort = Number(process.env.E2E_API_PORT ?? 8200);
+const frontendPort = Number(process.env.E2E_FRONTEND_PORT ?? 5190);
+const apiUrl = `http://127.0.0.1:${apiPort}`;
+const frontendUrl = `http://127.0.0.1:${frontendPort}`;
+const inheritedEnv = Object.fromEntries(
+  Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+);
+
 export default defineConfig({
   testDir: "./tests/e2e",
   workers: 1,
@@ -8,21 +16,33 @@ export default defineConfig({
     timeout: 8_000
   },
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: frontendUrl,
     trace: "retain-on-failure"
   },
   webServer: [
     {
       command: "npm --prefix ../apps/api run dev",
-      url: "http://127.0.0.1:8000/health",
-      reuseExistingServer: true,
-      timeout: 120_000
+      url: `${apiUrl}/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ...inheritedEnv,
+        NODE_ENV: "test",
+        PORT: String(apiPort),
+        MONGODB_DB: process.env.E2E_MONGODB_DB ?? "sarthi_codex_auth_e2e",
+        DEMO_CONTROLS_ENABLED: "true"
+      }
     },
     {
-      command: "npm run dev -- --host 127.0.0.1",
-      url: "http://127.0.0.1:5173",
-      reuseExistingServer: true,
-      timeout: 120_000
+      command: `npm run dev -- --host 127.0.0.1 --port ${frontendPort}`,
+      url: frontendUrl,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ...inheritedEnv,
+        SARTHI_API_TARGET: apiUrl,
+        SARTHI_FRONTEND_PORT: String(frontendPort)
+      }
     }
   ],
   projects: [
