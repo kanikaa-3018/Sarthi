@@ -3,10 +3,10 @@ import type { Db } from "mongodb";
 import { collections } from "../db/mongo.js";
 import { assertBuyer, requireRole } from "../middleware/auth.js";
 import { generateGroundedAgentAnswer } from "../services/agent.js";
+import { isGeneratedProvider } from "../services/ai.js";
 import { placeCheckoutOrder, recordOrderOutcome, returnAlternativeAssistant } from "../services/buyerOperations.js";
 import { expectationContract } from "../services/contracts.js";
 import { computeCartConfidence } from "../services/decisionEngine.js";
-import { geminiConfigured } from "../services/gemini.js";
 import {
   createOrIncrementProofRequest,
   createTrace,
@@ -74,7 +74,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       query: body.query
     });
     const cached = await readLlmCache(db, cacheKey);
-    if (cached && (!geminiConfigured() || cached.agent?.provider === "gemini")) {
+    if (cached) {
       const trace = await createTrace(db, {
         buyer_id: body.buyer_id,
         intent: ["knowledge_graph_chat"],
@@ -225,7 +225,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       },
       cache: { hit: false, cache_key: cacheKey }
     };
-    if (grounded.source === "gemini") {
+    if (isGeneratedProvider(grounded.source)) {
       await writeLlmCache(db, cacheKey, "knowledge_graph_chat", response);
     }
     return response;
@@ -306,7 +306,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       query: body.query
     });
     const cached = await readLlmCache(db, cacheKey);
-    if (cached && (!geminiConfigured() || cached.agent?.provider === "gemini")) {
+    if (cached) {
       const trace = await createTrace(db, {
         buyer_id: body.buyer_id,
         variant_id: body.selected_variant_id,
@@ -389,7 +389,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       agent: { provider: grounded.source },
       fact_ids
     };
-    if (grounded.source === "gemini") {
+    if (isGeneratedProvider(grounded.source)) {
       await writeLlmCache(db, cacheKey, "agent_query", response);
     }
     return response;

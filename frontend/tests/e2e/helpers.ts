@@ -4,10 +4,10 @@ import { getDemoAccountForRole, type DemoRole } from "../../src/demoAccounts";
 
 export type { DemoRole };
 
-export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
+export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "58001"}`;
 
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
-const E2E_DATABASE_NAME = "sarthi_codex_auth_e2e";
+const E2E_DATABASE_NAME = `sarthi_codex_auth_e2e_${process.env.E2E_API_PORT ?? "58001"}`;
 
 export async function resetSeed(request: APIRequestContext) {
   const health = await request.get(`${API_BASE}/health`);

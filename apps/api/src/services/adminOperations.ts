@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { collections } from "../db/mongo.js";
 import { sourceHealth } from "./domain.js";
 import { generateGroundedAgentAnswer } from "./agent.js";
+import { isGeneratedProvider } from "./ai.js";
 import { id } from "./crypto.js";
 import { withoutId } from "./format.js";
 import { llmCacheKey, readLlmCache, writeLlmCache } from "./llmCache.js";
@@ -427,7 +428,7 @@ async function adminPrescreenSuggestion(db: Db, itemType: AdminPrescreenItemType
     learn: grounded.reasons?.[1] ?? deterministic.learn,
     agent_provider: grounded.source
   };
-  if (grounded.source === "gemini") {
+  if (isGeneratedProvider(grounded.source)) {
     await writeLlmCache(db, cacheKey, "admin_prescreen", {
       observe: prescreen.observe,
       reason: prescreen.reason,
@@ -853,7 +854,7 @@ async function buildAdminAutomationPlan(db: Db, summary: any, activeQueue: any[]
     caution: grounded.caution ?? fallback.caution,
     agent_provider: grounded.source
   };
-  if (grounded.source === "gemini") {
+  if (isGeneratedProvider(grounded.source)) {
     await writeLlmCache(db, cacheKey, "admin_automation", {
       headline: plan.headline,
       summary: plan.summary,

@@ -60,10 +60,10 @@ Keep `E2E_API_PORT`/`E2E_FRONTEND_PORT`, `SARTHI_API_TARGET`, `SARTHI_FRONTEND_P
 
 - [ ] **Step 3: Keep one environment-driven API URL**
 
-Keep this helper definition:
+Keep this helper definition, using a reserved high default that does not collide with the existing worktrees' `8200` API:
 
 ```ts
-export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
+export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "58001"}`;
 ```
 
 Do not retain the duplicate hard-coded `58001` declaration.
