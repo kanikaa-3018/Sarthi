@@ -2552,6 +2552,906 @@ function SellerProductHealthTable({
               <div>
                 <span className="seller-health-label">Buyer issue</span>
                 <strong>{coach?.issue || productIssueLabel(listing, task)}</strong>
+                <p>{coach?.buyer_impact || listingImpactText(listing, task)}</p>
+              </div>
+              <div>
+                <span className="seller-health-label">Do now</span>
+                <strong>{coach?.next_step || proofNeededLabel(listing, task)}</strong>
+                <p>{coach?.rating_lift || "This keeps buyer trust clear before checkout."}</p>
+              </div>
+              <div className="seller-health-actions">
+                {task && (
+                  <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(task)}>
+                    Add proof
+                  </button>
+                )}
+                <button type="button" className="seller-secondary-action" onClick={() => onOpenDetails(listing)}>
+                  Plan
+                </button>
+                <button type="button" className="seller-secondary-action" onClick={() => onOpenFix(listing)}>
+                  Fix size
+                </button>
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function SellerProofLibraryPanel({
+  tasks,
+  listings,
+  onOpenProofTask
+}: {
+  tasks: SellerEvidenceCoachTask[];
+  listings: SellerPanelListing[];
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+}) {
+  const proofTypes = [
+    { title: "Daylight colour", detail: "Real colour, no filter.", icon: Camera },
+    { title: "Fabric close-up", detail: "Shows thickness and texture.", icon: ShieldCheck },
+    { title: "Size proof", detail: "Chest and length visible.", icon: LineChart },
+    { title: "Dispatch proof", detail: "Builds prepaid trust.", icon: CheckCircle2 }
+  ];
+
+  return (
+    <section className="seller-workbench-panel">
+      <div className="seller-section-heading clean">
+        <div>
+          <span className="eyebrow">Evidence queue</span>
+          <h3>Open proof work from buyer doubts</h3>
+          <p>Prepare the exact proof needed for buyer trust. Submitted proof status lives in the top Proof center.</p>
+        </div>
+        <span className="seller-status-pill watch">{tasks.length} open</span>
+      </div>
+
+      <div className="seller-proof-type-grid">
+        {proofTypes.map((item) => {
+          const Icon = item.icon;
+          return (
+          <article key={item.title}>
+            <Icon size={18} />
+            <strong>{item.title}</strong>
+            <p>{item.detail}</p>
+          </article>
+          );
+        })}
+      </div>
+
+      <div className="seller-section-heading compact">
+        <div>
+          <span className="eyebrow">Still needed</span>
+          <h3>{tasks.length ? `${tasks.length} proof task${tasks.length === 1 ? "" : "s"} from buyer asks` : "No proof task"}</h3>
+        </div>
+      </div>
+
+      {tasks.length ? (
+        <div className="seller-proof-work-list">
+          {tasks.map((task) => {
+            const listing = listings.find((item) => item.product.product_id === task.product_id);
+            return (
+            <article key={proofTaskId(task)} className={`seller-proof-work-row ${task.priority}`}>
+              <img
+                src={listing?.product.image_url || "/product-blue.svg"}
+                alt={task.product_title}
+                onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+              />
+              <div className="seller-proof-work-main">
+                <div className="seller-proof-work-title">
+                  <strong>{shortProductTitle(task.product_title)}</strong>
+                  <span>{task.buyer_demand} asks</span>
+                </div>
+                  <p><b>{labelize(task.attribute)} doubt</b> | {proofTypeLabel(task.recommended_proof_type)}</p>
+                <small>{sellerFriendlyProofReason(task)}</small>
+              </div>
+              <div className="seller-proof-work-action">
+                <span className={`seller-status-pill ${task.priority === "high" ? "risk" : "watch"}`}>{task.priority}</span>
+                <button type="button" className="seller-primary-action" onClick={() => onOpenProofTask(task)}>
+                  Prepare
+                </button>
+              </div>
+            </article>
+            );
+          })}
+        </div>
+      ) : (
+        <SellerEmptyState title="Proof queue is clear" detail="Keep product photos fresh. New buyer doubts will appear here automatically." />
+      )}
+    </section>
+  );
+}
+
+function SellerProofLedger({
+  proofAssets,
+  tasks,
+  onOpenProofTask
+}: {
+  proofAssets: SellerProofAsset[];
+  tasks: SellerEvidenceCoachTask[];
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+}) {
+  if (!proofAssets.length) {
+    return (
+      <section className="seller-proof-ledger empty">
+        <strong>No uploaded proof yet</strong>
+        <p>Use an open buyer ask to submit proof. Admin status will appear here after upload.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="seller-proof-ledger" aria-label="Uploaded proof review status">
+      <div className="seller-section-heading compact">
+        <div>
+          <span className="eyebrow">Uploaded proofs</span>
+          <h3>Admin review status</h3>
+        </div>
+      </div>
+      <div className="seller-proof-ledger-list">
+        {proofAssets.map((asset) => {
+          const matchingTask = tasks.find((task) => task.product_id === asset.product_id && task.attribute === asset.attribute);
+          return (
+            <article key={asset.proof_id} className={`seller-proof-ledger-row ${proofStatusTone(asset.status)}`}>
+              <img
+                src={asset.product_image_url || "/product-blue.svg"}
+                alt={asset.product_title}
+                onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+              />
+              <div className="seller-proof-ledger-main">
+                <div className="seller-proof-ledger-top">
+                  <strong>{shortProductTitle(asset.product_title)}</strong>
+                  <span className={`seller-status-pill ${proofStatusTone(asset.status)}`}>{proofStatusLabel(asset.status)}</span>
+                </div>
+                <p>{proofTypeLabel(asset.proof_type)} for {labelize(asset.attribute)} | {asset.quality_label}</p>
+                <small>
+                  {asset.status === "rejected"
+                    ? asset.review_notes || "Admin rejected this proof. Upload a clearer file that matches the product claim."
+                    : asset.status === "verified"
+                      ? asset.review_notes || "Approved proof is now buyer-visible evidence."
+                      : "Admin is checking this proof before it affects buyer trust."}
+                </small>
+              </div>
+              <div className="seller-proof-ledger-side">
+                <span>Quality {asset.quality_score}/100</span>
+                <strong>+{asset.trust_lift_points}</strong>
+                {asset.status === "rejected" && matchingTask && (
+                  <button type="button" className="seller-secondary-action" onClick={() => onOpenProofTask(matchingTask)}>
+                    Redo
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SellerProofSuggestionPanel({
+  proofNav,
+  tasks,
+  proofAssets,
+  onOpenProofTask
+}: {
+  proofNav: SellerProofNav | null;
+  tasks: SellerEvidenceCoachTask[];
+  proofAssets: SellerProofAsset[];
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+}) {
+  const suggestions = buildProofSuggestions(proofNav, tasks, proofAssets);
+  const topTask = tasks[0] ?? null;
+  return (
+    <section className="seller-proof-suggestion-panel" aria-label="Sarthi proof suggestions">
+      <div className="seller-section-heading compact">
+        <div>
+          <span className="eyebrow">Sarthi coach</span>
+          <h3>What to do after admin review</h3>
+        </div>
+        {topTask && (
+          <button type="button" className="seller-secondary-action" onClick={() => onOpenProofTask(topTask)}>
+            Prepare next proof
+          </button>
+        )}
+      </div>
+      <div className="seller-proof-suggestion-grid">
+        {suggestions.map((suggestion) => (
+          <article key={suggestion.title} className={suggestion.tone}>
+            {suggestion.tone === "good" ? <CheckCircle2 size={16} /> : suggestion.tone === "risk" ? <AlertTriangle size={16} /> : <ListChecks size={16} />}
+            <div>
+              <strong>{suggestion.title}</strong>
+              <p>{suggestion.detail}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SellerPerformancePanel({
+  panel,
+  selectedClusterId,
+  onClusterChange
+}: {
+  panel: SellerPanelResponse;
+  selectedClusterId: string;
+  onClusterChange: (clusterId: string) => void;
+}) {
+  return (
+    <section className="seller-workbench-panel">
+      <div className="seller-section-heading clean">
+        <div>
+          <span className="eyebrow">Compare</span>
+          <h3>{panel.cluster.label}</h3>
+          <p>Masked market context. You see your position, not private buyer profiles.</p>
+        </div>
+        <label className="seller-cluster-select">
+          Product cluster
+          <select value={selectedClusterId} onChange={(event) => onClusterChange(event.target.value)}>
+            {panel.seller.cluster_ids.map((clusterId) => (
+              <option key={clusterId} value={clusterId}>
+                {clusterLabel(clusterId)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="seller-overview-grid performance">
+        <SellerMetricCard label="Seller options" value={String(panel.cluster.seller_count)} detail={`${panel.cluster.listing_count} comparable listings`} tone="neutral" />
+        <SellerMetricCard label="Median returns" value={panel.cluster.stats.median_return_rate === null ? "N/A" : `${Math.round(panel.cluster.stats.median_return_rate * 100)}%`} detail={`${panel.cluster.stats.delivered_orders_90d} delivered orders`} tone="watch" />
+        <SellerMetricCard label="Dispatch median" value={panel.cluster.stats.median_dispatch_hours === null ? "N/A" : `${panel.cluster.stats.median_dispatch_hours}h`} detail="Cluster benchmark" tone="neutral" />
+        <SellerMetricCard label="Facts used" value={String(panel.fact_ids.length)} detail={labelize(panel.data_freshness.overall_status)} tone={panel.data_freshness.blocking ? "risk" : "good"} />
+      </div>
+
+      <div className="seller-performance-grid">
+        <div className="seller-health-table-wrap">
+          <table className="seller-health-table compact">
+            <thead>
+              <tr>
+                <th>Listing</th>
+                <th>Kept rate</th>
+                <th>Top issue</th>
+                <th>Rank</th>
+              </tr>
+            </thead>
+            <tbody>
+              {panel.seller_listings.map((listing) => (
+                <tr key={listing.variant.variant_id}>
+                  <td>{shortProductTitle(listing.product.title)}</td>
+                  <td>{formatRate(listing.metrics.kept_rate)}</td>
+                  <td>{listing.top_issue ? `${listing.top_issue.count} ${labelize(listing.top_issue.return_reason)}` : "No major issue"}</td>
+                  <td>{listing.cluster_position ? `#${listing.cluster_position}` : "Pending"}</td>
+                </tr>
+              ))}
+              {panel.competing_listings.map((listing, index) => (
+                <tr key={listing.variant.variant_id}>
+                  <td>Other seller #{index + 1}</td>
+                  <td>{formatRate(listing.metrics.kept_rate)}</td>
+                  <td>{listing.top_issue ? labelize(listing.top_issue.return_reason) : "No major issue"}</td>
+                  <td>Masked</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <aside className="seller-policy-panel">
+          <span className="eyebrow">What affects ranking</span>
+          <h3>Inputs used for ranking</h3>
+          <div>
+            {panel.decision_policy.inputs_used.map((input) => (
+              <span key={input}>{labelize(input)}</span>
+            ))}
+          </div>
+          <p>Not used: {panel.decision_policy.inputs_not_used.map(labelize).join(", ") || "none"}</p>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function SellerEmptyState({
+  title,
+  detail,
+  action,
+  onAction
+}: {
+  title: string;
+  detail: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <section className="seller-empty-state">
+      <strong>{title}</strong>
+      <p>{detail}</p>
+      {action && onAction && (
+        <button type="button" className="seller-primary-action" onClick={onAction}>
+          {action}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function SellerAgentInsight({ insight, copy }: { insight: SellerInsight; copy: SellerCopy }) {
+  return (
+    <section className={`seller-agent-insight ${insight.tone}`}>
+      <div className="seller-agent-insight-icon">
+        <ListChecks size={18} />
+      </div>
+      <div>
+        <span className="eyebrow">{copy.thisWeek}</span>
+        <strong>{insight.title}</strong>
+        <p>{insight.summary}</p>
+      </div>
+      <span className="seller-agent-insight-action">{insight.action}</span>
+    </section>
+  );
+}
+
+type SellerInsight = {
+  title: string;
+  summary: string;
+  action: string;
+  tone: "good" | "watch" | "risk";
+};
+
+function buildSellerInsight(
+  panel: SellerPanelResponse | null,
+  evidenceCoach: SellerEvidenceCoachResponse | null,
+  onboarding: SellerOnboardingResponse | null,
+  copy: SellerCopy
+): SellerInsight {
+  if (panel?.action_board) {
+    const firstPriority = panel.action_board.cards[0]?.priority ?? "low";
+    return {
+      title: panel.action_board.headline,
+      summary: panel.action_board.summary,
+      action: copy.plan,
+      tone: firstPriority === "high" ? "risk" : firstPriority === "medium" ? "watch" : "good"
+    };
+  }
+  if (evidenceCoach?.tasks.length) {
+    const topTask = [...evidenceCoach.tasks].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority))[0];
+    return {
+      title: `${topTask.buyer_demand} buyer proof request(s) need ${labelize(topTask.attribute)}`,
+      summary: `${topTask.product_title.split("-")[0].trim()} should get ${topTask.recommended_proof_type.replace(/_/g, " ")} before buyer trust improves.`,
+      action: copy.addProof,
+      tone: topTask.priority === "high" ? "risk" : "watch"
+    };
+  }
+  const listingWithIssue = panel?.seller_listings.find((listing) => listing.top_issue || listing.action_items.length);
+  if (listingWithIssue?.top_issue) {
+    return {
+      title: `${listingWithIssue.top_issue.count} ${labelize(listingWithIssue.top_issue.return_reason)} complaints detected`,
+      summary: "Update proof or measurement before this issue becomes a bigger return pattern.",
+      action: copy.checkListing,
+      tone: "watch"
+    };
+  }
+  if (onboarding?.seller_verification.verification_status !== "verified") {
+    return {
+      title: "Verification is the next blocker",
+      summary: "Upload GST, PAN, address, and bank proof so listings can move from draft to buyer feed.",
+      action: copy.uploadDocsReview,
+      tone: "watch"
+    };
+  }
+  return {
+    title: "Listings are stable this week",
+    summary: "No urgent proof gap is open. Keep measurement and fabric photos updated before new buyer doubts appear.",
+    action: copy.clear,
+    tone: "good"
+  };
+}
+
+function productDraftWarnings(input: {
+  title: string;
+  category: string;
+  garmentType: string;
+  fabric: string;
+  color: string;
+  price: number;
+  imageUrl: string;
+  verificationStatus: string;
+}, copy: SellerCopy): SellerUploadWarning[] {
+  const warnings: SellerUploadWarning[] = [];
+  const title = input.title.trim().toLowerCase();
+  const garment = input.garmentType.trim().toLowerCase();
+  const image = input.imageUrl.trim();
+  if (input.verificationStatus !== "verified") {
+    warnings.push({
+      key: "seller-verification",
+      title: copy.verificationBlocksTitle,
+      detail: copy.verificationBlocksDetail,
+      tone: "risk"
+    });
+  }
+  if (!image) {
+    warnings.push({
+      key: "missing-image",
+      title: copy.productImageMissingTitle,
+      detail: copy.productImageMissingDetail,
+      tone: "risk"
+    });
+  } else if (!isRecognizedAssetReference(image)) {
+    warnings.push({
+      key: "image-reference",
+      title: copy.imageReferenceWrongTitle,
+      detail: copy.imageReferenceWrongDetail,
+      tone: "risk"
+    });
+  }
+  if (input.title.trim().length < 8) {
+    warnings.push({
+      key: "short-title",
+      title: copy.titleThinTitle,
+      detail: copy.titleThinDetail,
+      tone: "watch"
+    });
+  }
+  if (garment && title && !title.includes(garment.split(" ")[0])) {
+    warnings.push({
+      key: "title-type-mismatch",
+      title: copy.titleTypeMismatchTitle,
+      detail: copy.titleTypeMismatchDetail,
+      tone: "watch"
+    });
+  }
+  if (!Number.isFinite(input.price) || input.price < 100) {
+    warnings.push({
+      key: "price",
+      title: copy.priceInvalidTitle,
+      detail: copy.priceInvalidDetail,
+      tone: "risk"
+    });
+  }
+  if (input.fabric.trim().length < 3 || input.color.trim().length < 3 || input.category.trim().length < 3) {
+    warnings.push({
+      key: "taxonomy",
+      title: copy.factsIncompleteTitle,
+      detail: copy.factsIncompleteDetail,
+      tone: "watch"
+    });
+  }
+  if (!warnings.length) {
+    warnings.push({
+      key: "ready",
+      title: copy.uploadReadyTitle,
+      detail: copy.uploadReadyDetail,
+      tone: "good"
+    });
+  }
+  return warnings;
+}
+
+function proofUploadWarnings(
+  task: SellerEvidenceCoachTask,
+  draft: { title: string; description: string; assetUrl: string },
+  copy: SellerCopy
+): SellerUploadWarning[] {
+  const warnings: SellerUploadWarning[] = [];
+  const asset = draft.assetUrl.trim();
+  if (!asset) {
+    warnings.push({
+      key: "proof-file",
+      title: copy.proofFileMissingTitle,
+      detail: `${proofTypeLabel(task.recommended_proof_type)} is required for ${labelize(task.attribute)}.`,
+      tone: "risk"
+    });
+  } else if (!isRecognizedAssetReference(asset)) {
+    warnings.push({
+      key: "proof-reference",
+      title: copy.proofReferenceWrongTitle,
+      detail: copy.proofReferenceWrongDetail,
+      tone: "risk"
+    });
+  }
+  if (!proofTypeMatchesAttribute(task.attribute, task.recommended_proof_type)) {
+    warnings.push({
+      key: "proof-type",
+      title: copy.proofTypeMismatchTitle,
+      detail: `${labelize(task.attribute)} needs ${proofTypeLabel(recommendedProofTypeForAttribute(task.attribute))}.`,
+      tone: "risk"
+    });
+  }
+  if (draft.description.trim().length < 30) {
+    warnings.push({
+      key: "proof-description",
+      title: copy.explainProofTitle,
+      detail: copy.explainProofDetail,
+      tone: "watch"
+    });
+  }
+  if (draft.title.trim().length < 8) {
+    warnings.push({
+      key: "proof-title",
+      title: copy.proofTitleTooShortTitle,
+      detail: copy.proofTitleTooShortDetail,
+      tone: "watch"
+    });
+  }
+  if (!warnings.length) {
+    warnings.push({
+      key: "proof-ready",
+      title: copy.proofReadyTitle,
+      detail: copy.proofReadyDetail,
+      tone: "good"
+    });
+  }
+  return warnings;
+}
+
+function buildProofSuggestions(
+  proofNav: SellerProofNav | null,
+  tasks: SellerEvidenceCoachTask[],
+  proofAssets: SellerProofAsset[]
+): Array<{ title: string; detail: string; tone: "good" | "watch" | "risk" }> {
+  const suggestions: Array<{ title: string; detail: string; tone: "good" | "watch" | "risk" }> = [];
+  const rejected = proofAssets.filter((asset) => asset.status === "rejected");
+  const inReview = proofAssets.filter((asset) => asset.status === "submitted");
+  const approved = proofAssets.filter((asset) => asset.status === "verified");
+  const topTask = [...tasks].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority))[0];
+
+  if (rejected.length) {
+    const asset = rejected[0];
+    suggestions.push({
+      title: `Redo ${proofTypeLabel(asset.proof_type)} for ${shortProductTitle(asset.product_title)}`,
+      detail: asset.review_notes || "Admin rejected this proof. Upload a clearer file that matches the exact product claim.",
+      tone: "risk"
+    });
+  }
+
+  if (topTask) {
+    suggestions.push({
+      title: `${topTask.buyer_demand} buyer asks need ${proofTypeLabel(topTask.recommended_proof_type)}`,
+      detail: `${shortProductTitle(topTask.product_title)} should be handled before adding generic photos.`,
+      tone: topTask.priority === "high" ? "risk" : "watch"
+    });
+  }
+
+  if (inReview.length) {
+    suggestions.push({
+      title: `${inReview.length} proof${inReview.length === 1 ? "" : "s"} under admin review`,
+      detail: "Avoid resubmitting the same proof while review is pending. Use this time to prepare the next high-demand proof.",
+      tone: "watch"
+    });
+  }
+
+  if (approved.length) {
+    suggestions.push({
+      title: `${approved.length} approved proof${approved.length === 1 ? "" : "s"} can protect trust`,
+      detail: proofNav?.rating_forecast ?? "Approved proof becomes buyer-visible evidence and can reduce repeat doubts.",
+      tone: "good"
+    });
+  }
+
+  if (proofNav && proofNav.trust_lift_points > 0) {
+    suggestions.push({
+      title: `+${proofNav.trust_lift_points} trust lift already unlocked`,
+      detail: "Keep improving proof coverage on products with weak evidence before pushing prepaid or high-volume traffic.",
+      tone: "good"
+    });
+  }
+
+  if (!suggestions.length) {
+    suggestions.push({
+      title: "No submitted proof yet",
+      detail: "Start with the highest-demand buyer ask. The submitted proof and admin status will appear here.",
+      tone: "watch"
+    });
+  }
+
+  return suggestions.slice(0, 4);
+}
+
+type SellerListingLabRow = {
+  key: string;
+  listing: SellerPanelListing;
+  task: SellerEvidenceCoachTask | null;
+  canFixSize: boolean;
+  title: string;
+  imageUrl: string | null;
+  scoreLabel: string;
+  issue: string;
+  suggestion: string;
+  tone: "good" | "watch" | "risk";
+};
+
+function buildListingLabRows(
+  listings: SellerPanelListing[],
+  tasks: SellerEvidenceCoachTask[],
+  actionCards: SellerActionBoard["cards"]
+): SellerListingLabRow[] {
+  return listings.map((listing) => {
+    const task = proofTaskForProduct(tasks, listing.product.product_id);
+    const coach = actionCards.find((card) => card.product_id === listing.product.product_id);
+    const tone: SellerListingLabRow["tone"] = task || listing.decision_status === "needs_seller_action"
+      ? "risk"
+      : listing.decision_status === "eligible_for_recommendation" && (listing.quality_score ?? 0) >= 70
+        ? "good"
+        : "watch";
+    const scoreLabel = listing.quality_score === null ? "New" : `${Math.round(listing.quality_score)} trust`;
+    const issue = coach?.issue_summary || productIssueLabel(listing, task);
+    const suggestion = task
+      ? `Add ${proofTypeLabel(task.recommended_proof_type)} for ${labelize(task.attribute)} so admin can clear the buyer doubt.`
+      : coach?.next_step || coach?.rating_lift || proofNeededLabel(listing, task);
+
+    return {
+      key: listing.variant.variant_id,
+      listing,
+      task,
+      canFixSize: shouldOpenSizeFix(listing, coach ?? null),
+      title: listing.product.title,
+      imageUrl: listing.product.image_url,
+      scoreLabel,
+      issue,
+      suggestion,
+      tone
+    };
+  }).sort((a, b) => priorityRankForTone(a.tone) - priorityRankForTone(b.tone));
+}
+
+function buildTrustCoachAction({
+  verificationStatus,
+  topProofTask,
+  topCard,
+  topCardListing,
+  draftWarnings,
+  onOpenProofTask,
+  onOpenDetails,
+  onOpenFix,
+  onAddProduct,
+  onOpenConsole,
+  copy
+}: {
+  verificationStatus: string;
+  topProofTask: SellerEvidenceCoachTask | null;
+  topCard: SellerActionBoard["cards"][number] | null;
+  topCardListing: SellerPanelListing | null;
+  draftWarnings: SellerUploadWarning[];
+  onOpenProofTask: (task: SellerEvidenceCoachTask) => void;
+  onOpenDetails: (listing: SellerPanelListing) => void;
+  onOpenFix: (listing: SellerPanelListing) => void;
+  onAddProduct: () => void;
+  onOpenConsole: () => void;
+  copy: SellerCopy;
+}): { label: string; title: string; detail: string; tone: "good" | "watch" | "risk"; run: () => void } {
+  if (verificationStatus !== "verified") {
+    return {
+      label: copy.uploadDocsReview,
+      title: copy.finishVerificationBeforeProof,
+      detail: copy.uploadSellerProof,
+      tone: "risk",
+      run: onAddProduct
+    };
+  }
+
+  if (topCardListing && shouldOpenSizeFix(topCardListing, topCard)) {
+    return {
+      label: copy.fixSize,
+      title: `${shortProductTitle(topCardListing.product.title)} needs clearer size proof`,
+      detail: topCard?.buyer_impact || "Wrong size information can create returns and lower trust.",
+      tone: topCard?.priority === "high" ? "risk" : "watch",
+      run: () => onOpenFix(topCardListing)
+    };
+  }
+
+  if (topProofTask) {
+    return {
+      label: copy.uploadProof,
+      title: `${topProofTask.buyer_demand} buyer ask${topProofTask.buyer_demand === 1 ? "" : "s"} need proof`,
+      detail: `${shortProductTitle(topProofTask.product_title)} needs ${proofTypeLabel(topProofTask.recommended_proof_type)} for ${labelize(topProofTask.attribute)}.`,
+      tone: topProofTask.priority === "high" ? "risk" : "watch",
+      run: () => onOpenProofTask(topProofTask)
+    };
+  }
+
+  if (topCardListing) {
+    return {
+      label: copy.plan,
+      title: topCard?.next_step || topCard?.action || "Review this product first",
+      detail: topCard?.issue_summary || topCard?.buyer_impact || "This product has the next highest trust improvement opportunity.",
+      tone: topCard?.priority === "high" ? "risk" : topCard?.priority === "medium" ? "watch" : "good",
+      run: () => onOpenDetails(topCardListing)
+    };
+  }
+
+  const draftWarning = draftWarnings.find((warning) => warning.tone !== "good");
+  if (draftWarning) {
+    return {
+      label: copy.checkListing,
+      title: draftWarning.title,
+      detail: draftWarning.detail,
+      tone: draftWarning.tone,
+      run: onAddProduct
+    };
+  }
+
+  return {
+    label: copy.sellerConsole,
+    title: copy.noUrgentProductFix,
+    detail: copy.proofCenterClear,
+    tone: "good",
+    run: onOpenConsole
+  };
+}
+
+function shouldOpenSizeFix(listing: SellerPanelListing, card?: SellerActionBoard["cards"][number] | null) {
+  const issueText = `${card?.action ?? ""} ${card?.issue ?? ""} ${card?.next_step ?? ""} ${card?.proof_type ?? ""}`.toLowerCase();
+  return issueText.includes("size") ||
+    issueText.includes("measurement") ||
+    card?.proof_type === "measurement_chart" ||
+    (listing.metrics.fit_as_expected_rate !== null && listing.metrics.fit_as_expected_rate < 0.85);
+}
+
+function priorityRankForTone(tone: "good" | "watch" | "risk") {
+  if (tone === "risk") return 0;
+  if (tone === "watch") return 1;
+  return 2;
+}
+
+function ratingForecastLine(ratingText: string, trustLiftPoints: number, openTasks: number) {
+  const current = Number(ratingText);
+  if (!Number.isFinite(current)) {
+    return {
+      title: "Build first rating signal",
+      detail: "Approved proof and kept orders can create a stronger first trust base."
+    };
+  }
+  const possibleLift = Math.min(0.3, Math.max(0, trustLiftPoints / 75));
+  const target = Math.min(5, current + possibleLift);
+  if (trustLiftPoints <= 0 && openTasks > 0) {
+    return {
+      title: `${current.toFixed(1)} can improve after proof`,
+      detail: `${openTasks} open proof task${openTasks === 1 ? "" : "s"} still limit buyer confidence.`
+    };
+  }
+  return {
+    title: `${current.toFixed(1)} -> ${target.toFixed(1)} potential`,
+    detail: "This is a trust-lift forecast, not a guaranteed marketplace rating change."
+  };
+}
+
+function draftReadinessScore(input: {
+  title: string;
+  category: string;
+  garmentType: string;
+  fabric: string;
+  color: string;
+  price: number;
+  imageUrl: string;
+  verified: boolean;
+}, copy: SellerCopy) {
+  const checks = [
+    input.title.trim().length >= 8,
+    input.category.trim().length >= 3,
+    input.garmentType.trim().length >= 3,
+    input.fabric.trim().length >= 3,
+    input.color.trim().length >= 3,
+    Number.isFinite(input.price) && input.price >= 100,
+    input.imageUrl.trim().length > 0,
+    input.verified
+  ];
+  const score = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  return {
+    score,
+    tone: score >= 75 ? "good" : score >= 50 ? "watch" : "risk",
+    message: !input.verified
+      ? copy.readinessBlockedByVerification
+      : score >= 75
+        ? copy.readinessGood
+        : copy.readinessIncomplete
+  };
+}
+
+function proofTaskForProduct(tasks: SellerEvidenceCoachTask[], productId: string) {
+  return tasks.find((task) => task.product_id === productId) ?? null;
+}
+
+function shortProductTitle(title: string) {
+  return title.split("-")[0].trim();
+}
+
+function qualityScoreLabel(listing: SellerPanelListing) {
+  if (listing.quality_score === null) return "New";
+  return `${Math.round(listing.quality_score)}/100`;
+}
+
+function formatRate(value: number | null) {
+  if (value === null) return "N/A";
+  return `${Math.round(value * 100)}%`;
+}
+
+function productIssueLabel(listing: SellerPanelListing, task: SellerEvidenceCoachTask | null) {
+  if (listing.top_issue) {
+    return `${listing.top_issue.count} ${labelize(listing.top_issue.return_reason)}`;
+  }
+  if (task) return labelize(task.attribute);
+  if (listing.metrics.evidence_strength === "weak" || listing.metrics.evidence_strength === "unknown") {
+    return "New data";
+  }
+  return "No major issue";
+}
+
+function proofNeededLabel(listing: SellerPanelListing, task: SellerEvidenceCoachTask | null) {
+  if (task) return proofTypeLabel(task.recommended_proof_type);
+  const highPriorityAction = listing.action_items.find((action) => action.priority === "high") ?? listing.action_items[0];
+  if (highPriorityAction) return highPriorityAction.title;
+  if (listing.metrics.fit_as_expected_rate !== null && listing.metrics.fit_as_expected_rate < 0.85) return "Clear size chart";
+  if (listing.metrics.color_match_rate !== null && listing.metrics.color_match_rate < 0.9) return "Daylight colour photo";
+  return "Keep proof updated";
+}
+
+function buildSellerTrustOps(
+  listings: SellerPanelListing[],
+  tasks: SellerEvidenceCoachTask[],
+  board: SellerActionBoard | null,
+  verificationStatus: string,
+  ratingText: string,
+  copy: SellerCopy
+): SellerTrustOpsInsight[] {
+  const totalAsks = tasks.reduce((sum, task) => sum + task.buyer_demand, 0);
+  const topTask = tasks[0] ?? null;
+  const spikeCard = board?.cards.find((card) => card.priority === "high" && (card.metric.includes("returns") || card.issue.toLowerCase().includes("return")))
+    ?? board?.cards.find((card) => card.priority === "high");
+  const thinEvidence = listings.filter((listing) => listing.metrics.evidence_strength === "weak" || listing.metrics.evidence_strength === "unknown").length;
+  const prepaidReady = listings.filter((listing) =>
+    listing.metrics.median_dispatch_hours <= 24 &&
+    listing.metrics.evidence_strength !== "unknown" &&
+    (listing.metrics.return_rate ?? 0.12) <= 0.18
+  ).length;
+  const reuseCount = topTask ? proofReuseCandidates(topTask, listings).length : 0;
+
+  return [
+    {
+      key: "doubt_cluster",
+      label: copy.buyerDoubts,
+      value: totalAsks ? `${totalAsks} asks` : "Clear",
+      detail: totalAsks ? "Repeated questions are grouped into proof tasks." : "No repeated proof doubt is open.",
+      tone: totalAsks ? "watch" : "good",
+      action: totalAsks ? copy.prepareProof : undefined
+    },
+    {
+      key: "return_spike",
+      label: copy.returnSpike,
+      value: spikeCard ? spikeCard.metric : "Stable",
+      detail: spikeCard ? `${shortProductTitle(spikeCard.product_title)} needs attention first.` : "No urgent return spike in live listings.",
+      tone: spikeCard ? "risk" : "good",
+      action: spikeCard ? copy.viewProducts : undefined
+    },
+    {
+      key: "rating_protection",
+      label: copy.ratingProtection,
+      value: ratingText,
+      detail: verificationStatus === "verified"
+        ? `${thinEvidence} low-evidence listing${thinEvidence === 1 ? "" : "s"} can improve without exposing buyer data.`
+        : "Finish verification before buyer-visible trust can grow.",
+      tone: verificationStatus === "verified" ? "good" : "watch",
+      action: thinEvidence ? copy.viewProducts : undefined
+    },
+    {
+      key: "proof_reuse",
+      label: copy.proofReuse,
+      value: reuseCount ? `${reuseCount} matches` : "Ready",
+      detail: reuseCount ? "One approved proof can support similar listings." : "Next proof will be checked for reuse.",
+      tone: reuseCount ? "good" : "neutral",
+      action: topTask ? copy.useProof : undefined
+    },
+    {
+      key: "prepaid",
+      label: copy.prepaidTrust,
+      value: `${prepaidReady}/${Math.max(1, listings.length)}`,
+      detail: "Fast dispatch plus clear packaging proof helps buyers trust prepaid.",
+      tone: prepaidReady ? "good" : "watch",
+      action: topTask ? copy.addProof : undefined
+    },
+    {
 function labelize(value: string) {
   return value.replace(/_/g, " ");
 }
