@@ -7975,6 +7975,112 @@
   width: auto !important;
 }
 
+/* Keep policy evidence full-width on reviewer dashboards. */
+.admin-app-route .admin-policy-board {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 18px !important;
+}
+
+.admin-app-route .admin-policy-panel {
+  min-width: 0 !important;
+}
+
+.admin-app-route .admin-policy-gate-grid,
+.admin-app-route .admin-source-grid {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 10px !important;
+  margin-top: 12px !important;
+  overflow: visible !important;
+}
+
+.admin-app-route .admin-policy-gate-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .admin-source-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .admin-policy-gate-grid .admin-policy-gate-row,
+.admin-app-route .admin-source-grid .admin-source-row {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+.admin-app-route .admin-policy-gate-grid .admin-policy-gate-row {
+  align-items: flex-start !important;
+  display: grid !important;
+  gap: 10px !important;
+  grid-template-columns: 18px minmax(0, 1fr) !important;
+  min-height: 112px !important;
+  padding: 14px !important;
+}
+
+.admin-app-route .admin-policy-gate-grid .admin-policy-gate-row.pass {
+  border-left-color: var(--success) !important;
+}
+
+.admin-app-route .admin-policy-gate-grid .admin-policy-gate-row.warn {
+  border-left-color: var(--warning) !important;
+}
+
+.admin-app-route .admin-policy-gate-grid .admin-policy-gate-row.fail {
+  border-left-color: var(--error) !important;
+}
+
+.admin-app-route .admin-source-grid .admin-source-row {
+  align-items: start !important;
+  display: grid !important;
+  gap: 9px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  min-height: 104px !important;
+  padding: 14px !important;
+}
+
+.admin-app-route .admin-source-grid .admin-source-row.operational {
+  border-left-color: var(--success) !important;
+}
+
+.admin-app-route .admin-source-grid .admin-source-row.degraded,
+.admin-app-route .admin-source-grid .admin-source-row.stale {
+  border-left-color: var(--warning) !important;
+}
+
+.admin-app-route .admin-source-grid .admin-source-row.down {
+  border-left-color: var(--error) !important;
+}
+
+.admin-app-route .admin-source-grid .admin-source-row small {
+  grid-column: 1 / -1 !important;
+  margin-top: 2px !important;
+}
+
+.admin-app-route .admin-source-grid .review-status-pill {
+  justify-self: end !important;
+}
+
+@media (max-width: 1200px) {
+  .admin-app-route .admin-policy-gate-grid,
+  .admin-app-route .admin-source-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-app-route .admin-policy-gate-grid,
+  .admin-app-route .admin-source-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @media (max-width: 760px) {
   .admin-app-route .review-status-pill,
   .admin-app-route .review-risk-pill,

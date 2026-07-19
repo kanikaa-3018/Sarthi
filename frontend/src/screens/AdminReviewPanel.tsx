@@ -805,30 +805,30 @@ function PolicyBrainView({ queue }: { queue: AdminReviewQueue }) {
         <PolicyMetric label="Gemini prescreens" value={String(geminiChecks)} tone={geminiChecks ? "good" : "warn"} />
       </div>
 
-      <div className="admin-mode-split">
-        <section className="admin-mode-panel">
+      <div className="admin-policy-board">
+        <section className="admin-policy-panel">
           <div className="admin-mode-panel-head">
             <div>
               <h3>Human-in-loop gates</h3>
               <p>These rules decide what can be fast-cleared and what must stay manual.</p>
             </div>
           </div>
-          <div className="admin-policy-gate-list">
+          <div className="admin-policy-gate-list admin-policy-gate-grid">
             {policyGates.map((gate) => (
               <PolicyGateRow key={gate.label} gate={gate} />
             ))}
           </div>
         </section>
 
-        <section className="admin-mode-panel">
+        <section className="admin-policy-panel">
           <div className="admin-mode-panel-head">
             <div>
               <h3>Source freshness</h3>
-              <p>Reviewer automation is only trusted when sources are usable.</p>
+              <p>Timestamped connected systems that reviewer automation relies on.</p>
             </div>
             <span>{queue.source_health.sources.length}</span>
           </div>
-          <div className="admin-source-list">
+          <div className="admin-source-list admin-source-grid">
             {queue.source_health.sources.map((source) => (
               <article className={`admin-source-row ${source.effective_status}`} key={source.source_id}>
                 <div>
