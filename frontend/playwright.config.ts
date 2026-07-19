@@ -1,7 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolveE2eDatabaseName } from "./e2eRuntime";
 
 const apiPort = Number(process.env.E2E_API_PORT ?? 58001);
 const frontendPort = Number(process.env.E2E_FRONTEND_PORT ?? 58173);
+const e2eDatabaseName = resolveE2eDatabaseName();
 const apiUrl = `http://127.0.0.1:${apiPort}`;
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const inheritedEnv = Object.fromEntries(
@@ -29,7 +31,7 @@ export default defineConfig({
         ...inheritedEnv,
         NODE_ENV: "test",
         PORT: String(apiPort),
-        MONGODB_DB: `sarthi_codex_auth_e2e_${apiPort}`,
+        MONGODB_DB: e2eDatabaseName,
         DEMO_CONTROLS_ENABLED: "true",
         BEDROCK_ENABLED: "false",
         AI_PROVIDER_ORDER: "",
