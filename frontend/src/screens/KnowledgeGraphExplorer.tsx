@@ -1,18 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  Boxes,
   CheckCircle2,
   CircleAlert,
   Clock3,
+  FileCheck2,
+  FileSearch,
   Maximize2,
   MessageCircle,
   Minimize2,
   PackageCheck,
+  RefreshCw,
+  Search,
   Send,
   ShieldCheck,
-  Sparkles,
   Star,
   UserCheck,
+  UsersRound,
   X,
   ZoomIn,
   ZoomOut,
@@ -35,10 +40,12 @@ type Props = {
   onQueryChange: (value: string) => void;
   onAsk: (query: string) => void;
   onOpenProof: (traceId: string) => void;
+  onRetry?: () => void;
 };
 
 type SellerContext = ClusterKnowledgeGraph["seller_context"][number];
 type EvidenceTone = "safe" | "watch" | "danger" | "private";
+type GraphNodeCategory = "product" | "seller" | "evidence" | "cohort";
 
 type ViewNode = KnowledgeGraphNode & {
   x: number;
@@ -46,6 +53,7 @@ type ViewNode = KnowledgeGraphNode & {
   title: string;
   value: string;
   tone: EvidenceTone;
+  category: GraphNodeCategory;
   Icon: LucideIcon;
 };
 
@@ -100,12 +108,27 @@ export function KnowledgeGraphExplorer({
   error,
   onQueryChange,
   onAsk,
-  onOpenProof
+  onOpenProof,
+  onRetry
 }: Props) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | GraphNodeCategory>("all");
+  const [answerPulse, setAnswerPulse] = useState(false);
+
+  useEffect(() => {
+    if (!answer) return;
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setAnswerPulse(true);
+    const timeout = window.setTimeout(() => setAnswerPulse(false), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [answer?.trace_id]);
 
   if (loading) {
     return (
@@ -137,6 +160,12 @@ export function KnowledgeGraphExplorer({
           </div>
         </div>
         <p>{error}</p>
+        {onRetry && (
+          <button type="button" className="kg-retry-button" onClick={onRetry}>
+            <RefreshCw size={14} />
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -147,25 +176,47 @@ export function KnowledgeGraphExplorer({
   const highlightedEdgeIds = new Set(answer?.answer.highlighted_edge_ids ?? []);
   const winnerContext = selectedSellerContext(graph);
   const graphView = buildGraphView(graph, winnerContext, highlightedEdgeIds, expanded);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const visibleNodes = graphView.nodes.filter((node) => {
+    const typeMatch = typeFilter === "all" || node.category === typeFilter;
+    const textMatch = !normalizedSearch || `${node.title} ${node.value} ${node.subtitle}`.toLowerCase().includes(normalizedSearch);
+    return typeMatch && textMatch;
+  });
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+  const visibleEdges = graphView.edges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
   const selectedNode = selectedNodeId
-    ? graphView.nodes.find((node) => node.id === selectedNodeId) ?? null
+    ? visibleNodes.find((node) => node.id === selectedNodeId) ?? null
     : null;
   const selectedEdge = selectedEdgeId
-    ? graphView.edges.find((edge) => edge.id === selectedEdgeId) ?? null
+    ? visibleEdges.find((edge) => edge.id === selectedEdgeId) ?? null
     : null;
-  const engineLabel = graph.summary.neo4j_projection?.status === "projected"
-    ? "Neo4j live"
-    : "Mongo graph";
+  const selectedNodeConnections = selectedNode
+    ? visibleEdges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id).slice(0, 5)
+    : [];
+  const focus = buildGraphFocus({
+    selectedNodeId,
+    selectedEdgeId,
+    selectedEdge,
+    matchedNodeIds,
+    highlightedEdgeIds,
+    visibleNodes,
+    visibleEdges,
+    answerText: answer
+      ? [answer.answer.query, answer.answer.title, answer.answer.summary, ...answer.answer.reasons, answer.answer.caution ?? ""].join(" ")
+      : "",
+    answerActive: Boolean(answer)
+  });
+  const engineLabel = "Evidence map";
   const similarity = graph.summary.similarity;
   const aiLabel = answer?.agent?.provider === "gemini"
-    ? "Gemini answer"
+    ? "AI answer"
     : answer
-      ? "Fact answer"
+      ? "Proof answer"
       : "Ask Sarthi";
   const similarityLabel = similarity?.agent?.provider === "gemini"
     ? similarity.agent.used
-      ? `Image AI ${similarity.agent.image_inputs} pics`
-      : `Image AI ${similarity.agent.status}`
+      ? `Image match ${similarity.agent.image_inputs} photos`
+      : `Image match ${similarity.agent.status}`
     : similarity
       ? `${similarity.distinct_seller_count} similar sellers`
       : null;
@@ -183,21 +234,69 @@ export function KnowledgeGraphExplorer({
       <div className={`kg-card kg-simple-card ${expanded ? "graph-expanded" : ""}`}>
       <div className="kg-card-header kg-simple-header">
         <div>
-          <span className="eyebrow">Knowledge graph</span>
-          <h3>Evidence links</h3>
+          <span className="eyebrow">Proof graph</span>
+          <h3>What affects trust</h3>
         </div>
         <span className="kg-live-pill">{graph.summary.fact_count} facts</span>
       </div>
 
       <div className="kg-system-strip" aria-label="Runtime status">
         <span><ShieldCheck size={13} /> {engineLabel}</span>
-        <span><Sparkles size={13} /> {aiLabel}</span>
+        <span><MessageCircle size={13} /> {aiLabel}</span>
         {similarityLabel && (
           <span><PackageCheck size={13} /> {similarityLabel}</span>
         )}
       </div>
 
-      <div className="kg-graph-toolbar" aria-label="Graph controls">
+      <div className="kg-graph-controls" aria-label="Graph controls">
+        <label className="kg-search-control">
+          <Search size={14} aria-hidden="true" />
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search seller, return, review..."
+            aria-label="Find a graph node"
+          />
+        </label>
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value as "all" | GraphNodeCategory)}
+          aria-label="Filter graph node type"
+        >
+          <option value="all">All checks</option>
+          <option value="product">Products</option>
+          <option value="seller">Sellers</option>
+          <option value="evidence">Evidence</option>
+          <option value="cohort">Buyer and review groups</option>
+        </select>
+      </div>
+
+      <div className="kg-legend" aria-label="Graph legend">
+        <span className="product"><Boxes size={13} /> Product or SKU</span>
+        <span className="seller"><UserCheck size={13} /> Seller</span>
+        <span className="evidence"><FileCheck2 size={13} /> Evidence</span>
+        <span className="cohort"><UsersRound size={13} /> Buyer or reviews</span>
+      </div>
+
+      {focus.label && (
+        <div className={`kg-focus-strip ${answerPulse ? "pulse" : ""}`} aria-live="polite">
+          <FileSearch size={14} />
+          <span>{plainFocusLabel(focus.label)}</span>
+          {(selectedNodeId || selectedEdgeId) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedNodeId(null);
+                setSelectedEdgeId(null);
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="kg-graph-toolbar">
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
@@ -224,109 +323,198 @@ export function KnowledgeGraphExplorer({
           >
             <ZoomIn size={14} />
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }}
+            aria-label="Reset graph view"
+          >
+            <RefreshCw size={14} />
+          </button>
         </div>
       </div>
 
-      <div className="kg-real-graph" aria-label="Knowledge graph relationships">
-        <div
-          className="kg-graph-zoom-surface"
-          style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
-        >
-          <svg className="kg-real-edges" viewBox="0 0 100 100" aria-hidden="true" preserveAspectRatio="none">
-            {graphView.edges.map((edge) => {
-              const highlighted = highlightedEdgeIds.has(edge.id);
-              const selected = selectedEdgeId === edge.id;
-              return (
-                <path
-                  key={edge.id}
-                  className={`kg-real-edge ${edge.tone} ${highlighted ? "highlighted" : ""} ${selected ? "selected" : ""}`}
-                  d={edge.path}
-                />
-              );
-            })}
-          </svg>
+      {visibleNodes.length === 0 ? (
+        <div className="kg-empty-state">
+          <FileSearch size={22} />
+          <strong>No connected evidence yet</strong>
+          <span>Try another search or clear the node filter.</span>
+          <button type="button" onClick={() => { setSearchTerm(""); setTypeFilter("all"); }}>
+            Show all facts
+          </button>
+        </div>
+      ) : (
+        <div className={`kg-graph-layout ${(selectedNode || selectedEdge) ? "has-selection" : ""}`}>
+          <div
+            className={`kg-real-graph ${dragStart ? "is-panning" : ""}`}
+            aria-label="Knowledge graph relationships"
+            onPointerDown={(event) => {
+              if (event.target instanceof Element && event.target.closest("button, input, select")) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDragStart({ x: event.clientX - pan.x, y: event.clientY - pan.y });
+            }}
+            onPointerMove={(event) => {
+              if (!dragStart) return;
+              setPan({ x: event.clientX - dragStart.x, y: event.clientY - dragStart.y });
+            }}
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+              setDragStart(null);
+            }}
+            onPointerCancel={() => setDragStart(null)}
+          >
+            <div
+              className="kg-graph-zoom-surface"
+              style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+            >
+              <svg className="kg-real-edges" viewBox="0 0 100 100" aria-hidden="true" preserveAspectRatio="none">
+                {visibleEdges.map((edge) => {
+                  const highlighted = highlightedEdgeIds.has(edge.id);
+                  const selected = selectedEdgeId === edge.id;
+                  const connected = focus.edgeIds.has(edge.id);
+                  const dimmed = focus.active && !connected;
+                  return (
+                    <path
+                      key={edge.id}
+                      className={`kg-real-edge ${edge.tone} ${highlighted ? "highlighted" : ""} ${selected ? "selected" : ""} ${connected ? "connected" : ""} ${dimmed ? "dimmed" : ""} ${answerPulse && highlighted ? "answer-pulse" : ""}`}
+                      d={edge.path}
+                    />
+                  );
+                })}
+              </svg>
 
-          {graphView.edges.filter((edge) => edge.showLabel).map((edge) => {
-            const highlighted = highlightedEdgeIds.has(edge.id);
-            const selected = selectedEdgeId === edge.id;
-            return (
+              {visibleEdges.filter((edge) => edge.showLabel || selectedEdgeId === edge.id).map((edge) => {
+                const highlighted = highlightedEdgeIds.has(edge.id);
+                const selected = selectedEdgeId === edge.id;
+                const connected = focus.edgeIds.has(edge.id);
+                const dimmed = focus.active && !connected;
+                return (
+                  <button
+                    key={`label-${edge.id}`}
+                    type="button"
+                    className={`kg-real-edge-label ${edge.tone} ${highlighted ? "highlighted" : ""} ${selected ? "selected" : ""} ${connected ? "connected" : ""} ${dimmed ? "dimmed" : ""} ${answerPulse && highlighted ? "answer-pulse" : ""}`}
+                    style={{ left: `${edge.mx}%`, top: `${edge.my}%` }}
+                    onClick={() => {
+                      setSelectedNodeId(null);
+                      setSelectedEdgeId(selected ? null : edge.id);
+                    }}
+                    aria-pressed={selected}
+                    aria-label={`${edge.sourceNode.title} to ${edge.targetNode.title}: ${edge.label}`}
+                  >
+                    {edge.labelShort}
+                  </button>
+                );
+              })}
+
+              {visibleNodes.map((node) => {
+                const Icon = node.Icon;
+                const highlighted = matchedNodeIds.has(node.id);
+                const selected = selectedNodeId === node.id;
+                const connected = focus.nodeIds.has(node.id);
+                const dimmed = focus.active && !connected;
+                return (
+                  <button
+                    key={node.id}
+                    type="button"
+                    data-category={node.category}
+                    className={`kg-real-node ${node.type} ${node.tone} ${highlighted ? "highlighted" : ""} ${selected ? "selected" : ""} ${connected ? "connected" : ""} ${dimmed ? "dimmed" : ""} ${answerPulse && highlighted ? "answer-pulse" : ""}`}
+                    style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                    onClick={() => {
+                      setSelectedEdgeId(null);
+                      setSelectedNodeId(selected ? null : node.id);
+                    }}
+                    aria-pressed={selected}
+                    aria-label={`${node.title}: ${node.value}. ${node.subtitle}`}
+                  >
+                    <span className="kg-real-node-icon"><Icon size={17} /></span>
+                    <span className="kg-real-node-copy">
+                      <strong>{node.title}</strong>
+                      <small>{node.value}</small>
+                    </span>
+                    <span className="kg-node-hover-tip" role="tooltip">{node.subtitle}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="kg-mobile-tree" aria-label="Evidence relationship list">
+            {visibleEdges.length ? visibleEdges.map((edge) => (
               <button
-                key={`label-${edge.id}`}
+                key={`mobile-${edge.id}`}
                 type="button"
-                className={`kg-real-edge-label ${edge.tone} ${highlighted ? "highlighted" : ""} ${selected ? "selected" : ""}`}
-                style={{ left: `${edge.mx}%`, top: `${edge.my}%` }}
+                className={edge.tone}
                 onClick={() => {
                   setSelectedNodeId(null);
-                  setSelectedEdgeId(selected ? null : edge.id);
+                  setSelectedEdgeId(edge.id);
                 }}
-                aria-pressed={selected}
-                aria-label={`${edge.sourceNode.title} to ${edge.targetNode.title}: ${edge.label}`}
               >
-                {edge.labelShort}
+                <strong>{edge.sourceNode.title}</strong>
+                <span>{edgeLabelShort(edge.label)}</span>
+                <strong>{edge.targetNode.title}</strong>
               </button>
-            );
-          })}
-
-          {graphView.nodes.map((node) => {
-            const Icon = node.Icon;
-            const highlighted = matchedNodeIds.has(node.id);
-            const selected = selectedNodeId === node.id;
-            return (
-              <button
-                key={node.id}
-                type="button"
-                className={`kg-real-node ${node.type} ${node.tone} ${highlighted ? "highlighted" : ""} ${selected ? "selected" : ""}`}
-                style={{ left: `${node.x}%`, top: `${node.y}%` }}
-                onClick={() => {
-                  setSelectedEdgeId(null);
-                  setSelectedNodeId(selected ? null : node.id);
-                }}
-                aria-pressed={selected}
-                aria-label={`${node.title}: ${node.value}. ${node.subtitle}`}
-              >
-                <span className="kg-real-node-icon">
-                  <Icon size={17} />
-                </span>
-                <span className="kg-real-node-copy">
-                  <strong>{node.title}</strong>
-                  <small>{node.value}</small>
-                </span>
+            )) : visibleNodes.map((node) => (
+              <button key={`mobile-${node.id}`} type="button" onClick={() => setSelectedNodeId(node.id)}>
+                <strong>{node.title}</strong>
+                <span>{node.value}</span>
               </button>
-            );
-          })}
-        </div>
-      </div>
+            ))}
+          </div>
 
-      {(selectedNode || selectedEdge) && (
-        <div className={`kg-node-details-card kg-simple-details ${(selectedNode?.tone ?? selectedEdge?.tone) || "watch"}`}>
-          <div className="kg-node-details-top">
-            <div>
-              <span className="eyebrow">{selectedEdge ? "Relationship" : "Fact node"}</span>
-              <h4>{selectedEdge ? `${selectedEdge.sourceNode.title} -> ${selectedEdge.targetNode.title}` : selectedNode?.value}</h4>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedNodeId(null);
-                setSelectedEdgeId(null);
-              }}
-              className="kg-node-close"
-              aria-label="Close evidence detail"
-            >
-              <X size={14} />
-            </button>
-          </div>
-          <p className="kg-node-subtitle">
-            {selectedEdge ? labelize(selectedEdge.label) : selectedNode?.subtitle}
-          </p>
-          <div className="kg-grounding-box">
-            <strong>Fact used</strong>
-            <div>
-              <span>{factLine(selectedNode ?? selectedEdge)}</span>
-              <span>Reference: <code>{firstFactId(selectedNode ?? selectedEdge)}</code></span>
-              <span>Private fit is buyer-only.</span>
-            </div>
-          </div>
+          {(selectedNode || selectedEdge) && (
+            <aside className={`kg-node-details-card kg-simple-details kg-node-side-panel ${(selectedNode?.tone ?? selectedEdge?.tone) || "watch"}`}>
+              <div className="kg-node-details-top">
+                <div>
+                  <span className="eyebrow">{selectedEdge ? "Relationship" : "Fact node"}</span>
+                  <h4>{selectedEdge ? `${selectedEdge.sourceNode.title} -> ${selectedEdge.targetNode.title}` : selectedNode?.value}</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedNodeId(null);
+                    setSelectedEdgeId(null);
+                  }}
+                  className="kg-node-close"
+                  aria-label="Close evidence detail"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <p className="kg-node-subtitle">{selectedEdge ? labelize(selectedEdge.label) : selectedNode?.subtitle}</p>
+              {selectedNode && selectedNodeConnections.length > 0 && (
+                <div className="kg-connected-list">
+                  <strong>Connected to</strong>
+                  {selectedNodeConnections.map((edge) => {
+                    const other = edge.source === selectedNode.id ? edge.targetNode : edge.sourceNode;
+                    return (
+                      <button
+                        key={edge.id}
+                        type="button"
+                        className={edge.tone}
+                        onClick={() => {
+                          setSelectedNodeId(null);
+                          setSelectedEdgeId(edge.id);
+                        }}
+                      >
+                        <span>{other.title}</span>
+                        <small>{edgeLabelShort(edge.label)}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="kg-grounding-box">
+                <strong>Fact used</strong>
+                <div>
+                  <span>{factLine(selectedNode ?? selectedEdge)}</span>
+                  <span>Reference: <code>{firstFactId(selectedNode ?? selectedEdge)}</code></span>
+                  <span>Private fit is buyer-only.</span>
+                </div>
+              </div>
+            </aside>
+          )}
         </div>
       )}
 
@@ -336,6 +524,7 @@ export function KnowledgeGraphExplorer({
             <button
               key={suggestion}
               type="button"
+              disabled={asking}
               onClick={() => {
                 onQueryChange(suggestion);
                 onAsk(suggestion);
@@ -350,13 +539,14 @@ export function KnowledgeGraphExplorer({
           className="kg-chat-input"
           onSubmit={(event) => {
             event.preventDefault();
-            onAsk(query);
+            const prompt = query.trim();
+            if (prompt) onAsk(prompt);
           }}
         >
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Ask: returns affect reviews?"
+            placeholder="Ask in simple words"
           />
           <button type="submit" disabled={asking || !query.trim()} aria-label="Ask Sarthi">
             {asking ? <MessageCircle size={14} /> : <Send size={14} />}
@@ -464,6 +654,109 @@ function buildFallbackGraphView(graph: ClusterKnowledgeGraph): GraphView {
   return { nodes, edges };
 }
 
+function buildGraphFocus({
+  selectedNodeId,
+  selectedEdgeId,
+  selectedEdge,
+  matchedNodeIds,
+  highlightedEdgeIds,
+  visibleNodes,
+  visibleEdges,
+  answerText,
+  answerActive
+}: {
+  selectedNodeId: string | null;
+  selectedEdgeId: string | null;
+  selectedEdge: ViewEdge | null;
+  matchedNodeIds: Set<string>;
+  highlightedEdgeIds: Set<string>;
+  visibleNodes: ViewNode[];
+  visibleEdges: ViewEdge[];
+  answerText: string;
+  answerActive: boolean;
+}) {
+  const nodeIds = new Set<string>();
+  const edgeIds = new Set<string>();
+  let label = "";
+
+  if (selectedNodeId) {
+    nodeIds.add(selectedNodeId);
+    visibleEdges.forEach((edge) => {
+      if (edge.source === selectedNodeId || edge.target === selectedNodeId) {
+        edgeIds.add(edge.id);
+        nodeIds.add(edge.source);
+        nodeIds.add(edge.target);
+      }
+    });
+    const connectedCount = Math.max(0, nodeIds.size - 1);
+    label = `Showing ${connectedCount} direct connection${connectedCount === 1 ? "" : "s"} for this node.`;
+  } else if (selectedEdgeId && selectedEdge) {
+    edgeIds.add(selectedEdgeId);
+    nodeIds.add(selectedEdge.source);
+    nodeIds.add(selectedEdge.target);
+    label = `Showing how ${selectedEdge.sourceNode.title} affects ${selectedEdge.targetNode.title}.`;
+  } else if (answerActive && (matchedNodeIds.size || highlightedEdgeIds.size || answerText.trim())) {
+    const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+    matchedNodeIds.forEach((nodeId) => {
+      if (visibleNodeIds.has(nodeId)) nodeIds.add(nodeId);
+    });
+    visibleEdges.forEach((edge) => {
+      if (highlightedEdgeIds.has(edge.id)) {
+        edgeIds.add(edge.id);
+        nodeIds.add(edge.source);
+        nodeIds.add(edge.target);
+      }
+    });
+    addSemanticAnswerFocus(answerText, visibleNodes, visibleEdges, nodeIds, edgeIds);
+    label = `Sarthi used ${nodeIds.size} node${nodeIds.size === 1 ? "" : "s"} and ${edgeIds.size} link${edgeIds.size === 1 ? "" : "s"} for this answer.`;
+  }
+
+  return {
+    active: Boolean(selectedNodeId || selectedEdgeId || (answerActive && (nodeIds.size || edgeIds.size))),
+    nodeIds,
+    edgeIds,
+    label
+  };
+}
+
+function addSemanticAnswerFocus(
+  answerText: string,
+  visibleNodes: ViewNode[],
+  visibleEdges: ViewEdge[],
+  nodeIds: Set<string>,
+  edgeIds: Set<string>
+) {
+  const text = answerText.toLowerCase();
+  const wanted = new Set<string>();
+  if (/\breturn|rto|kept|refund/.test(text)) wanted.add("return_reason");
+  if (/\breview|rating|credib/.test(text)) wanted.add("reviews");
+  if (/\bseller|verified|verification/.test(text)) wanted.add("seller");
+  if (/\bproof|photo|fabric|transparen|evidence/.test(text)) wanted.add("proof");
+  if (/\boffer|price|timer|rush|discount/.test(text)) wanted.add("offer");
+  if (/\bsize|fit|sku|xl|l\b|m\b/.test(text)) wanted.add("sku");
+  if (/\btrust|score|safe|risk/.test(text)) wanted.add("evidence");
+
+  visibleNodes.forEach((node) => {
+    if (wanted.has(node.type)) nodeIds.add(node.id);
+  });
+
+  visibleEdges.forEach((edge) => {
+    if (nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
+      edgeIds.add(edge.id);
+    }
+  });
+
+  if (nodeIds.size > 0) {
+    const scoreNode = visibleNodes.find((node) => node.type === "evidence");
+    if (scoreNode) nodeIds.add(scoreNode.id);
+    visibleEdges.forEach((edge) => {
+      if (nodeIds.has(edge.source) || nodeIds.has(edge.target)) {
+        edgeIds.add(edge.id);
+      }
+    });
+  }
+}
+
 function toViewNode(node: KnowledgeGraphNode, x: number, y: number): ViewNode {
   return {
     ...node,
@@ -472,6 +765,7 @@ function toViewNode(node: KnowledgeGraphNode, x: number, y: number): ViewNode {
     title: nodeTitle(node),
     value: nodeValue(node),
     tone: nodeTone(node),
+    category: nodeCategory(node),
     Icon: nodeIcon(node)
   };
 }
@@ -497,7 +791,7 @@ function toViewEdge(edge: KnowledgeGraphEdge, sourceNode: ViewNode, targetNode: 
     mx: midX,
     my: midY,
     path: `M ${sourceNode.x} ${sourceNode.y} C ${controlX1} ${controlY}, ${controlX2} ${targetNode.y}, ${targetNode.x} ${targetNode.y}`,
-    showLabel: highlighted || shouldShowEdgeLabel(edge.label, expanded)
+    showLabel: highlighted
   };
 }
 
@@ -537,6 +831,13 @@ function nodeTone(node: KnowledgeGraphNode): EvidenceTone {
     if (node.score < 0.72) return "watch";
   }
   return "safe";
+}
+
+function nodeCategory(node: KnowledgeGraphNode): GraphNodeCategory {
+  if (node.type === "seller") return "seller";
+  if (node.type === "product" || node.type === "sku" || node.type === "cluster") return "product";
+  if (node.type === "reviews" || node.type === "buyer_context") return "cohort";
+  return "evidence";
 }
 
 function nodeIcon(node: KnowledgeGraphNode): LucideIcon {
@@ -590,6 +891,16 @@ function edgeLabelShort(label: string) {
   if (normalized === "timer needs proof") return "timer needs proof";
   if (normalized === "private fit check") return "fit check";
   return truncate(labelize(label), 22);
+}
+
+function plainFocusLabel(label: string) {
+  if (label.startsWith("Showing ") && label.includes("direct connection")) {
+    return "Showing only the checks linked to the item you tapped.";
+  }
+  if (label.startsWith("Sarthi used ")) {
+    return "Highlighted checks were used for this answer.";
+  }
+  return label;
 }
 
 function edgePriority(edge: KnowledgeGraphEdge, highlightedEdgeIds: Set<string>) {

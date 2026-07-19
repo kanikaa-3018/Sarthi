@@ -1,10 +1,12 @@
 import { useState } from "react";
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronDown,
   HelpCircle,
   Info,
   Layers,
+  ListChecks,
   Palette,
   RotateCcw,
   Ruler,
@@ -42,6 +44,8 @@ export function CompareSheet({
   const visibleFactors = isSimple ? ranking.top_factors.slice(0, 2) : ranking.top_factors;
   const winnerDetails = getProductDetailsForVariant(ranking.winner, productCatalog);
   const winnerCandidate = ranking.candidates.find((candidate) => candidate.variant_id === ranking.winner) ?? null;
+  const winnerTrust = winnerDetails.product?.buyer_trust ?? null;
+  const canRecommendWinner = winnerTrust?.can_recommend ?? (winnerCandidate ? trustScorePercent(winnerCandidate) >= 75 : false);
   const alternativeDetails = ranking.alternative
     ? getProductDetailsForVariant(ranking.alternative, productCatalog)
     : null;
@@ -52,17 +56,18 @@ export function CompareSheet({
     isWinner: candidate.variant_id === ranking.winner,
     isAlternative: candidate.variant_id === ranking.alternative
   }));
+  const agentReason = winnerCandidate ? compareAgentReason(winnerCandidate, ranking.candidates, language) : null;
 
   return (
     <div className="compare-sheet">
       <section className="compare-best-card interactive-lift">
         <div className="compare-card-header">
           <div className="compare-title-row">
-            <span className="compare-icon-badge positive">
-              <CheckCircle2 size={15} />
+            <span className={`compare-icon-badge ${canRecommendWinner ? "positive" : "watch"}`}>
+              {canRecommendWinner ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
             </span>
             <div>
-              <span className="eyebrow">Best match for you</span>
+              <span className="eyebrow">{canRecommendWinner ? t(language, "bestMatchForYou") : t(language, "checkOnce")}</span>
               <h3>{winnerDetails.sellerName}</h3>
             </div>
           </div>
@@ -74,15 +79,15 @@ export function CompareSheet({
 
         <div className="compare-kv-panel">
           <div className="kv-row">
-            <span>Product</span>
+            <span>{t(language, "product")}</span>
             <strong>{winnerDetails.title}</strong>
           </div>
           <div className="kv-row">
-            <span>Price</span>
+            <span>{t(language, "price")}</span>
             <strong className="compare-price">Rs {winnerDetails.price}</strong>
           </div>
           <div className="kv-row">
-            <span>Size</span>
+            <span>{t(language, "size")}</span>
             <strong>
               <span className="ui-badge neutral">{fit.recommended_size}</span>
             </strong>
@@ -92,24 +97,65 @@ export function CompareSheet({
         {comparison.similarity && (
           <div className="compare-match-strip">
             <Layers size={14} />
-            <strong>{comparison.similarity.distinct_seller_count} similar sellers</strong>
-            <span>{matchReasons(comparison.similarity.candidates)}</span>
+            <strong>{comparison.similarity.distinct_seller_count} {t(language, "similarSellers")}</strong>
+            <span>{matchReasons(comparison.similarity.candidates, language)}</span>
           </div>
         )}
 
+        {winnerTrust && !winnerTrust.can_recommend && (
+          <div className="compare-simple-note">
+            <AlertTriangle size={14} />
+            <span>{winnerTrust.buyer_guidance}</span>
+          </div>
+        )}
+
+        {agentReason && (
+          <div className="compare-agent-reason">
+            <ListChecks size={15} />
+            <div>
+              <span>{t(language, "agentChecks")}</span>
+              <strong>{agentReason.title}</strong>
+              <small>{agentReason.summary}</small>
+            </div>
+          </div>
+        )}
+
+        <div className="compare-similar-strip">
+          <span className="compare-section-label">{t(language, "similarSellers")}</span>
+          <div className="compare-similar-list">
+            {candidateRows.slice(0, isSimple ? 3 : 4).map(({ candidate, details, isWinner }) => (
+              <div
+                key={candidate.variant_id}
+                className={`compare-similar-card ${isWinner ? "winner" : ""}`}
+              >
+                <img
+                  src={details.imageUrl}
+                  alt={details.title}
+                  onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+                />
+                <div>
+                  <strong>{details.sellerName}</strong>
+                  <span>Rs {details.price}</span>
+                </div>
+                <small>{trustScorePercent(candidate)}/100</small>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="compare-reason-list">
-          <span className="compare-section-label">Why this one</span>
+          <span className="compare-section-label">{t(language, "whyThisOne")}</span>
           {visibleFactors.map((factor) => (
             <div className="reason-row" key={factor}>
               <FactorIcon factor={factor} />
-              <span>{humanFactorLabel(factor)}</span>
+              <span>{humanFactorLabel(factor, language)}</span>
             </div>
           ))}
         </div>
 
         {winnerCandidate && (
           <div className="compare-factor-meter-list">
-            {factorRowsForCandidate(winnerCandidate).map((factor) => (
+            {factorRowsForCandidate(winnerCandidate, language).map((factor) => (
               <div className="compare-factor-meter" key={factor.key}>
                 <div>
                   <span>{factor.label}</span>
@@ -133,9 +179,9 @@ export function CompareSheet({
             aria-expanded={alternativeOpen}
           >
             <div>
-              <span className="eyebrow">Also consider</span>
+              <span className="eyebrow">{t(language, "alsoConsider")}</span>
               <strong>{alternativeDetails.sellerName}</strong>
-              <small>Rs {alternativeDetails.price} | Size {fit.recommended_size}</small>
+              <small>Rs {alternativeDetails.price} | {t(language, "size")} {fit.recommended_size}</small>
             </div>
             <ChevronDown size={16} />
           </button>
@@ -143,7 +189,7 @@ export function CompareSheet({
             <div className="compare-alternative-body">
               <div className="reason-row">
                 <Tag size={16} />
-                <span>Useful if price is the priority, but it scored lower after return, color, dispatch, and fit checks.</span>
+                <span>{t(language, "usefulIfPricePriority")}</span>
               </div>
             </div>
           )}
@@ -154,18 +200,15 @@ export function CompareSheet({
         <div className="compare-engine-card">
           <div className="compare-engine-header">
             <div>
-              <span className="eyebrow">Trust ranking</span>
-              <h4>Seller options checked</h4>
+              <span className="eyebrow">{t(language, "trustRanking")}</span>
+              <h4>{t(language, "sellerOptionsChecked")}</h4>
             </div>
-            <span className="ui-badge neutral">{candidateRows.length} checked</span>
+            <span className="ui-badge neutral">{candidateRows.length} {t(language, "checked")}</span>
           </div>
-          <p>
-            Ranked using seller reliability, kept-order history, fit signals, reviews, price facts, proof, and offer truth.
-            Ads or paid position are not used.
-          </p>
+          <p>{t(language, "rankingExplainer")}</p>
           {ranking.weighting && (
             <div className="compare-weight-note">
-              <span>Weight policy</span>
+              <span>{t(language, "weightPolicy")}</span>
               <strong>{formatPolicyLabel(ranking.weighting.version)}</strong>
             </div>
           )}
@@ -182,11 +225,11 @@ export function CompareSheet({
                   <strong>{details.sellerName}</strong>
                   <small>{details.title} | Rs {details.price}</small>
                   <div className="compare-factor-chips">
-                    <span><Ruler size={12} /> Fit {factorPercent(candidate, "fit_match")}</span>
-                    <span><RotateCcw size={12} /> Returns {factorPercent(candidate, "outcome_quality")}</span>
-                    <span><ShieldCheck size={12} /> Trust {factorPercent(candidate, "seller_trust")}</span>
-                    <span><Truck size={12} /> Dispatch {factorPercent(candidate, "fulfilment_reliability")}</span>
-                    <span><Info size={12} /> Proof {factorPercent(candidate, "proof_coverage")}</span>
+                    <span><Ruler size={12} /> {t(language, "fit")} {factorPercent(candidate, "fit_match")}</span>
+                    <span><RotateCcw size={12} /> {t(language, "returnsChecked")} {factorPercent(candidate, "outcome_quality")}</span>
+                    <span><ShieldCheck size={12} /> {t(language, "trust")} {factorPercent(candidate, "seller_trust")}</span>
+                    <span><Truck size={12} /> {t(language, "dispatch")} {factorPercent(candidate, "fulfilment_reliability")}</span>
+                    <span><Info size={12} /> {t(language, "proof")} {factorPercent(candidate, "proof_coverage")}</span>
                   </div>
                 </div>
                 <div className="compare-score-cell">
@@ -203,16 +246,16 @@ export function CompareSheet({
       <div className="compare-sheet-footer">
         <span>
           <Info size={12} />
-          {isSimple ? t(language, "proofAvailable") : `Checked ${comparison.graph_path.relationships.length} evidence links`}
+          {isSimple ? t(language, "proofAvailable") : `${comparison.graph_path.relationships.length} ${t(language, "evidenceLinksChecked")}`}
         </span>
         <button type="button" onClick={onOpenAudit}>
           <HelpCircle size={12} />
-          {isSimple ? "Proof" : "Why this option won"}
+          {isSimple ? t(language, "proof") : t(language, "whyThisOptionWon")}
         </button>
       </div>
 
       <button className="compare-primary-cta" type="button" onClick={onContinue}>
-        Choose this option
+        {t(language, "chooseThisOption")}
       </button>
     </div>
   );
@@ -230,7 +273,17 @@ function FactorIcon({ factor }: { factor: string }) {
   return <ShieldCheck size={16} />;
 }
 
-function humanFactorLabel(factor: string) {
+function humanFactorLabel(factor: string, language: LanguageCode) {
+  const normalized = factor.toLowerCase();
+  if (normalized.includes("outcome") || normalized.includes("return")) return t(language, "keptOrderSignal");
+  if (normalized.includes("seller")) return t(language, "sellerTrust");
+  if (normalized.includes("fit") || normalized.includes("size")) return t(language, "fitMatch");
+  if (normalized.includes("review")) return t(language, "credibleReviews");
+  if (normalized.includes("proof")) return t(language, "proofCoverage");
+  if (normalized.includes("offer")) return t(language, "offerTruth");
+  if (normalized.includes("price") || normalized.includes("value")) return t(language, "priceChecked");
+  if (normalized.includes("color")) return t(language, "color");
+  if (normalized.includes("fabric")) return t(language, "fabric");
   return factor
     .replace(/sku/gi, "SKU")
     .replace(/_/g, " ")
@@ -245,8 +298,16 @@ function getProductDetailsForVariant(variantId: string, productCatalog: Product[
   return {
     title: product?.title.split("-")[0].trim() ?? "Selected product",
     sellerName: product?.seller_name ?? "Mapped seller",
-    price: product?.base_price ?? 0
+    price: product?.base_price ?? 0,
+    imageUrl: product?.image_url || fallbackProductImage(product?.color_family),
+    product
   };
+}
+
+function fallbackProductImage(color?: string) {
+  if (color === "pink") return "/product-pink.svg";
+  if (color === "maroon") return "/product-maroon.svg";
+  return "/product-blue.svg";
 }
 
 type CandidateFactor = Exclude<keyof CandidateScore["factors"], "uncertainty_penalty">;
@@ -255,14 +316,14 @@ function factorPercent(candidate: CandidateScore, factor: CandidateFactor) {
   return `${Math.round((candidate.factors[factor] ?? 0) * 100)}%`;
 }
 
-function factorRowsForCandidate(candidate: CandidateScore) {
+function factorRowsForCandidate(candidate: CandidateScore, language: LanguageCode) {
   const rows: Array<{ key: CandidateFactor; label: string }> = [
-    { key: "outcome_quality", label: "Kept-order signal" },
-    { key: "seller_trust", label: "Seller trust" },
-    { key: "fit_match", label: "Fit match" },
-    { key: "review_signal", label: "Credible reviews" },
-    { key: "proof_coverage", label: "Proof coverage" },
-    { key: "offer_truth", label: "Offer truth" }
+    { key: "outcome_quality", label: t(language, "keptOrderSignal") },
+    { key: "seller_trust", label: t(language, "sellerTrust") },
+    { key: "fit_match", label: t(language, "fitMatch") },
+    { key: "review_signal", label: t(language, "credibleReviews") },
+    { key: "proof_coverage", label: t(language, "proofCoverage") },
+    { key: "offer_truth", label: t(language, "offerTruth") }
   ];
   return rows.map((row) => ({
     ...row,
@@ -279,7 +340,19 @@ function formatPolicyLabel(version: string) {
   return "Sarthi Trust Policy v1";
 }
 
-function matchReasons(candidates: NonNullable<CompareResponse["similarity"]>["candidates"] = []) {
+function matchReasons(candidates: NonNullable<CompareResponse["similarity"]>["candidates"] = [], language: LanguageCode) {
   const reasons = new Set(candidates.flatMap((candidate) => candidate.reasons));
-  return [...reasons].slice(0, 3).join(" + ") || "matched by product facts";
+  return [...reasons].slice(0, 3).join(" + ") || t(language, "matchedByProductFacts");
+}
+
+function compareAgentReason(winner: CandidateScore, candidates: CandidateScore[], language: LanguageCode) {
+  const factors = factorRowsForCandidate(winner, language);
+  const strongFactors = factors.filter((factor) => factor.value >= 70).slice(0, 3);
+  const compared = Math.max(1, candidates.length);
+  return {
+    title: `${compared} sellers checked. ${strongFactors.length || 1} strong signal(s) found.`,
+    summary: strongFactors.length
+      ? `Wins on ${strongFactors.map((factor) => factor.label.toLowerCase()).join(", ")}.`
+      : t(language, "checkOnce")
+  };
 }

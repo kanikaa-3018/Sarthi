@@ -1,4 +1,5 @@
 import { CheckCircle2, HelpCircle, Info, Send, ShieldCheck } from "lucide-react";
+import { t, type LanguageCode } from "../i18n";
 import type { ClusterKnowledgeGraph, CompareResponse, Product, RegretDecisionResponse } from "../types/api";
 
 type AutoScanState =
@@ -17,6 +18,7 @@ export function SarthiLensPanel({
   regretDecision,
   decisionQuestion,
   decisionLoading,
+  language,
   possibleComparableCount,
   onOpenResult,
   onOpenProof,
@@ -34,6 +36,7 @@ export function SarthiLensPanel({
   regretDecision: RegretDecisionResponse | null;
   decisionQuestion: string;
   decisionLoading: boolean;
+  language: LanguageCode;
   possibleComparableCount: number;
   onOpenResult: (result: CompareResponse) => void;
   onOpenProof: (traceId: string) => void;
@@ -64,20 +67,20 @@ export function SarthiLensPanel({
             <ShieldCheck size={16} />
           </div>
           <div>
-            <span className="eyebrow">Saved radar</span>
-            <h2>Save a product when you want help deciding</h2>
+            <span className="eyebrow">{t(language, "trustCheckReady")}</span>
+            <h2>{t(language, "saveToCheckTrust")}</h2>
             <p>
               {possibleComparableCount > 0
-                ? `${possibleComparableCount} comparable product groups are available in these results.`
-                : "These results are browsable, but comparison starts only for products with enough mapped evidence."}
-              {" "}The recommendation starts only after you save one product.
+                ? `${possibleComparableCount} ${t(language, "groups")} ${t(language, "checkable")}.`
+                : t(language, "catalogOnly")}
+              {" "}{t(language, "saveToCheckTrust")}.
             </p>
           </div>
         </div>
         <div className="lens-guard-row">
-          <span>No hidden auto-buy pressure</span>
-          <span>No seller ads used</span>
-          <span>Buyer memory stays private</span>
+          <span>{t(language, "noPaymentForced")}</span>
+          <span>{t(language, "sellerPrivacyLine")}</span>
+          <span>{t(language, "privateMemoryBuyerOnly")}</span>
         </div>
       </section>
     );
@@ -90,20 +93,20 @@ export function SarthiLensPanel({
           <ShieldCheck size={16} />
         </div>
         <div>
-          <span className="eyebrow">Saved radar</span>
+          <span className="eyebrow">{t(language, "trustCheckReady")}</span>
           <h2>
             {result
-              ? "Radar decision ready"
+              ? t(language, "recommendationReady")
               : autoScan.status === "error"
-                ? "Radar could not complete"
-                : `Checking ${similarProducts.length || scanCount} mapped seller options`}
+                ? t(language, "sellerCheckFailed")
+                : `${t(language, "checkingEllipsis")} ${similarProducts.length || scanCount} ${t(language, "similarSellers")}`}
           </h2>
           <p>
             {result
-              ? `${scanSubject} was ranked using fit, returns, seller reliability, price facts, reviews, and buyer-owned fit context.`
+              ? `${scanSubject}: ${t(language, "sellerChecked")}, ${t(language, "returnsChecked")}, ${t(language, "priceChecked")}.`
               : autoScan.status === "error"
                 ? autoScan.message
-                : `You saved ${savedProduct.title.split("-")[0].trim()}. Only mapped seller alternatives for this product are being compared.`}
+                : `${savedProduct.title.split("-")[0].trim()} ${t(language, "saved").toLowerCase()}.`}
           </p>
         </div>
       </div>
@@ -115,7 +118,7 @@ export function SarthiLensPanel({
           onError={(event) => { event.currentTarget.src = fallbackProductImage((winnerProduct ?? savedProduct).color_family); }}
         />
         <div>
-          <span>{result ? "Recommended option" : "Saved by you"}</span>
+          <span>{result ? t(language, "bestMatchForYou") : t(language, "saved")}</span>
           <strong>{(winnerProduct ?? savedProduct).title.split("-")[0].trim()}</strong>
           <small>
             {(winnerProduct ?? savedProduct).seller_name} | Rs {(winnerProduct ?? savedProduct).base_price}
@@ -132,6 +135,7 @@ export function SarthiLensPanel({
         scanCount={similarProducts.length || scanCount}
         isScanning={isScanning}
         regretDecision={regretDecision}
+        language={language}
       />
 
       {result && (
@@ -139,6 +143,7 @@ export function SarthiLensPanel({
           result={result}
           similarProducts={similarProducts}
           graph={knowledgeGraph}
+          language={language}
         />
       )}
 
@@ -146,6 +151,7 @@ export function SarthiLensPanel({
         value={decisionQuestion}
         loading={decisionLoading}
         decision={regretDecision}
+        language={language}
         onChange={onDecisionQuestionChange}
         onAsk={onAskDecision}
       />
@@ -154,11 +160,11 @@ export function SarthiLensPanel({
         <div className="lens-action-row">
           <button className="lens-primary-action" onClick={() => onOpenResult(result)}>
             <CheckCircle2 size={14} />
-            <span>View best option</span>
+            <span>{t(language, "viewItem")}</span>
           </button>
           <button className="lens-secondary-action" onClick={() => onOpenProof(result.trace_id)}>
             <HelpCircle size={14} />
-            <span>Proof</span>
+            <span>{t(language, "proof")}</span>
           </button>
           {!hideGraphButton && (
             <button
@@ -167,7 +173,7 @@ export function SarthiLensPanel({
               disabled={graphLoading || (!knowledgeGraph && !graphError)}
             >
               <Info size={14} />
-              <span>{graphLoading ? "Preparing evidence" : graphError ? "Evidence status" : "Ask proof map"}</span>
+              <span>{graphLoading ? t(language, "checkingProof") : graphError ? t(language, "proof") : t(language, "seeProof")}</span>
             </button>
           )}
         </div>
@@ -184,7 +190,8 @@ function LensDecisionSummary({
   graph,
   scanCount,
   isScanning,
-  regretDecision
+  regretDecision,
+  language
 }: {
   result: CompareResponse | null;
   savedProduct: Product;
@@ -194,21 +201,22 @@ function LensDecisionSummary({
   scanCount: number;
   isScanning: boolean;
   regretDecision: RegretDecisionResponse | null;
+  language: LanguageCode;
 }) {
   if (!result) {
     return (
       <div className="lens-clean-summary scanning-state">
         <div>
-          <span className="eyebrow">Evidence check running</span>
-          <h3>{isScanning ? "Ranking mapped seller options" : "Ready to check this product"}</h3>
+          <span className="eyebrow">{t(language, "agentChecks")}</span>
+          <h3>{isScanning ? t(language, "checkingEllipsis") : t(language, "checkTrust")}</h3>
           <p>
-            Checking seller trust, SKU returns, fit, reviews, price facts, and buyer-owned fit context.
+            {t(language, "sellerChecked")}, {t(language, "returnsChecked")}, {t(language, "sizeChecked")}, {t(language, "priceChecked")}.
           </p>
         </div>
         <div className="lens-progress-row">
-          <span className={graph ? "complete" : ""}>Evidence map</span>
-          <span className={isScanning ? "active" : ""}>Risk score</span>
-          <span>Fit check</span>
+          <span className={graph ? "complete" : ""}>{t(language, "proof")}</span>
+          <span className={isScanning ? "active" : ""}>{t(language, "trustReceipt")}</span>
+          <span>{t(language, "sizeChecked")}</span>
         </div>
       </div>
     );
@@ -228,23 +236,23 @@ function LensDecisionSummary({
     <div className="lens-clean-summary ready-state">
       <div className="lens-decision-top">
         <div>
-          <span className="eyebrow">Radar decision</span>
+          <span className="eyebrow">{t(language, "nextStep")}</span>
           <h3>{decision?.label ?? winner.seller_name}</h3>
           <p>
-            {decision?.summary ?? `Best among ${scanCount} mapped seller options for ${winner.title.split("-")[0].trim()}.`}
+            {decision?.summary ?? `${scanCount} ${t(language, "similarSellers")} ${t(language, "checked").toLowerCase()}.`}
           </p>
         </div>
         <div className="lens-score-badge">
           <strong>{score ?? "--"}</strong>
-          <span>trust score</span>
+          <span>{t(language, "trustReceipt")}</span>
         </div>
       </div>
 
       <div className="lens-evidence-chips">
-        <span>Size {passport?.fit.recommended_size ?? result.fit.recommended_size}</span>
-        <span>{returnRate === null ? "Returns checked" : `${returnRate}% return rate`}</span>
-        <span>{labelize(sellerStatus)} seller</span>
-        <span>{passport?.proof_coverage ? evidenceGapLabel(passport.evidence_gaps.length) : `${proofCountValue} facts`}</span>
+        <span>{t(language, "size")} {passport?.fit.recommended_size ?? result.fit.recommended_size}</span>
+        <span>{returnRate === null ? t(language, "returnsChecked") : `${returnRate}% ${t(language, "returnRisk").toLowerCase()}`}</span>
+        <span>{labelize(sellerStatus)} {t(language, "seller").toLowerCase()}</span>
+        <span>{passport?.proof_coverage ? evidenceGapLabel(passport.evidence_gaps.length, language) : `${proofCountValue} ${t(language, "facts")}`}</span>
       </div>
 
       <div className="lens-reason-line">
@@ -254,7 +262,7 @@ function LensDecisionSummary({
 
       {alternativeProduct && alternativeProduct.product_id !== winner.product_id && (
         <div className="lens-backup-line">
-          <span>Backup option</span>
+          <span>{t(language, "alsoConsider")}</span>
           <strong>{alternativeProduct.seller_name}</strong>
         </div>
       )}
@@ -265,11 +273,13 @@ function LensDecisionSummary({
 function LensSellerOptionList({
   result,
   similarProducts,
-  graph
+  graph,
+  language
 }: {
   result: CompareResponse;
   similarProducts: Product[];
   graph: ClusterKnowledgeGraph | null;
+  language: LanguageCode;
 }) {
   const ranked = [...result.ranking.candidates]
     .sort((left, right) => right.score - left.score)
@@ -289,10 +299,10 @@ function LensSellerOptionList({
     <div className="lens-seller-list">
       <div className="lens-seller-list-header">
         <div>
-          <span className="eyebrow">Seller options checked</span>
-          <strong>{ranked.length} ranked from live SKU evidence</strong>
+          <span className="eyebrow">{t(language, "sellerChecked")}</span>
+          <strong>{ranked.length} {t(language, "similarSellers")}</strong>
         </div>
-        <span>No ads used</span>
+        <span>{t(language, "rankingExplainer").split(".")[1]?.trim() || t(language, "sellerPrivacyLine")}</span>
       </div>
 
       <div className="lens-seller-rows">
@@ -311,11 +321,11 @@ function LensSellerOptionList({
               />
               <div className="seller-row-main">
                 <strong>{product.seller_name}</strong>
-                <span>{topCandidateFactor(candidate)} | {returnRate === null ? "returns checked" : `${returnRate}% returns`}</span>
+                <span>{topCandidateFactor(candidate, language)} | {returnRate === null ? t(language, "returnsChecked") : `${returnRate}% ${t(language, "returnsChecked").toLowerCase()}`}</span>
               </div>
               <div className="seller-row-score">
                 <strong>{score}</strong>
-                <span>{isWinner ? "Recommended" : "Backup"}</span>
+                <span>{isWinner ? t(language, "bestMatchForYou") : t(language, "alsoConsider")}</span>
               </div>
             </div>
           );
@@ -325,17 +335,17 @@ function LensSellerOptionList({
   );
 }
 
-function topCandidateFactor(candidate: CompareResponse["ranking"]["candidates"][number]) {
+function topCandidateFactor(candidate: CompareResponse["ranking"]["candidates"][number], language: LanguageCode) {
   const labels: Record<string, string> = {
-    fit_match: "fit match",
-    outcome_quality: "kept-order history",
-    expectation_match: "claim match",
-    fulfilment_reliability: "dispatch reliability",
-    seller_trust: "seller trust",
-    review_signal: "review signal",
-    review_credibility: "credible reviews",
-    rating_signal: "rating signal",
-    price_value: "price value",
+    fit_match: t(language, "fitMatch"),
+    outcome_quality: t(language, "keptOrderSignal"),
+    expectation_match: t(language, "meaning"),
+    fulfilment_reliability: t(language, "dispatch"),
+    seller_trust: t(language, "sellerTrust"),
+    review_signal: t(language, "reviews"),
+    review_credibility: t(language, "credibleReviews"),
+    rating_signal: t(language, "reviews"),
+    price_value: t(language, "price"),
     fair_start_boost: "fair-start boost"
   };
   const [key] = Object.entries(candidate.factors)
@@ -348,12 +358,14 @@ function DecisionQuestionBox({
   value,
   loading,
   decision,
+  language,
   onChange,
   onAsk
 }: {
   value: string;
   loading: boolean;
   decision: RegretDecisionResponse | null;
+  language: LanguageCode;
   onChange: (value: string) => void;
   onAsk: (question: string) => void;
 }) {
@@ -366,27 +378,27 @@ function DecisionQuestionBox({
       }}
     >
       <div>
-        <span className="eyebrow">Ask one doubt</span>
+        <span className="eyebrow">{t(language, "askFromVerifiedFacts")}</span>
         <p>
-          If proof is missing, the system creates an aggregate seller proof request instead of guessing.
+          {t(language, "askSimpleQuestion")}
         </p>
       </div>
       <div className="decision-question-input">
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Kapda transparent toh nahi hai?"
+          placeholder={t(language, "samvaadPlaceholder")}
         />
         <button type="submit" disabled={loading || !value.trim()}>
           <Send size={14} />
-          <span>{loading ? "Checking" : "Check"}</span>
+          <span>{loading ? t(language, "checkingEllipsis") : t(language, "check")}</span>
         </button>
       </div>
       {decision?.proof_request && (
         <div className="decision-proof-requested">
           <Info size={14} />
           <span>
-            Seller proof requested for {decision.proof_request.attribute}. Demand count: {decision.proof_request.request_count}
+            {t(language, "sellerProofAsked")}: {labelize(decision.proof_request.attribute)}. {t(language, "checkingProof")}
           </span>
         </div>
       )}
@@ -402,10 +414,10 @@ function proofCount(result: CompareResponse) {
   ]).size;
 }
 
-function evidenceGapLabel(count: number) {
-  if (count === 0) return "Proof complete";
-  if (count === 1) return "1 proof gap";
-  return `${count} proof gaps`;
+function evidenceGapLabel(count: number, language: LanguageCode) {
+  if (count === 0) return t(language, "proofAvailable");
+  if (count === 1) return `1 ${t(language, "missingProof").toLowerCase()}`;
+  return `${count} ${t(language, "missingProof").toLowerCase()}`;
 }
 
 function productForVariant(variantId: string, products: Product[]) {
