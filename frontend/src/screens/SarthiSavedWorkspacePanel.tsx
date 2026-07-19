@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { AlertTriangle, ArrowLeft, Database, FileSearch, Heart, ListChecks, MessageCircle, ShieldCheck, Store, TrendingDown } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileSearch, MessageCircle, ShieldCheck, Store, TrendingDown } from "lucide-react";
 import type {
   ClusterKnowledgeGraph,
   CompareResponse,
@@ -9,8 +9,8 @@ import type {
   RegretDecisionResponse,
   WishlistRadarEvent
 } from "../types/api";
+import { t, type LanguageCode } from "../i18n";
 import { KnowledgeGraphExplorer } from "./KnowledgeGraphExplorer";
-import { SarthiLensPanel } from "./SarthiLensPanel";
 
 type AutoScanState =
   | { status: "idle" }
@@ -36,13 +36,16 @@ export function SarthiSavedWorkspacePanel({
   radarLoading,
   radarError,
   activeFitProfile,
+  language,
   onBack,
+  onOpenProduct,
   onOpenResult,
   onOpenProof,
   onDecisionQuestionChange,
   onAskDecision,
   onQueryChange,
-  onAskGraph
+  onAskGraph,
+  onRetryGraph
 }: {
   buyerId: string;
   savedProduct: Product;
@@ -61,14 +64,18 @@ export function SarthiSavedWorkspacePanel({
   radarLoading: boolean;
   radarError: string | null;
   activeFitProfile: FitProfile | null;
+  language: LanguageCode;
   onBack: () => void;
+  onOpenProduct: (product: Product, variantId?: string | null) => void;
   onOpenResult: (res: CompareResponse) => void;
   onOpenProof: (traceId: string) => void;
   onDecisionQuestionChange: (value: string) => void;
-  onAskDecision: (question: string) => void;
+  onAskDecision: (question: string, product?: Product) => void;
   onQueryChange: (value: string) => void;
   onAskGraph: (query: string) => void;
+  onRetryGraph: () => void;
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const resolvedMatchIds = (
     knowledgeGraph?.summary.similarity?.candidates ??
     wishlistRadar?.similarity?.candidates ??
@@ -87,6 +94,10 @@ export function SarthiSavedWorkspacePanel({
   const winnerProduct = result ? productForVariant(result.ranking.winner, similarProducts) : null;
   const winnerCandidate = result && winnerProduct ? candidateForProduct(result, winnerProduct) : null;
   const score = winnerCandidate ? trustScorePercent(winnerCandidate) : null;
+  const radarPick = wishlistRadar?.candidates.find((candidate) => candidate.is_recommended) ?? wishlistRadar?.candidates[0] ?? null;
+  const recommendedProduct = winnerProduct ?? radarPick?.product ?? savedProduct;
+  const recommendedSeller = recommendedProduct.seller_name;
+  const recommendedVariantId = winnerCandidate?.variant_id ?? wishlistRadar?.recommended_variant_id ?? radarPick?.variant?.variant_id ?? null;
   const graphContext = winnerProduct
     ? knowledgeGraph?.seller_context.find((item) => item.product.product_id === winnerProduct.product_id)
     : null;
@@ -94,108 +105,227 @@ export function SarthiSavedWorkspacePanel({
     ? returnSignalLabel(graphContext.evidence.delivered_orders_90d, graphContext.evidence.return_rate)
     : null;
   const sourceCount = knowledgeGraph?.summary.fact_count ?? result?.ranking.fact_ids.length ?? 0;
-  const statusLabel = result
-    ? "Decision ready"
-    : autoScan.status === "scanning"
-      ? "Checking evidence"
-      : autoScan.status === "error"
-        ? "Needs retry"
-        : "Saved";
+  const entryCopy = savedEntryCopy(language);
+  const decisionTitle = wishlistRadar?.status === "better_option_found"
+    ? entryCopy.betterSeller
+    : wishlistRadar?.status === "needs_one_check"
+      ? entryCopy.askProofFirst
+      : result
+        ? entryCopy.readyToCompare
+        : autoScan.status === "scanning"
+          ? entryCopy.checking
+          : entryCopy.saved;
+  const decisionBody = radarPick
+    ? entryCopy.recommendReason.replace("{seller}", recommendedSeller)
+    : `${t(language, "sellerChecked")}, ${t(language, "returnsChecked")}, ${t(language, "proof")}.`;
+  const proofChecklist = [
+    {
+      tone: winnerProduct ? "safe" : "watch",
+      label: winnerProduct ? t(language, "sellerChecked") : t(language, "checkingEllipsis"),
+      detail: winnerCandidate
+        ? `${winnerProduct?.seller_name ?? t(language, "seller")} ${t(language, "sellerTrust").toLowerCase()}: ${Math.floor((winnerCandidate.factors?.seller_trust ?? 0) * 100)}%.`
+        : `${t(language, "sellerChecked")}, ${t(language, "returnsChecked")}, ${t(language, "proof")}.`
+    },
+    {
+      tone: returnSignal && returnSignal !== "New data" ? "safe" : "watch",
+      label: t(language, "returnsChecked"),
+      detail: returnSignal ? returnSignal : `${t(language, "recentOrders")} ${t(language, "checkingEllipsis").toLowerCase()}`
+    },
+    {
+      tone: sourceCount > 0 ? "safe" : "watch",
+      label: `${sourceCount} ${t(language, "facts")} ${t(language, "checked")}`,
+      detail: `${t(language, "reviews")}, ${t(language, "price")}, ${t(language, "returnsChecked")}, ${t(language, "size")}.`
+    },
+    {
+      tone: knowledgeGraph ? "safe" : "watch",
+      label: knowledgeGraph ? t(language, "proofAvailable") : graphLoading ? t(language, "checkingProof") : t(language, "checkProofFirst"),
+      detail: t(language, "seeProof")
+    }
+  ] as const;
+  const simpleChecks = [
+    {
+      icon: <Store size={17} />,
+      label: t(language, "sellerChecked"),
+      detail: `${recommendedSeller} ${score === null ? t(language, "checkingEllipsis").toLowerCase() : entryCopy.checked}`
+    },
+    {
+      icon: <TrendingDown size={17} />,
+      label: t(language, "returnsChecked"),
+      detail: returnSignal ? `${returnSignal} ${t(language, "returnRisk").toLowerCase()}` : t(language, "checkingEllipsis")
+    },
+    {
+      icon: <FileSearch size={17} />,
+      label: t(language, "proof"),
+      detail: sourceCount > 0 ? `${sourceCount} ${t(language, "facts")} ${t(language, "checked")}` : t(language, "checkingProof")
+    }
+  ];
 
   return (
-    <div className="sarthi-saved-workspace buyer-shop-shell">
-      <header className="workspace-hero">
-        <div className="workspace-hero-left">
-          <button
-            type="button"
-            onClick={onBack}
-            className="workspace-back-button"
-          >
-            <ArrowLeft size={16} />
-            <span>Catalog</span>
-          </button>
+    <div className="sarthi-saved-workspace buyer-shop-shell buyer-simple-entry">
+      <header className="buyer-simple-hero">
+        <button type="button" onClick={onBack} className="workspace-back-button buyer-simple-back">
+          <ArrowLeft size={16} />
+          <span>{t(language, "catalog")}</span>
+        </button>
+
+        <div className="buyer-simple-product">
           <img
-            src={savedProduct.image_url || fallbackProductImage(savedProduct.color_family)}
+            src={productImageSource(savedProduct)}
             alt={savedProduct.title}
             onError={(event) => { event.currentTarget.src = fallbackProductImage(savedProduct.color_family); }}
           />
-          <div className="workspace-product-copy">
-            <span className="eyebrow">Saved check</span>
-            <h2>Buy or ask proof?</h2>
+          <div>
+            <span className="eyebrow">{t(language, "trustCheckReady")}</span>
+            <h1>{decisionTitle}</h1>
             <p>
-              <strong>{savedProduct.title.split("-")[0].trim()}</strong> | Rs {savedProduct.base_price} | {similarSellerCount} image-matched sellers
+              <strong>{savedProduct.title.split("-")[0].trim()}</strong>
+              <span>Rs {savedProduct.base_price}</span>
+              <span>{similarSellerCount} {t(language, "similarSellers")}</span>
             </p>
           </div>
         </div>
-        <div className="workspace-score-summary">
-          <span>{statusLabel}</span>
+
+        <div className="buyer-simple-score" aria-label={t(language, "trustReceipt")}>
           <strong>{score ?? "--"}</strong>
-          <small>{score === null ? `${sourceCount} facts queued` : `trust score / 100`}</small>
+          <span>{score === null ? t(language, "checkingEllipsis") : t(language, "trustReceipt")}</span>
         </div>
       </header>
 
-      <div className="workspace-flow-strip" aria-label="Decision flow">
-        <span className="complete"><Heart size={13} /> Saved</span>
-        <span className={result ? "complete" : autoScan.status === "scanning" ? "active" : ""}><Store size={13} /> Sellers checked</span>
-        <span className={knowledgeGraph ? "complete" : graphLoading ? "active" : ""}><FileSearch size={13} /> Proof ready</span>
-        <span className={regretDecision ? "complete" : ""}><MessageCircle size={13} /> Doubt answered</span>
-      </div>
-
-      <div className="workspace-insight-row">
-        <WorkspaceInsight icon={<Store size={16} />} label="Sellers" value={String(similarSellerCount)} detail="image match" />
-        <WorkspaceInsight icon={<Database size={16} />} label="Facts" value={String(sourceCount)} detail="proof used" />
-        <WorkspaceInsight icon={<TrendingDown size={16} />} label="Returns" value={returnSignal ?? "Checking"} detail="winner SKU" />
-        <WorkspaceInsight icon={<ListChecks size={16} />} label="Rule" value={formatPolicyLabel(result?.ranking.weighting?.version)} detail="score weights" />
-      </div>
-
-      <div className="workspace-grid workspace-grid-upgraded">
-        <div className="workspace-column workspace-primary-column">
-          <TrustRadarCard
-            radar={wishlistRadar}
-            loading={radarLoading}
-            error={radarError}
-            activeFitProfile={activeFitProfile}
-            similarity={knowledgeGraph?.summary.similarity ?? wishlistRadar?.similarity ?? null}
-            onOpenProof={onOpenProof}
-          />
-          <SarthiLensPanel
-            autoScan={autoScan}
-            savedProduct={savedProduct}
-            similarProducts={similarProducts}
-            knowledgeGraph={knowledgeGraph}
-            graphLoading={graphLoading}
-            graphError={graphError}
-            regretDecision={regretDecision}
-            decisionQuestion={decisionQuestion}
-            decisionLoading={decisionLoading}
-            possibleComparableCount={new Set(products.filter((product) => product.is_sarthi_eligible).map((product) => product.cluster_id)).size}
-            onOpenResult={onOpenResult}
-            onOpenProof={onOpenProof}
-            onOpenGraph={() => {}} // Unused since graph is inline next to it
-            onDecisionQuestionChange={onDecisionQuestionChange}
-            onAskDecision={onAskDecision}
-            hideGraphButton={true}
-          />
-        </div>
-
-        <div className="workspace-column workspace-evidence-column">
-          <div className="kg-header-row">
-            <h3>Proof path</h3>
-            <span>{knowledgeGraph ? `${knowledgeGraph.summary.fact_count} facts` : "Preparing"}</span>
+      <main className="buyer-simple-main">
+        <section className="buyer-simple-decision-card">
+          <div className="buyer-simple-decision-copy">
+            <span className="eyebrow">{t(language, "nextStep")}</span>
+            <h2>{entryCopy.chooseSeller.replace("{seller}", recommendedSeller)}</h2>
+            <p>{decisionBody}</p>
           </div>
-          <KnowledgeGraphExplorer
-            graph={knowledgeGraph}
-            answer={graphAnswer}
-            query={graphQuery}
-            loading={graphLoading}
-            asking={graphAsking}
-            error={graphError}
-            onQueryChange={onQueryChange}
-            onAsk={onAskGraph}
-            onOpenProof={onOpenProof}
+
+          <div className="buyer-simple-seller">
+            <img
+              src={productImageSource(recommendedProduct)}
+              alt={recommendedProduct.title}
+              onError={(event) => { event.currentTarget.src = fallbackProductImage(recommendedProduct.color_family); }}
+            />
+            <div>
+              <span>{entryCopy.recommendedSeller}</span>
+              <strong>{recommendedSeller}</strong>
+              <small>Rs {recommendedProduct.base_price} - {recommendedProduct.delivery_text}</small>
+            </div>
+            <CheckCircle2 size={19} />
+          </div>
+
+          <div className="buyer-simple-checks compact" aria-label={t(language, "agentChecks")}>
+            {simpleChecks.map((item) => (
+              <div key={item.label}>
+                {item.icon}
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="buyer-simple-actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => onOpenProduct(recommendedProduct, recommendedVariantId)}
+              disabled={!recommendedProduct}
+            >
+              {entryCopy.continueWithPick}
+            </button>
+            <button type="button" onClick={() => result && onOpenResult(result)} disabled={!result}>
+              {result ? entryCopy.compareSellers : t(language, "checkingEllipsis")}
+            </button>
+            <button type="button" onClick={() => setDetailsOpen((open) => !open)}>
+              {detailsOpen ? entryCopy.hideDetails : entryCopy.showDetails}
+              <ChevronDown size={15} aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+
+        <form
+          className="buyer-simple-question"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onAskDecision(decisionQuestion || entryCopy.defaultQuestion, savedProduct);
+          }}
+        >
+          <MessageCircle size={18} />
+          <input
+            value={decisionQuestion}
+            onChange={(event) => onDecisionQuestionChange(event.target.value)}
+            placeholder={entryCopy.questionPlaceholder}
           />
-        </div>
-      </div>
+          <button type="submit" disabled={decisionLoading}>
+            {decisionLoading ? t(language, "checkingEllipsis") : t(language, "check")}
+          </button>
+        </form>
+
+        {detailsOpen && (
+          <section className="buyer-simple-details" aria-label={t(language, "seeProof")}>
+            <TrustRadarCard
+              radar={wishlistRadar}
+              loading={radarLoading}
+              error={radarError}
+              activeFitProfile={activeFitProfile}
+              similarity={knowledgeGraph?.summary.similarity ?? wishlistRadar?.similarity ?? null}
+              language={language}
+              onOpenProof={onOpenProof}
+            />
+            <section className="workspace-proof-simple compact" aria-label={t(language, "agentChecks")}>
+              <div className="workspace-proof-simple-head">
+                <div>
+                  <span className="eyebrow">{t(language, "agentChecks")}</span>
+                  <h3>{knowledgeGraph ? t(language, "proofAvailable") : t(language, "checkingProof")}</h3>
+                </div>
+                <span>{sourceCount} {t(language, "facts")}</span>
+              </div>
+              <div className="workspace-proof-plain-list">
+                {proofChecklist.slice(0, 3).map((item) => (
+                  <span key={item.label} className={item.tone}>
+                    {item.tone === "safe" ? <ShieldCheck size={14} /> : <AlertTriangle size={14} />}
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+              <button type="button" onClick={() => wishlistRadar && onOpenProof(wishlistRadar.trace_id)} disabled={!wishlistRadar}>
+                {t(language, "seeProof")}
+              </button>
+            </section>
+            <details className="buyer-graph-details">
+              <summary>
+                <span className="buyer-graph-summary-icon">
+                  <FileSearch size={16} />
+                </span>
+                <span>
+                  <strong>{entryCopy.evidenceGraph}</strong>
+                  <small>{entryCopy.graphSubtitle}</small>
+                </span>
+                <em>
+                  {knowledgeGraph
+                    ? `${knowledgeGraph.summary.fact_count} ${t(language, "facts")}`
+                    : graphLoading
+                      ? t(language, "checkingProof")
+                      : entryCopy.graphUnavailable}
+                </em>
+              </summary>
+              <KnowledgeGraphExplorer
+                graph={knowledgeGraph}
+                answer={graphAnswer}
+                query={graphQuery}
+                loading={graphLoading}
+                asking={graphAsking}
+                error={graphError}
+                onQueryChange={onQueryChange}
+                onAsk={onAskGraph}
+                onOpenProof={onOpenProof}
+                onRetry={onRetryGraph}
+              />
+            </details>
+          </section>
+        )}
+      </main>
     </div>
   );
 }
@@ -206,6 +336,7 @@ function TrustRadarCard({
   error,
   activeFitProfile,
   similarity,
+  language,
   onOpenProof
 }: {
   radar: WishlistRadarEvent | null;
@@ -213,19 +344,22 @@ function TrustRadarCard({
   error: string | null;
   activeFitProfile: FitProfile | null;
   similarity: ClusterKnowledgeGraph["summary"]["similarity"] | null;
+  language: LanguageCode;
   onOpenProof: (traceId: string) => void;
 }) {
+  const copy = trustRadarCopy(language);
+
   if (error) {
     return (
       <section className="trust-radar-card attention">
         <div className="trust-radar-header">
           <div>
-            <span className="eyebrow">Saved product radar</span>
-            <h3>Radar could not refresh</h3>
+            <span className="eyebrow">{copy.savedProductRadar}</span>
+            <h3>{copy.refreshFailed}</h3>
           </div>
           <AlertTriangle size={18} />
         </div>
-        <p>Product comparison still works, but the saved-product watch loop could not be stored right now.</p>
+        <p>{copy.refreshFailedBody}</p>
       </section>
     );
   }
@@ -235,33 +369,32 @@ function TrustRadarCard({
       <section className="trust-radar-card loading">
         <div className="trust-radar-header">
           <div>
-            <span className="eyebrow">Saved product radar</span>
-            <h3>{loading ? "Watching this product" : "Waiting for saved intent"}</h3>
+            <span className="eyebrow">{copy.savedProductRadar}</span>
+            <h3>{loading ? copy.watchingProduct : copy.waitingIntent}</h3>
           </div>
           <ShieldCheck size={18} />
         </div>
-        <p>Sarthi is creating a closed-loop watch record for seller options, proof gaps, fit profile, and checkout risk.</p>
+        <p>{copy.watchingBody}</p>
       </section>
     );
   }
 
   const recommended = radar.candidates.find((candidate) => candidate.is_recommended) ?? radar.candidates[0] ?? null;
-  const saved = radar.candidates.find((candidate) => candidate.is_saved_product) ?? null;
   const score = Math.floor(radar.recommended_score * 100);
   const headline = radar.status === "better_option_found"
-    ? "Better seller found"
+    ? copy.betterSellerFound
     : radar.status === "needs_one_check"
-      ? "Ask proof first"
-      : "Saved option checked";
+      ? copy.askProofFirst
+      : copy.savedOptionChecked;
   const summary = recommended
-    ? `${recommended.product.seller_name} is strongest on returns, proof, and price.`
-    : "Sarthi checked seller, SKU, reviews, proof, and price facts.";
+    ? copy.recommendedSummary.replace("{seller}", recommended.product.seller_name)
+    : copy.checkedSummary;
 
   return (
     <section className={`trust-radar-card ${radar.status}`}>
       <div className="trust-radar-header">
         <div>
-          <span className="eyebrow">Saved radar</span>
+          <span className="eyebrow">{copy.savedProductRadar}</span>
           <h3>{headline}</h3>
           <p>{summary}</p>
         </div>
@@ -271,90 +404,239 @@ function TrustRadarCard({
         </div>
       </div>
 
-      <div className="radar-context-row">
-        <span>{activeFitProfile ? `${activeFitProfile.label} profile` : "Buyer profile"}</span>
-        <span>{similarity ? `${similarity.distinct_seller_count} similar sellers` : "Similarity checked"}</span>
-        <span>{radar.alerts.length ? `${radar.alerts.length} alert${radar.alerts.length > 1 ? "s" : ""}` : "No blocker alert"}</span>
-        <span>{radar.delta > 0 ? `+${Math.round(radar.delta * 100)} score lift` : "Saved option checked"}</span>
-      </div>
-
       {recommended && (
         <div className="radar-recommendation-row">
           <img
-            src={recommended.product.image_url || fallbackProductImage(recommended.product.color_family)}
+            src={productImageSource(recommended.product)}
             alt={recommended.product.title}
             onError={(event) => { event.currentTarget.src = fallbackProductImage(recommended.product.color_family); }}
           />
           <div>
-            <span>{recommended.is_saved_product ? "Saved option" : "Recommended option"}</span>
+            <span>{recommended.is_saved_product ? copy.savedOption : copy.recommendedOption}</span>
             <strong>{recommended.product.seller_name}</strong>
             <small>
-              {Math.round(recommended.evidence.return_rate * 100)}% returns | {labelize(recommended.evidence.seller_verification)} seller
+              {Math.round(recommended.evidence.return_rate * 100)}% {t(language, "returnRisk").toLowerCase()} | {labelize(recommended.evidence.seller_verification)} {t(language, "seller").toLowerCase()}
             </small>
           </div>
         </div>
       )}
 
-      <div className="radar-chip-row">
-        {(recommended?.reason_chips ?? []).slice(0, 4).map((chip) => (
-          <span key={`${chip.key ?? chip.type}-${chip.label}`} className={chip.sentiment}>
-            {chip.label}
-          </span>
-        ))}
+      <div className="radar-context-row compact">
+        <span>{activeFitProfile ? `${activeFitProfile.label} ${copy.profile}` : copy.buyerProfile}</span>
+        <span>{similarity ? `${similarity.distinct_seller_count} ${t(language, "similarSellers")}` : copy.similarityChecked}</span>
+        <span>{radar.alerts.length ? `${radar.alerts.length} ${copy.alerts}` : copy.noBlockerAlert}</span>
       </div>
 
       {radar.alerts.length > 0 && (
-        <div className="radar-alert-list">
-          {radar.alerts.slice(0, 2).map((alert) => (
-            <div key={`${alert.type}-${alert.title}`} className={alert.severity}>
-              <AlertTriangle size={13} />
-              <span>{alert.title}</span>
-            </div>
-          ))}
+        <div className="radar-alert-list compact">
+          <AlertTriangle size={13} />
+          <span>{radar.alerts[0].title}</span>
         </div>
       )}
 
       <div className="radar-action-row">
         <div>
-          <span>Do this next</span>
+          <span>{t(language, "nextStep")}</span>
           <strong>{radar.next_best_action.label}</strong>
           <small>{radar.next_best_action.reason}</small>
         </div>
         <button type="button" onClick={() => onOpenProof(radar.trace_id)}>
-          Proof
+          {t(language, "seeProof")}
         </button>
       </div>
-
-      {saved && recommended && saved.product.product_id !== recommended.product.product_id && (
-        <p className="radar-compare-note">
-          <strong>Saved seller:</strong> <b>{Math.floor(saved.score * 100)}</b>.{" "}
-          <strong>Recommended:</strong> <b>{Math.floor(recommended.score * 100)}</b>.
-        </p>
-      )}
     </section>
   );
-}
-
-function WorkspaceInsight({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
-  return (
-    <div className="workspace-insight-card">
-      {icon}
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
-  );
-}
-
-function formatPolicyLabel(version?: string) {
-  if (!version) return "Live policy";
-  if (version.toLowerCase().includes("apparel")) return "Apparel policy";
-  return "Trust policy";
 }
 
 function returnSignalLabel(deliveredOrders: number, returnRate: number) {
   if (deliveredOrders < 8) return "New data";
   return `${Math.round(returnRate * 100)}%`;
+}
+
+type SavedEntryCopyKey =
+  | "betterSeller"
+  | "askProofFirst"
+  | "readyToCompare"
+  | "checking"
+  | "saved"
+  | "recommendReason"
+  | "chooseSeller"
+  | "checked"
+  | "recommendedSeller"
+  | "continueWithPick"
+  | "compareSellers"
+  | "showDetails"
+  | "hideDetails"
+  | "questionPlaceholder"
+  | "defaultQuestion"
+  | "evidenceGraph"
+  | "graphSubtitle"
+  | "graphUnavailable";
+
+const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> = {
+  english: {
+    betterSeller: "Sarthi found a safer seller",
+    askProofFirst: "Ask for proof before buying",
+    readyToCompare: "Best seller is ready",
+    checking: "Checking this product",
+    saved: "Saved for trust check",
+    recommendReason: "{seller} looks stronger on returns, proof, and price.",
+    chooseSeller: "Choose {seller}",
+    checked: "checked",
+    recommendedSeller: "Sarthi pick",
+    continueWithPick: "Continue with pick",
+    compareSellers: "Compare sellers",
+    showDetails: "Show proof details",
+    hideDetails: "Hide details",
+    questionPlaceholder: "Ask: should I buy this?",
+    defaultQuestion: "Should I buy this?",
+    evidenceGraph: "Evidence graph",
+    graphSubtitle: "Open the connected proof map",
+    graphUnavailable: "Not ready"
+  },
+  hindi: {
+    betterSeller: "Sarthi ne safer seller dhoonda",
+    askProofFirst: "Buy se pehle proof maango",
+    readyToCompare: "Best seller ready hai",
+    checking: "Product check ho raha hai",
+    saved: "Trust check ke liye saved",
+    recommendReason: "{seller} returns, proof, aur price me stronger lagta hai.",
+    chooseSeller: "{seller} choose karo",
+    checked: "checked",
+    recommendedSeller: "Sarthi pick",
+    continueWithPick: "Pick continue karo",
+    compareSellers: "Sellers compare karo",
+    showDetails: "Proof details dekho",
+    hideDetails: "Details hide karo",
+    questionPlaceholder: "Poochho: buy karna safe hai?",
+    defaultQuestion: "Kya mujhe ye buy karna chahiye?",
+    evidenceGraph: "Evidence graph",
+    graphSubtitle: "Connected proof map dekho",
+    graphUnavailable: "Not ready"
+  },
+  hinglish: {
+    betterSeller: "Sarthi found a safer seller",
+    askProofFirst: "Buy se pehle proof maango",
+    readyToCompare: "Best seller ready hai",
+    checking: "Product check ho raha hai",
+    saved: "Trust check ke liye saved",
+    recommendReason: "{seller} returns, proof, aur price me stronger lagta hai.",
+    chooseSeller: "Choose {seller}",
+    checked: "checked",
+    recommendedSeller: "Sarthi pick",
+    continueWithPick: "Continue with pick",
+    compareSellers: "Compare sellers",
+    showDetails: "Proof details dekho",
+    hideDetails: "Hide details",
+    questionPlaceholder: "Ask: buy karna safe hai?",
+    defaultQuestion: "Should I buy this?",
+    evidenceGraph: "Evidence graph",
+    graphSubtitle: "Connected proof map dekho",
+    graphUnavailable: "Not ready"
+  }
+};
+
+function savedEntryCopy(language: LanguageCode) {
+  return SAVED_ENTRY_COPY[language] ?? SAVED_ENTRY_COPY.english;
+}
+
+type TrustRadarCopyKey =
+  | "savedProductRadar"
+  | "refreshFailed"
+  | "refreshFailedBody"
+  | "watchingProduct"
+  | "waitingIntent"
+  | "watchingBody"
+  | "betterSellerFound"
+  | "askProofFirst"
+  | "savedOptionChecked"
+  | "recommendedSummary"
+  | "checkedSummary"
+  | "profile"
+  | "buyerProfile"
+  | "similarityChecked"
+  | "alerts"
+  | "noBlockerAlert"
+  | "scoreLift"
+  | "savedOption"
+  | "recommendedOption"
+  | "savedSeller"
+  | "recommended";
+
+const TRUST_RADAR_COPY: Record<LanguageCode, Record<TrustRadarCopyKey, string>> = {
+  english: {
+    savedProductRadar: "Saved product radar",
+    refreshFailed: "Radar could not refresh",
+    refreshFailedBody: "Product comparison still works. Saved-product watch will retry when proof data refreshes.",
+    watchingProduct: "Watching this product",
+    waitingIntent: "Waiting for saved item",
+    watchingBody: "Sarthi is watching seller options, proof gaps, fit profile, and checkout risk.",
+    betterSellerFound: "Better seller found",
+    askProofFirst: "Ask proof first",
+    savedOptionChecked: "Saved option checked",
+    recommendedSummary: "{seller} is strongest on returns, proof, and price.",
+    checkedSummary: "Sarthi checked seller, SKU, reviews, proof, and price facts.",
+    profile: "profile",
+    buyerProfile: "Buyer profile",
+    similarityChecked: "Similarity checked",
+    alerts: "alerts",
+    noBlockerAlert: "No blocker alert",
+    scoreLift: "score lift",
+    savedOption: "Saved option",
+    recommendedOption: "Recommended option",
+    savedSeller: "Saved seller",
+    recommended: "Recommended"
+  },
+  hindi: {
+    savedProductRadar: "Saved product radar",
+    refreshFailed: "Radar refresh nahi hua",
+    refreshFailedBody: "Product comparison chalega. Proof data refresh hote hi watch retry hoga.",
+    watchingProduct: "Product watch ho raha hai",
+    waitingIntent: "Saved item ka wait",
+    watchingBody: "Sarthi seller options, proof gaps, fit profile, aur checkout risk watch kar raha hai.",
+    betterSellerFound: "Better seller mila",
+    askProofFirst: "Pehle proof maango",
+    savedOptionChecked: "Saved option checked",
+    recommendedSummary: "{seller} returns, proof, aur price me strongest hai.",
+    checkedSummary: "Sarthi ne seller, SKU, reviews, proof, aur price facts check kiye.",
+    profile: "profile",
+    buyerProfile: "Buyer profile",
+    similarityChecked: "Similarity checked",
+    alerts: "alerts",
+    noBlockerAlert: "Blocker alert nahi",
+    scoreLift: "score lift",
+    savedOption: "Saved option",
+    recommendedOption: "Recommended option",
+    savedSeller: "Saved seller",
+    recommended: "Recommended"
+  },
+  hinglish: {
+    savedProductRadar: "Saved product radar",
+    refreshFailed: "Radar refresh nahi hua",
+    refreshFailedBody: "Product comparison still works. Proof data refresh ke baad watch retry hoga.",
+    watchingProduct: "Watching this product",
+    waitingIntent: "Waiting for saved item",
+    watchingBody: "Sarthi seller options, proof gaps, fit profile, aur checkout risk watch kar raha hai.",
+    betterSellerFound: "Better seller found",
+    askProofFirst: "Proof first",
+    savedOptionChecked: "Saved option checked",
+    recommendedSummary: "{seller} returns, proof, aur price me strongest hai.",
+    checkedSummary: "Sarthi ne seller, SKU, reviews, proof, aur price facts check kiye.",
+    profile: "profile",
+    buyerProfile: "Buyer profile",
+    similarityChecked: "Similarity checked",
+    alerts: "alerts",
+    noBlockerAlert: "No blocker alert",
+    scoreLift: "score lift",
+    savedOption: "Saved option",
+    recommendedOption: "Recommended option",
+    savedSeller: "Saved seller",
+    recommended: "Recommended"
+  }
+};
+
+function trustRadarCopy(language: LanguageCode) {
+  return TRUST_RADAR_COPY[language] ?? TRUST_RADAR_COPY.english;
 }
 
 function productForVariant(variantId: string, products: Product[]) {
@@ -378,6 +660,14 @@ function fallbackProductImage(color: string) {
   if (color === "pink") return "/product-pink.svg";
   if (color === "maroon") return "/product-maroon.svg";
   return "/product-blue.svg";
+}
+
+function productImageSource(product: Pick<Product, "image_url" | "color_family">) {
+  const source = product.image_url?.trim() ?? "";
+  if (!source || source.includes("placehold.co") || source.includes("text=")) {
+    return fallbackProductImage(product.color_family);
+  }
+  return source;
 }
 
 function labelize(value: string) {
