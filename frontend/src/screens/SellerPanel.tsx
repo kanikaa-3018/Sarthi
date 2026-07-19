@@ -1553,32 +1553,76 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
               <div className="seller-proof-context">
                 <strong>{activeProofTask.title}</strong>
                 <span>
-                  {activeProofTask.product_title.split("-")[0].trim()} needs {activeProofTask.recommended_proof_type.replace(/_/g, " ")} for {activeProofTask.attribute}.
+                  {activeProofTask.product_title.split("-")[0].trim()} needs {proofTypeLabel(activeProofTask.recommended_proof_type)} for {labelize(activeProofTask.attribute)}.
                 </span>
               </div>
 
+              {activeSuggestedProofDraft && (
+                <section className="seller-proof-draft-card" aria-label={copy.suggestedDraft}>
+                  <div className="seller-proof-draft-head">
+                    <div>
+                      <span className="eyebrow">{copy.suggestedDraft}</span>
+                      <strong>{activeSuggestedProofDraft.title}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="seller-secondary-action"
+                      onClick={() => applySuggestedProof(activeProofTask)}
+                      disabled={proofMatchesSuggested}
+                    >
+                      {proofMatchesSuggested ? copy.draftApplied : copy.applyDraft}
+                    </button>
+                  </div>
+                  <div className="seller-proof-draft-preview">
+                    <span>
+                      <b>{copy.requiredAsset}</b>
+                      <small>{activeSuggestedProofDraft.assetUrl || activeSuggestedProofDraft.assetHint}</small>
+                    </span>
+                    <span>
+                      <b>{copy.adminNote}</b>
+                      <small>{activeSuggestedProofDraft.description}</small>
+                    </span>
+                  </div>
+                  {proofMatchesSuggested && (
+                    <p className="seller-proof-draft-state">
+                      <CheckCircle2 size={14} />
+                      {copy.suggestedDraftApplied}
+                    </p>
+                  )}
+                </section>
+              )}
+
+              {activeProofQuality && (
+                <ProofDraftQualityPanel quality={activeProofQuality} reuseCount={activeProofReuse.length} copy={copy} />
+              )}
+              <SellerUploadWarningList title={copy.wrongProofGuard} warnings={activeProofWarnings} />
+
               <label>
-                <span>Proof title</span>
+                <span>{copy.proofTitle}</span>
                 <input
                   value={proofTitle}
                   onChange={(event) => setProofTitle(event.target.value)}
                   required
                 />
               </label>
+              <label className="seller-file-upload">
+                <UploadCloud size={15} />
+                <span>{proofAssetUrl.startsWith("data:") ? copy.proofFileSelected : copy.uploadProofFile}</span>
+                <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => void handleProofFileSelect(event)} />
+              </label>
 
               <label>
-                <span>Proof URL or storage reference</span>
+                <span>{copy.proofFileOrLink}</span>
                 <input
-                  type="url"
                   value={proofAssetUrl}
                   onChange={(event) => setProofAssetUrl(event.target.value)}
-                  placeholder="https://.../daylight-photo.jpg"
+                  placeholder={copy.proofFilePlaceholder}
                   required
                 />
               </label>
 
               <label>
-                <span>What this proof shows</span>
+                <span>{copy.whatProofShows}</span>
                 <textarea
                   value={proofDescription}
                   onChange={(event) => setProofDescription(event.target.value)}
