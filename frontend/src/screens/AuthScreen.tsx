@@ -174,10 +174,6 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
             <div className="brand-logo-badge auth-logo-mark">
               <SarthiMark />
             </div>
-            <div>
-              <strong>Sarthi</strong>
-              <span>Commerce trust OS</span>
-            </div>
           </div>
           <h2>One login. Three clean workspaces.</h2>
           <p>
