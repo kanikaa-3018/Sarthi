@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -10,12 +10,14 @@ import {
   Info,
   Ruler,
   Send,
+  Share2,
   ShieldCheck,
   Truck
 } from "lucide-react";
 import {
   askSarthi,
   createExpectationContract,
+  createWishlistIntent,
   getCartConfidence,
   getKeepConfidence,
   getProductDetail
@@ -26,7 +28,9 @@ import type {
   CartConfidenceResponse,
   ExpectationContract,
   KeepConfidenceResponse,
-  ProductDetailResponse
+  Product,
+  ProductDetailResponse,
+  Variant
 } from "../types/api";
 
 // Screen 3: Responsive Split 2-Column Product Detail Panel
@@ -48,7 +52,7 @@ export function ProductDetailPanel({
   clusterId: string;
   onBack: () => void;
   onOpenAudit: (traceId: string) => void;
-  onOpenCheckout: (variantId: string, contract: ExpectationContract) => void;
+  onOpenCheckout: (variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant }) => void;
   language: LanguageCode;
   experienceMode: "simple" | "standard";
   comparisonTraceId?: string;
@@ -61,12 +65,20 @@ export function ProductDetailPanel({
   const [questionError, setQuestionError] = useState<string | null>(null);
   const [contractLocking, setContractLocking] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [proofRequesting, setProofRequesting] = useState(false);
+  const [proofRequested, setProofRequested] = useState(false);
+  const [proofRequestError, setProofRequestError] = useState<string | null>(null);
   const [keepConfidence, setKeepConfidence] = useState<KeepConfidenceResponse | null>(null);
   const [keepConfidenceLoading, setKeepConfidenceLoading] = useState(false);
   const [keepConfidenceError, setKeepConfidenceError] = useState<string | null>(null);
   const [cartConfidence, setCartConfidence] = useState<CartConfidenceResponse | null>(null);
   const [cartConfidenceLoading, setCartConfidenceLoading] = useState(false);
   const [cartConfidenceError, setCartConfidenceError] = useState<string | null>(null);
+  const [scoreRefreshState, setScoreRefreshState] = useState<"idle" | "refreshing" | "updated">("idle");
+  const [scoreRefreshReason, setScoreRefreshReason] = useState<"question" | "proof" | null>(null);
+  const [receiptViewCount, setReceiptViewCount] = useState(1);
+  const [activeSupportPanel, setActiveSupportPanel] = useState<"ask" | "proof" | null>(null);
+  const scoreRefreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setContractError(null);
@@ -128,6 +140,25 @@ export function ProductDetailPanel({
     };
   }, [buyerId, detail, selectedVariantId]);
 
+  useEffect(() => {
+    const storageKey = `sarthi.trust-receipt.${buyerId}.${productId}`;
+    const nextCount = Number(window.localStorage.getItem(storageKey) ?? "0") + 1;
+    window.localStorage.setItem(storageKey, String(nextCount));
+    setReceiptViewCount(nextCount);
+    return () => {
+      if (scoreRefreshTimerRef.current !== null) window.clearTimeout(scoreRefreshTimerRef.current);
+    };
+  }, [buyerId, productId]);
+
+  useEffect(() => {
+    setActiveSupportPanel(null);
+  }, [productId]);
+
+  useEffect(() => {
+    setProofRequested(false);
+    setProofRequestError(null);
+  }, [productId, selectedVariantId]);
+
   if (!detail) {
     return (
       <div className="detail-loading-state">
@@ -153,11 +184,12 @@ export function ProductDetailPanel({
       if (response.answer.primary_action?.variant_id) {
         setSelectedVariantId(response.answer.primary_action.variant_id);
       }
+      void refreshTrustScore("question");
     } catch (err) {
       setQuestionError(
         err instanceof Error
           ? err.message
-          : "Sarthi could not answer from verified facts right now."
+          : t(language, "verifiedQuestionError")
       );
     } finally {
       setSubmitting(false);
@@ -172,8 +204,31 @@ export function ProductDetailPanel({
   const colorMatch = detail.evidence.delivered_orders_90d
     ? Math.round((1 - detail.evidence.color_mismatch_returns / detail.evidence.delivered_orders_90d) * 100)
     : null;
+  const showDetailedTrustReceipt = experienceMode === "standard";
+  const trustBlocksCheckout = !detail.trust_state.can_recommend;
+  const checkoutCopy = checkoutActionCopy(language, trustBlocksCheckout);
+  const proofActionLabel = proofRequestActionLabel(language, proofRequested, proofRequesting);
+  const shouldOfferProofRequest = detail.trust_state.missing_data.length > 0 || !detail.trust_state.can_recommend;
+
+  async function refreshTrustScore(reason: "question" | "proof") {
+    if (!selectedVariantId) return;
+    setScoreRefreshReason(reason);
+    setScoreRefreshState("refreshing");
+    setKeepConfidenceError(null);
+    try {
+      const refreshed = await getKeepConfidence(buyerId, productId, selectedVariantId);
+      setKeepConfidence(refreshed);
+      setScoreRefreshState("updated");
+      if (scoreRefreshTimerRef.current !== null) window.clearTimeout(scoreRefreshTimerRef.current);
+      scoreRefreshTimerRef.current = window.setTimeout(() => setScoreRefreshState("idle"), 2400);
+    } catch (err) {
+      setKeepConfidenceError(err instanceof Error ? err.message : "Could not refresh trust score");
+      setScoreRefreshState("idle");
+    }
+  }
 
   async function handleBuyWithContract() {
+    if (!detail) return;
     setContractLocking(true);
     setContractError(null);
     try {
@@ -182,7 +237,10 @@ export function ProductDetailPanel({
         variant_id: selectedVariant.variant_id,
         preferred_fit: "comfort"
       });
-      onOpenCheckout(selectedVariant.variant_id, contract);
+      onOpenCheckout(selectedVariant.variant_id, contract, {
+        product: detail.product,
+        variant: selectedVariant
+      });
     } catch (err) {
       setContractError(err instanceof Error ? err.message : "Could not lock expectation contract");
     } finally {
@@ -190,15 +248,36 @@ export function ProductDetailPanel({
     }
   }
 
+  async function handleAskSellerProof() {
+    if (!detail || !selectedVariantId || proofRequesting) return;
+    setProofRequesting(true);
+    setProofRequestError(null);
+    try {
+      await createWishlistIntent({
+        buyer_id: buyerId,
+        product_id: detail.product.product_id,
+        selected_variant_id: selectedVariantId,
+        create_seller_signal: true
+      });
+      setProofRequested(true);
+      setActiveSupportPanel("proof");
+      await refreshTrustScore("proof");
+    } catch (err) {
+      setProofRequestError(err instanceof Error ? err.message : "Could not ask seller proof");
+    } finally {
+      setProofRequesting(false);
+    }
+  }
+
   return (
     <div className="product-detail-shell">
       <div className="product-detail-header">
-        <button type="button" onClick={onBack} aria-label="Back to catalog">
+        <button type="button" onClick={onBack} aria-label={t(language, "backToCatalog")}>
           <ArrowLeft size={18} />
         </button>
         <div>
-          <span className="eyebrow">Selected listing</span>
-          <strong>Back to catalog</strong>
+          <span className="eyebrow">{t(language, "selectedListing")}</span>
+          <strong>{t(language, "backToCatalog")}</strong>
         </div>
       </div>
 
@@ -209,27 +288,61 @@ export function ProductDetailPanel({
               <img
                 src={detail.product.image_url || fallbackProductImage(detail.product.color_family)}
                 alt={detail.product.title}
+                onError={(event) => { event.currentTarget.src = fallbackProductImage(detail.product.color_family); }}
               />
               <span>{detail.product.fabric}</span>
             </div>
             <div className="detail-product-summary">
-              <span>Sold by {detail.product.seller_name}</span>
+              <span>{t(language, "soldBy")} {detail.product.seller_name}</span>
               <h1>{displayTitle}</h1>
               <div className="detail-price-row">
                 <strong>Rs {selectedVariant.current_price}</strong>
                 <span>Rs {strikePrice}</span>
-                <small>{selectedVariant.stock} in stock</small>
+                <small>{selectedVariant.stock} {t(language, "inStock")}</small>
               </div>
             </div>
           </section>
 
-          <section className="size-selector-card">
+          <section className="sku-evidence-card">
+            <span className="eyebrow">{t(language, "quickChecks")}</span>
+            <div className="sku-evidence-grid">
+              <div>
+                <span><Ruler size={13} /> {t(language, "size")}</span>
+                <strong>{sizeAccuracy}%</strong>
+              </div>
+              <div>
+                <span><BadgeCheck size={13} /> {t(language, "color")}</span>
+                <strong>{colorMatch === null ? t(language, "unknown") : `${colorMatch}%`}</strong>
+              </div>
+              <div>
+                <span><Truck size={13} /> {t(language, "dispatch")}</span>
+                <strong>{detail.evidence.median_dispatch_hours}h</strong>
+              </div>
+            </div>
+            <p>
+              {t(language, "checkedFrom")} <strong>{detail.evidence.delivered_orders_90d}</strong> {t(language, "recentOrders")}.
+            </p>
+          </section>
+        </div>
+
+        <aside className="detail-decision-container" aria-label="Listing decision">
+          <KeepConfidenceCard
+            confidence={keepConfidence}
+            loading={keepConfidenceLoading}
+            error={keepConfidenceError}
+            refreshState={scoreRefreshState}
+            onApplySize={(variantId) => setSelectedVariantId(variantId)}
+            onOpenAudit={onOpenAudit}
+            language={language}
+          />
+
+          <section className="size-selector-card detail-priority-card">
             <div className="section-heading-row compact">
               <div>
-                <span className="eyebrow">Size Oracle</span>
-                <h3>Select size</h3>
+                <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
+                <h3>{t(language, "selectSize")}</h3>
               </div>
-              <span className="ui-badge neutral">{detail.fit.confidence} confidence</span>
+              <span className="ui-badge neutral">{detail.fit.confidence} {t(language, "confidence")}</span>
             </div>
             <div className="detail-size-options">
               {detail.variants.map((v) => (
@@ -244,100 +357,150 @@ export function ProductDetailPanel({
               ))}
             </div>
             <p>
-              Recommended size is <strong>{detail.fit.recommended_size}</strong> from category fit memory and SKU outcomes.
+              {t(language, "recommendedSizeIs")} <strong>{detail.fit.recommended_size}</strong> {t(language, "recommendedSizeSuffix")}
             </p>
           </section>
 
-          <KeepConfidenceCard
-            confidence={keepConfidence}
-            loading={keepConfidenceLoading}
-            error={keepConfidenceError}
-            onApplySize={(variantId) => setSelectedVariantId(variantId)}
-            onOpenAudit={onOpenAudit}
-          />
+          {detail.avoidable_issue && (
+            <section className="avoidable-issue-card" aria-label="Important warning">
+              <AlertTriangle size={18} />
+              <div>
+                <span>{t(language, "caution")}</span>
+                <strong>{detail.avoidable_issue.title}</strong>
+                <p>{detail.avoidable_issue.action}</p>
+              </div>
+            </section>
+          )}
+
+          {contractError && <div className="notice error">{contractError}</div>}
 
           <CartConfidenceCard
             confidence={cartConfidence}
             loading={cartConfidenceLoading}
             error={cartConfidenceError}
             onOpenAudit={onOpenAudit}
-          />
-
-          <section className="sku-evidence-card">
-            <span className="eyebrow">Quick checks</span>
-            <div className="sku-evidence-grid">
-              <div>
-                <span><Ruler size={13} /> Size</span>
-                <strong>{sizeAccuracy}%</strong>
-              </div>
-              <div>
-                <span><BadgeCheck size={13} /> Color</span>
-                <strong>{colorMatch === null ? "Unknown" : `${colorMatch}%`}</strong>
-              </div>
-              <div>
-                <span><Truck size={13} /> Dispatch</span>
-                <strong>{detail.evidence.median_dispatch_hours}h</strong>
-              </div>
-            </div>
-            <p>
-              Checked from <strong>{detail.evidence.delivered_orders_90d}</strong> recent orders.
-            </p>
-          </section>
-        </div>
-
-        <div className="detail-info-container">
-          <div className="sarthi-confidence-strip">
-            {keepConfidence && (
-              <button className="strip-row evidence" type="button" onClick={() => onOpenAudit(keepConfidence.trace_id)}>
-                <ShieldCheck size={16} />
-                <span><strong>Keep confidence</strong> {Math.floor(keepConfidence.score * 100)}/100 | {labelize(keepConfidence.confidence_band)}</span>
-                <ChevronRight size={14} />
-              </button>
-            )}
-            <div className="strip-row">
-              <Ruler size={17} />
-              <span><strong>Size</strong> {detail.fit.recommended_size} recommended</span>
-            </div>
-            {detail.avoidable_issue && (
-              <div className="strip-row caution">
-                <AlertTriangle size={16} />
-                <span><strong>Watch for</strong> {detail.avoidable_issue.title}</span>
-              </div>
-            )}
-            <button className="strip-row evidence" type="button" onClick={() => onOpenAudit(proofTraceId)}>
-              <CheckCircle2 size={16} />
-              <span><strong>Evidence</strong> {detail.evidence.evidence_strength} | {detail.evidence.delivered_orders_90d} recent delivered orders</span>
-              <ChevronRight size={14} />
-            </button>
-          </div>
-
-          <TrustReceipt
-            detail={detail}
             language={language}
-            experienceMode={experienceMode}
-            comparisonTraceId={proofTraceId}
-            onOpenAudit={onOpenAudit}
           />
 
-          {experienceMode === "standard" && <AgentCheckTimeline detail={detail} />}
+          <section className="cod-action-card">
+            <div>
+              <span>{t(language, "size")} {selectedVariant.size} {t(language, "selected").toLowerCase()}</span>
+              <strong>Rs {selectedVariant.current_price}</strong>
+              <small className={trustBlocksCheckout ? "checkout-risk-note" : "checkout-ready-note"}>
+                {checkoutCopy.helper}
+              </small>
+            </div>
 
-          {experienceMode === "standard" && (
-            <ExpectationContractPreview
+            <button
+              className="btn-sticky-buy"
+              type="button"
+              onClick={() => void handleBuyWithContract()}
+              disabled={contractLocking}
+            >
+              <span>{contractLocking ? t(language, "checkingProof") : checkoutCopy.cta}</span>
+              <ChevronRight size={18} />
+            </button>
+          </section>
+        </aside>
+      </div>
+
+      <section className="detail-help-strip" aria-label="Extra help">
+        <div>
+          <span className="eyebrow">{t(language, "nextStep")}</span>
+          <strong>{t(language, "askProofOrChangeSize")}</strong>
+        </div>
+        <div className="detail-help-actions">
+          <button
+            type="button"
+            className={activeSupportPanel === "ask" ? "active" : ""}
+            aria-expanded={activeSupportPanel === "ask"}
+            onClick={() => setActiveSupportPanel((panel) => panel === "ask" ? null : "ask")}
+          >
+            <ShieldCheck size={15} />
+            {t(language, "askFromVerifiedFacts")}
+          </button>
+          {shouldOfferProofRequest && (
+            <button
+              type="button"
+              className={proofRequested ? "active" : ""}
+              onClick={() => void handleAskSellerProof()}
+              disabled={proofRequesting}
+            >
+              <BadgeCheck size={15} />
+              {proofActionLabel}
+            </button>
+          )}
+          <button
+            type="button"
+            className={activeSupportPanel === "proof" ? "active" : ""}
+            aria-expanded={activeSupportPanel === "proof"}
+            onClick={() => setActiveSupportPanel((panel) => panel === "proof" ? null : "proof")}
+          >
+            <HelpCircle size={15} />
+            {t(language, "seeProof")}
+          </button>
+        </div>
+      </section>
+
+      {proofRequestError && (
+        <div className="notice error detail-proof-request-error">
+          {proofRequestError}
+        </div>
+      )}
+
+      {activeSupportPanel === "proof" && (
+        <section className="detail-support-panel proof-panel" aria-label="Proof details">
+          {showDetailedTrustReceipt ? (
+            <TrustReceipt
               detail={detail}
-              selectedVariant={selectedVariant}
+              confidence={keepConfidence}
+              language={language}
+              experienceMode={experienceMode}
+              comparisonTraceId={proofTraceId}
+              refreshState={scoreRefreshState}
+              viewCount={receiptViewCount}
+              onExpandContributors={() => void refreshTrustScore("proof")}
+              onOpenAudit={onOpenAudit}
+            />
+          ) : (
+            <SimpleProofSummary
+              detail={detail}
+              confidence={keepConfidence}
+              comparisonTraceId={proofTraceId}
+              language={language}
+              onOpenAudit={onOpenAudit}
+              onRefreshProof={() => void refreshTrustScore("proof")}
             />
           )}
 
+          {experienceMode === "standard" && (
+            <details className="detail-standard-proof-more">
+              <summary>{proofMoreLabel(language)}</summary>
+              <div className="detail-standard-proof-grid">
+                <AgentCheckTimeline detail={detail} language={language} />
+                <ExpectationContractPreview
+                  detail={detail}
+                  selectedVariant={selectedVariant}
+                  language={language}
+                />
+              </div>
+            </details>
+          )}
+        </section>
+      )}
+
+      {activeSupportPanel === "ask" && (
+        <section className="detail-support-panel ask-panel" aria-label="Ask Sarthi">
           <section className="samvaad-card">
             <div className="samvaad-card-header">
               <ShieldCheck size={18} />
               <div>
-                <span className="eyebrow">Listing questions</span>
-                <h3>Ask from verified facts</h3>
+                <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
+                <h3>{t(language, "askFromVerifiedFacts")}</h3>
               </div>
             </div>
             <p>
-              Ask one simple question. Sarthi answers only from proof.
+              {t(language, "askSimpleQuestion")}
             </p>
 
             <div className="samvaad-suggestion-list">
@@ -345,13 +508,13 @@ export function ProductDetailPanel({
                 type="button"
                 onClick={() => setQuery("Mera usual size L hai, yahan kya size standard rahega?")}
               >
-                Size L sahi rahega?
+                {t(language, "sizeQuestionCta")}
               </button>
               <button
                 type="button"
                 onClick={() => setQuery("Kapde ka color print mismatch toh nahi hai? Fabric transparency?")}
               >
-                Kapda thin toh nahi?
+                {t(language, "fabricQuestionCta")}
               </button>
             </div>
 
@@ -359,13 +522,13 @@ export function ProductDetailPanel({
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Size, kapda, seller, offer..."
+                placeholder={t(language, "samvaadPlaceholder")}
               />
               <button
                 type="button"
                 onClick={submitQuestion}
                 disabled={submitting || !query.trim()}
-                aria-label="Ask about this listing"
+                aria-label={t(language, "askAboutListing")}
               >
                 <Send size={15} />
               </button>
@@ -373,14 +536,14 @@ export function ProductDetailPanel({
 
             {questionError && (
               <div className="notice error samvaad-error">
-                This question could not be answered from verified facts right now. Please retry or inspect the product proof.
+                {t(language, "verifiedQuestionError")}
               </div>
             )}
 
             {answer && (
               <div className="samvaad-response-card">
                 <div className="response-conclusion">
-                  <strong>Evidence answer</strong>
+                  <strong>{t(language, "evidenceAnswer")}</strong>
                   <p>{answer.answer.summary}</p>
                 </div>
                 <div className="response-reasons">
@@ -393,7 +556,7 @@ export function ProductDetailPanel({
                 </div>
                 {answer.answer.caution && (
                   <div className="response-caution">
-                    <strong>Caution</strong>
+                    <strong>{t(language, "caution")}</strong>
                     <span>{answer.answer.caution}</span>
                   </div>
                 )}
@@ -406,36 +569,18 @@ export function ProductDetailPanel({
                       }
                     }}
                   >
-                    {answer.answer.primary_action?.label || "Apply size selection"}
+                    {answer.answer.primary_action?.label || t(language, "applySizeSelection")}
                   </button>
                   <button className="btn-action-secondary" onClick={() => onOpenAudit(answer.trace_id)}>
-                    See proof
+                    {t(language, "seeProof")}
                   </button>
                 </div>
+                <AgentReasoningTrace state={scoreRefreshState} reason={scoreRefreshReason} />
               </div>
             )}
           </section>
-
-          {contractError && <div className="notice error">{contractError}</div>}
-
-          <section className="cod-action-card">
-            <div>
-              <span>Size {selectedVariant.size} selected</span>
-              <strong>Rs {selectedVariant.current_price}</strong>
-            </div>
-            
-            <button
-              className="btn-sticky-buy"
-              type="button"
-              onClick={handleBuyWithContract}
-              disabled={contractLocking}
-            >
-              <span>{contractLocking ? "Checking proof" : "Go to checkout"}</span>
-              <ChevronRight size={18} />
-            </button>
-          </section>
-        </div>
-      </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -444,14 +589,18 @@ function KeepConfidenceCard({
   confidence,
   loading,
   error,
+  refreshState,
   onApplySize,
-  onOpenAudit
+  onOpenAudit,
+  language
 }: {
   confidence: KeepConfidenceResponse | null;
   loading: boolean;
   error: string | null;
+  refreshState: "idle" | "refreshing" | "updated";
   onApplySize: (variantId: string) => void;
   onOpenAudit: (traceId: string) => void;
+  language: LanguageCode;
 }) {
   if (error) {
     return (
@@ -459,9 +608,9 @@ function KeepConfidenceCard({
         <div className="simple-decision-top">
           <span className="simple-decision-icon danger"><AlertTriangle size={20} /></span>
           <div>
-            <span className="eyebrow">Buy check</span>
-            <strong>Check proof first</strong>
-            <p>Confidence could not refresh.</p>
+            <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
+            <strong>{t(language, "checkProofFirst")}</strong>
+            <p>{t(language, "confidenceCouldNotRefresh")}</p>
           </div>
         </div>
       </section>
@@ -474,9 +623,9 @@ function KeepConfidenceCard({
         <div className="simple-decision-top">
           <span className="simple-decision-icon watch"><ShieldCheck size={20} /></span>
           <div>
-            <span className="eyebrow">Buy check</span>
-            <strong>{loading ? "Checking..." : "Waiting for proof"}</strong>
-            <p>Size, seller, and returns are being checked.</p>
+            <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
+            <strong>{loading ? t(language, "checkingEllipsis") : t(language, "waitingForProof")}</strong>
+            <p>{t(language, "sizeSellerReturnsChecking")}</p>
           </div>
         </div>
       </section>
@@ -487,16 +636,16 @@ function KeepConfidenceCard({
   const primaryAction = confidence.interventions[0];
   const canApplySize = primaryAction?.type === "change_size" && Boolean(primaryAction.target_variant_id);
   const tone = confidence.confidence_band === "high" ? "safe" : confidence.confidence_band === "medium" ? "watch" : "danger";
-  const decision = simpleBuyDecision(confidence.confidence_band);
+  const decision = simpleBuyDecision(confidence.confidence_band, language);
 
   return (
-    <section className={`keep-confidence-card ${confidence.confidence_band} simple-decision-card ${tone}`}>
+    <section className={`keep-confidence-card ${confidence.confidence_band} simple-decision-card ${tone} score-${refreshState}`} aria-live="polite">
       <div className="simple-decision-top">
         <span className={`simple-decision-icon ${tone}`}>
           {tone === "safe" ? <CheckCircle2 size={20} /> : tone === "watch" ? <CircleAlert size={20} /> : <AlertTriangle size={20} />}
         </span>
         <div>
-          <span className="eyebrow">Buy check</span>
+          <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
           <strong>{decision.title}</strong>
           <p>{decision.line}</p>
         </div>
@@ -506,7 +655,7 @@ function KeepConfidenceCard({
         </div>
       </div>
 
-      <div className="keep-driver-list simple-signal-list">
+        <div className="keep-driver-list simple-signal-list">
         {confidence.drivers.slice(0, 3).map((driver) => (
           <span key={`${driver.type}-${driver.label}`} className={driver.positive ? "positive" : driver.severity}>
             {driver.positive ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
@@ -515,10 +664,17 @@ function KeepConfidenceCard({
         ))}
       </div>
 
+      {refreshState !== "idle" && (
+        <div className="score-refresh-note">
+          <ShieldCheck size={13} />
+          <span>{refreshState === "refreshing" ? "Checking the latest facts..." : "Trust score checked again"}</span>
+        </div>
+      )}
+
       {primaryAction && (
         <div className="keep-action-row">
           <div>
-            <span>Next step</span>
+            <span>{t(language, "nextStep")}</span>
             <strong>{primaryAction.label}</strong>
           </div>
           {canApplySize ? (
@@ -526,14 +682,14 @@ function KeepConfidenceCard({
               type="button"
               onClick={() => onApplySize(primaryAction.target_variant_id!)}
             >
-              Apply
+              {t(language, "apply")}
             </button>
           ) : (
             <button
               type="button"
               onClick={() => onOpenAudit(confidence.trace_id)}
             >
-              Proof
+              {t(language, "proof")}
             </button>
           )}
         </div>
@@ -545,8 +701,69 @@ function KeepConfidenceCard({
         onClick={() => onOpenAudit(confidence.trace_id)}
       >
         <HelpCircle size={12} />
-        <span>See proof</span>
+        <span>{t(language, "seeProof")}</span>
       </button>
+    </section>
+  );
+}
+
+function SimpleProofSummary({
+  detail,
+  confidence,
+  comparisonTraceId,
+  language,
+  onOpenAudit,
+  onRefreshProof
+}: {
+  detail: ProductDetailResponse;
+  confidence: KeepConfidenceResponse | null;
+  comparisonTraceId: string;
+  language: LanguageCode;
+  onOpenAudit: (traceId: string) => void;
+  onRefreshProof: () => void;
+}) {
+  const score = confidence ? Math.floor(confidence.score * 100) : null;
+  const firstGap = detail.trust_state.missing_data[0] ?? null;
+  const keptPercent = Math.round(detail.evidence.fit_as_expected_rate * 100);
+  const proofLine = firstGap
+    ? `${t(language, "missingProof")}: ${labelize(firstGap)}`
+    : `${detail.evidence.delivered_orders_90d} ${t(language, "recentOrders")} checked`;
+
+  return (
+    <section className="simple-proof-summary" aria-label="Simple proof summary">
+      <div>
+        <span className="eyebrow">{t(language, "beforeYouScrollFurther")}</span>
+        <h3>{t(language, "checkSellerProof")}</h3>
+        <p>
+          {score === null
+            ? t(language, "checkingProof")
+            : `${score}/100. ${proofLine}.`}
+        </p>
+      </div>
+      <div className="simple-proof-facts">
+        <span>
+          <CheckCircle2 size={13} />
+          {detail.evidence.delivered_orders_90d} orders
+        </span>
+        <span>
+          <Ruler size={13} />
+          {detail.selected_variant.size} fit {keptPercent}%
+        </span>
+        {firstGap && (
+          <span className="watch">
+            <AlertTriangle size={13} />
+            {labelize(firstGap)}
+          </span>
+        )}
+      </div>
+      <div className="simple-proof-actions">
+        <button type="button" onClick={onRefreshProof}>
+          {t(language, "seeScoreReasons")}
+        </button>
+        <button type="button" onClick={() => onOpenAudit(comparisonTraceId)}>
+          {t(language, "seeProof")}
+        </button>
+      </div>
     </section>
   );
 }
@@ -555,19 +772,21 @@ function CartConfidenceCard({
   confidence,
   loading,
   error,
-  onOpenAudit
+  onOpenAudit,
+  language
 }: {
   confidence: CartConfidenceResponse | null;
   loading: boolean;
   error: string | null;
   onOpenAudit: (traceId: string) => void;
+  language: LanguageCode;
 }) {
   if (error) {
     return (
       <section className="cart-confidence-card attention">
-        <span className="eyebrow">Checkout</span>
-        <strong>Pay with caution</strong>
-        <p>Cart check could not refresh.</p>
+        <span className="eyebrow">{t(language, "beforeYouPay")}</span>
+        <strong>{t(language, "payWithCaution")}</strong>
+        <p>{t(language, "cartCheckCouldNotRefresh")}</p>
       </section>
     );
   }
@@ -575,9 +794,9 @@ function CartConfidenceCard({
   if (!confidence) {
     return (
       <section className="cart-confidence-card loading">
-        <span className="eyebrow">Checkout</span>
-        <strong>{loading ? "Checking..." : "Waiting for size"}</strong>
-        <p>Payment and size risk are being checked.</p>
+        <span className="eyebrow">{t(language, "beforeYouPay")}</span>
+        <strong>{loading ? t(language, "checkingEllipsis") : t(language, "waitingForSize")}</strong>
+        <p>{t(language, "paymentSizeRiskChecking")}</p>
       </section>
     );
   }
@@ -587,16 +806,16 @@ function CartConfidenceCard({
   const firstAlert = confidence.bracket_alerts[0];
   const checkoutTone = confidence.confidence_band === "high" ? "safe" : confidence.confidence_band === "medium" ? "watch" : "danger";
   const checkoutTitle = confidence.checkout_nudge.prepaid_recommended
-    ? "Pay online is okay"
+    ? t(language, "payOnlineOkay")
     : confidence.confidence_band === "low"
-      ? "Use COD for now"
-      : "COD is safer";
+      ? t(language, "useCodForNow")
+      : t(language, "codSafer");
 
   return (
     <section className={`cart-confidence-card ${confidence.confidence_band} simple-cart-card ${checkoutTone}`}>
       <div className="cart-confidence-header">
         <div>
-          <span className="eyebrow">Checkout</span>
+          <span className="eyebrow">{t(language, "beforeYouPay")}</span>
           <strong>{checkoutTitle}</strong>
           <p>{firstAlert ? firstAlert.message : confidence.checkout_nudge.trust_condition}</p>
         </div>
@@ -607,20 +826,20 @@ function CartConfidenceCard({
       </div>
 
       <div className="cart-confidence-chips">
-        <span>{confidence.active_profile ? `${confidence.active_profile.label} size` : "Size checked"}</span>
-        <span>{confidence.checkout_nudge.prepaid_recommended ? "Online ok" : "COD ok"}</span>
-        <span>{firstAlert ? "Bracketing risk" : "No size bracketing"}</span>
+        <span>{confidence.active_profile ? `${confidence.active_profile.label} ${t(language, "size")}` : t(language, "sizeChecked")}</span>
+        <span>{confidence.checkout_nudge.prepaid_recommended ? t(language, "onlineOk") : t(language, "codOk")}</span>
+        <span>{firstAlert ? t(language, "bracketingRisk") : t(language, "noSizeBracketing")}</span>
       </div>
 
       {primaryLine && (
         <div className="cart-line-summary simple">
           <div>
-            <span>Selected</span>
+            <span>{t(language, "selected")}</span>
             <strong>{primaryLine.selected_size}</strong>
           </div>
           <div>
-            <span>Your size</span>
-            <strong>{primaryLine.suggested_size ?? "Learning"}</strong>
+            <span>{t(language, "yourSize")}</span>
+            <strong>{primaryLine.suggested_size ?? t(language, "learning")}</strong>
           </div>
         </div>
       )}
@@ -634,60 +853,154 @@ function CartConfidenceCard({
 
       <button type="button" className="keep-proof-link" onClick={() => onOpenAudit(confidence.trace_id)}>
         <HelpCircle size={12} />
-        <span>Checkout proof</span>
+        <span>{t(language, "checkoutProof")}</span>
       </button>
     </section>
   );
 }
 
-function simpleBuyDecision(band: KeepConfidenceResponse["confidence_band"]) {
+function checkoutActionCopy(language: LanguageCode, proofLimited: boolean) {
+  if (language === "hindi") {
+    return proofLimited
+      ? {
+          cta: "Checkout kholo",
+          helper: "Proof limited hai. Checkout me COD safe option rahega."
+        }
+      : {
+          cta: "Checkout kholo",
+          helper: "Proof checked. Payment se pehle final check dikhega."
+        };
+  }
+  if (language === "hinglish") {
+    return proofLimited
+      ? {
+          cta: "Open checkout",
+          helper: "Proof limited hai. Checkout me COD safe option rahega."
+        }
+      : {
+          cta: "Open checkout",
+          helper: "Proof checked. Payment se pehle final check dikhega."
+        };
+  }
+  return proofLimited
+    ? {
+        cta: "Open checkout",
+        helper: "Proof is limited. Checkout will keep COD as the safer option."
+      }
+    : {
+        cta: "Open checkout",
+        helper: "Proof checked. Final payment guidance appears in checkout."
+      };
+}
+
+function proofRequestActionLabel(language: LanguageCode, requested: boolean, requesting: boolean) {
+  if (requesting) {
+    if (language === "hindi") return "Proof pooch rahe hain";
+    if (language === "hinglish") return "Proof pooch rahe hain";
+    return "Asking proof";
+  }
+  if (requested) {
+    if (language === "hindi") return "Proof asked";
+    if (language === "hinglish") return "Proof asked";
+    return "Proof asked";
+  }
+  if (language === "hindi") return "Ask proof";
+  if (language === "hinglish") return "Ask proof";
+  return "Ask proof";
+}
+
+function simpleBuyDecision(band: KeepConfidenceResponse["confidence_band"], language: LanguageCode) {
   if (band === "high") {
     return {
-      title: "Good to buy",
-      line: "Size and seller signals look okay."
+      title: t(language, "goodToBuy"),
+      line: t(language, "sizeSellerSignalsOkay")
     };
   }
   if (band === "medium") {
     return {
-      title: "Check once",
-      line: "One proof check can avoid a return."
+      title: t(language, "recommendationPaused"),
+      line: t(language, "oneProofAvoidReturn")
     };
   }
   return {
-    title: "Do not rush",
-    line: "Ask proof or change size before paying."
+    title: t(language, "doNotRush"),
+    line: t(language, "askProofOrChangeSize")
   };
+}
+
+function proofMoreLabel(language: LanguageCode) {
+  if (language === "hindi") return "और जानकारी";
+  if (language === "hinglish") return "Aur details";
+  return "More details";
+}
+
+function AgentReasoningTrace({
+  state,
+  reason
+}: {
+  state: "idle" | "refreshing" | "updated";
+  reason: "question" | "proof" | null;
+}) {
+  const status = state === "refreshing"
+    ? "Sarthi is checking the latest connected facts."
+    : state === "updated"
+      ? "Your action refreshed the trust check."
+      : "Sarthi used the listing facts for this answer.";
+
+  return (
+    <section className={`agent-reasoning-trace ${state}`} aria-live="polite">
+      <div>
+        <span>Observe</span>
+        <strong>Listing facts</strong>
+      </div>
+      <div>
+        <span>Reason</span>
+        <strong>{reason === "question" ? "Your question" : "Evidence link"}</strong>
+      </div>
+      <div>
+        <span>Act</span>
+        <strong>Trust advice</strong>
+      </div>
+      <div>
+        <span>Learn</span>
+        <strong>Outcome later</strong>
+      </div>
+      <p>{status}</p>
+    </section>
+  );
 }
 
 function ExpectationContractPreview({
   detail,
-  selectedVariant
+  selectedVariant,
+  language
 }: {
   detail: ProductDetailResponse;
   selectedVariant: ProductDetailResponse["selected_variant"];
+  language: LanguageCode;
 }) {
   const colorMatch = detail.evidence.delivered_orders_90d
     ? Math.round((1 - detail.evidence.color_mismatch_returns / detail.evidence.delivered_orders_90d) * 100)
     : null;
   const checks = [
     {
-      label: "Fit",
-      value: `Size ${selectedVariant.size}, recommended ${detail.fit.recommended_size}`,
+      label: t(language, "fit"),
+      value: `${t(language, "size")} ${selectedVariant.size}, ${t(language, "recommendedSizeIs")} ${detail.fit.recommended_size}`,
       status: detail.fit.confidence
     },
     {
-      label: "Fabric",
-      value: `${detail.product.fabric} listing checked against reviews and seller proof`,
+      label: t(language, "fabric"),
+      value: `${detail.product.fabric} ${t(language, "sellerProof").toLowerCase()}`,
       status: detail.trust_state.missing_data.includes("fabric") ? "low" : "medium"
     },
     {
-      label: "Color",
-      value: colorMatch === null ? "Color evidence checked where available" : `${colorMatch}% color match signal`,
+      label: t(language, "color"),
+      value: colorMatch === null ? t(language, "color") : `${colorMatch}%`,
       status: detail.avoidable_issue?.reason === "color_different" ? "low" : "medium"
     },
     {
-      label: "Offer",
-      value: "Price urgency will be checked again before order",
+      label: t(language, "offer"),
+      value: t(language, "beforeYouPay"),
       status: "medium"
     }
   ];
@@ -696,26 +1009,26 @@ function ExpectationContractPreview({
     <div className="expectation-preview-card">
       <div className="expectation-preview-header">
         <div>
-          <span className="eyebrow">Expectation contract</span>
-          <h3>What will be held accountable</h3>
+          <span className="eyebrow">{t(language, "beforeYouPay")}</span>
+          <h3>{t(language, "whatWillBeHeldAccountable")}</h3>
           <p>
-            Before checkout, the app locks a fact-backed snapshot of size, fabric, color, dispatch, and offer claims for this exact SKU.
+            {t(language, "expectationPreviewBody")}
           </p>
         </div>
-        <span>{detail.evidence.delivered_orders_90d} orders</span>
+        <span>{detail.evidence.delivered_orders_90d} {t(language, "factOrders")}</span>
       </div>
       <div className="expectation-preview-grid">
         {checks.map((check) => (
           <div key={check.label}>
             <span>{check.label}</span>
             <strong>{check.value}</strong>
-            <small>{labelize(check.status)} confidence</small>
+            <small>{labelize(check.status)} {t(language, "confidence")}</small>
           </div>
         ))}
       </div>
       <div className="expectation-privacy-line">
         <ShieldCheck size={14} />
-        <span>Seller sees only aggregate broken expectations, never your private fit memory.</span>
+        <span>{t(language, "sellerPrivacyLine")}</span>
       </div>
     </div>
   );
@@ -723,99 +1036,126 @@ function ExpectationContractPreview({
 
 function TrustReceipt({
   detail,
+  confidence,
   language,
   experienceMode,
   comparisonTraceId,
+  refreshState,
+  viewCount,
+  onExpandContributors,
   onOpenAudit
 }: {
   detail: ProductDetailResponse;
+  confidence: KeepConfidenceResponse | null;
   language: LanguageCode;
   experienceMode: "simple" | "standard";
   comparisonTraceId: string;
+  refreshState: "idle" | "refreshing" | "updated";
+  viewCount: number;
+  onExpandContributors: () => void;
   onOpenAudit: (traceId: string) => void;
 }) {
+  const [contributorsOpen, setContributorsOpen] = useState(false);
   const trust = detail.trust_state;
   const allowed = trust.can_recommend;
-  const sourceStatus = trust.data_freshness.overall_status;
-  const graphFactCount = new Set(detail.graph_paths.flatMap((path) => path.fact_ids)).size;
-  const simpleTitle = allowed ? "Seller looks okay" : "Check seller proof";
+  const score = confidence ? Math.floor(confidence.score * 100) : null;
   const simpleLine = simpleTrustMeaning(trust.status, trust.can_recommend, language);
+  const cohortAvailable = detail.evidence.delivered_orders_90d >= 8 && detail.evidence.fit_as_expected_rate > 0;
+
+  async function shareReceipt() {
+    const title = `${detail.product.title.split("-")[0].trim()}: ${score ?? "--"}/100 trust check`;
+    const text = `${title}. ${simpleLine}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url: window.location.href });
+        return;
+      }
+      window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${window.location.href}`)}`, "_blank", "noopener,noreferrer");
+    } catch {
+      // Closing a native share sheet is not an application error.
+    }
+  }
 
   return (
-    <div className={`trust-receipt-card ${experienceMode === "simple" ? "simple" : ""}`}>
-      <div className="trust-receipt-top">
-        <div>
-          <span className="eyebrow sheet-eyebrow-primary">{experienceMode === "simple" ? "Seller check" : t(language, "trustReceipt")}</span>
-          <h3>{experienceMode === "simple" ? simpleTitle : trust.headline}</h3>
+    <div className="trust-receipt-card simple">
+      <div className={`trust-simple-verdict ${allowed ? "safe" : "watch"} ${refreshState}`} aria-live="polite">
+        <div className="trust-simple-score">
+          <strong>{score === null ? "--" : score}</strong>
+          <span>/100</span>
         </div>
-        <span className={`trust-receipt-pill ${allowed ? "allowed" : "paused"}`}>
-          {allowed ? "OK" : "Check"}
+        <div>
+          <span className="eyebrow">{t(language, "trustReceipt")}</span>
+          <h3>{allowed ? t(language, "goodToBuy") : t(language, "checkProofFirst")}</h3>
+          <p>{refreshState === "refreshing" ? t(language, "checkingProof") : simpleLine}</p>
+        </div>
+      </div>
+
+      {trust.missing_data.length > 0 && (
+        <div className="trust-simple-warning">
+          <Info size={14} />
+          <span>{t(language, "missingProof")}: {labelize(trust.missing_data[0])}</span>
+        </div>
+      )}
+
+      <div className="trust-simple-facts" aria-label={t(language, "agentChecks")}>
+        <span>
+          <ShieldCheck size={14} />
+          {trust.seller_verification.verification_status === "verified" ? t(language, "sellerChecked") : t(language, "sellerPendingShort")}
+        </span>
+        <span>
+          <Ruler size={14} />
+          {cohortAvailable
+            ? `${detail.selected_variant.size}: ${Math.round(detail.evidence.fit_as_expected_rate * 100)}% ${t(language, "fitWorked")}`
+            : t(language, "sizeChecked")}
+        </span>
+        <span>
+          <CheckCircle2 size={14} />
+          {detail.evidence.delivered_orders_90d} {t(language, "recentOrders")}
         </span>
       </div>
 
-      <div className="trust-receipt-section">
-        <span>{experienceMode === "simple" ? "Meaning" : t(language, "whatThisMeans")}</span>
-        <strong>
-          {experienceMode === "simple"
-            ? simpleLine
-            : trust.summary}
-        </strong>
+      <div className="trust-receipt-actions">
+        <button
+          type="button"
+          className="trust-contributors-toggle"
+          aria-expanded={contributorsOpen}
+          onClick={() => {
+            const nextOpen = !contributorsOpen;
+            setContributorsOpen(nextOpen);
+            if (nextOpen) onExpandContributors();
+          }}
+        >
+          {contributorsOpen ? t(language, "hideScoreReasons") : t(language, "seeScoreReasons")}
+        </button>
+        {experienceMode === "standard" && (
+          <button type="button" className="trust-share-button" onClick={() => void shareReceipt()}>
+            <Share2 size={14} />
+            {t(language, "shareTrustCheck")}
+          </button>
+        )}
+        <button
+          className="btn-action-secondary trust-proof-button"
+          onClick={() => onOpenAudit(comparisonTraceId)}
+        >
+          {t(language, "seeProof")}
+        </button>
       </div>
 
-      {experienceMode === "standard" && (
-        <div className="trust-receipt-section">
-          <span>{t(language, "nextStep")}</span>
-          <strong>{trust.buyer_guidance}</strong>
+      {contributorsOpen && confidence && (
+        <div className="trust-contributor-list">
+          {confidence.drivers.slice(0, 4).map((driver) => (
+            <div key={`${driver.type}-${driver.label}`} className={driver.positive ? "positive" : driver.severity}>
+              {driver.positive ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+              <span>{driver.label}</span>
+            </div>
+          ))}
         </div>
       )}
-
-      {trust.missing_data.length > 0 && (
-        <div className="compare-simple-note">
-          <Info size={14} />
-          <span>Missing proof: {trust.missing_data.slice(0, 2).join(", ")}</span>
-        </div>
-      )}
-
-      {experienceMode === "standard" && (
-        <div className="trust-receipt-facts">
-          <div>
-            <span>Seller</span>
-            <strong>{labelize(trust.seller_verification.verification_status)}</strong>
-          </div>
-          <div>
-            <span>Evidence</span>
-            <strong>{detail.evidence.evidence_strength}</strong>
-          </div>
-          <div>
-            <span>Sources</span>
-            <strong>{labelize(sourceStatus)}</strong>
-          </div>
-          <div>
-            <span>Orders</span>
-            <strong>{String(detail.evidence.delivered_orders_90d)}</strong>
-          </div>
-          <div>
-            <span>Graph proof</span>
-            <strong>{String(graphFactCount)}</strong>
-          </div>
-          <div>
-            <span>Memory</span>
-            <strong>{detail.privacy.fit_memory_enabled ? "On" : "Off"}</strong>
-          </div>
-        </div>
-      )}
-
-      <button
-        className="btn-action-secondary trust-proof-button"
-        onClick={() => onOpenAudit(comparisonTraceId)}
-      >
-        See proof
-      </button>
     </div>
   );
 }
 
-function AgentCheckTimeline({ detail }: { detail: ProductDetailResponse }) {
+function AgentCheckTimeline({ detail, language }: { detail: ProductDetailResponse; language: LanguageCode }) {
   const trust = detail.trust_state;
   const sourceHealthy = !trust.data_freshness.blocking;
   const sellerVerified = trust.seller_verification.verification_status === "verified";
@@ -824,33 +1164,33 @@ function AgentCheckTimeline({ detail }: { detail: ProductDetailResponse }) {
 
   const checks = [
     {
-      title: "Seller verification",
+      title: t(language, "sellerVerification"),
       passed: sellerVerified,
       body: sellerVerified
-        ? `${detail.product.seller_name} has verified seller status.`
-        : `Seller status is ${labelize(trust.seller_verification.verification_status)}.`
+        ? `${detail.product.seller_name}: ${t(language, "verified")}`
+        : `${t(language, "seller")}: ${labelize(trust.seller_verification.verification_status)}`
     },
     {
-      title: "Return evidence",
+      title: t(language, "returnEvidence"),
       passed: enoughEvidence,
-      body: `${detail.evidence.delivered_orders_90d} delivered orders and ${detail.evidence.returns_90d} returns checked.`
+      body: `${detail.evidence.delivered_orders_90d} ${t(language, "recentDeliveredOrders")} | ${detail.evidence.returns_90d} ${t(language, "returnsChecked")}`
     },
     {
-      title: "Size fit",
+      title: t(language, "sizeFit"),
       passed: fitConfident,
-      body: `Recommended size is ${detail.fit.recommended_size} with ${detail.fit.confidence} confidence.`
+      body: `${t(language, "recommendedSizeIs")} ${detail.fit.recommended_size} | ${detail.fit.confidence} ${t(language, "confidence")}`
     },
     {
-      title: "Source freshness",
+      title: t(language, "sourceFreshness"),
       passed: sourceHealthy,
-      body: `Data source status is ${labelize(trust.data_freshness.overall_status)}.`
+      body: `${t(language, "sources")}: ${labelize(trust.data_freshness.overall_status)}`
     },
     {
-      title: "Privacy boundary",
+      title: t(language, "privacyBoundary"),
       passed: true,
       body: detail.privacy.fit_memory_enabled
-        ? "Personal fit memory was used only for this buyer."
-        : "Personal fit memory is off; aggregate evidence was used only."
+        ? t(language, "privacyChecked")
+        : `${t(language, "memory")}: ${t(language, "offStatus")}`
     }
   ];
 
@@ -858,8 +1198,8 @@ function AgentCheckTimeline({ detail }: { detail: ProductDetailResponse }) {
     <div className="agent-check-card">
       <div className="agent-check-header">
         <div>
-          <span className="eyebrow sheet-eyebrow-primary">Agent checks</span>
-          <h3>Checks completed</h3>
+          <span className="eyebrow sheet-eyebrow-primary">{t(language, "agentChecks")}</span>
+          <h3>{t(language, "checksCompleted")}</h3>
         </div>
         <ShieldCheck size={18} />
       </div>
