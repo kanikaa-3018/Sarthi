@@ -1455,8 +1455,8 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
           <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-danger">Fix Listing Metrics</span>
-                <h3 className="sheet-title">Update Size Chest Specs</h3>
+                <span className="eyebrow sheet-eyebrow-danger">Size fix</span>
+                <h3 className="sheet-title">Update chest measurements</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setActiveFixListing(null)}>
                 <X size={16} />
