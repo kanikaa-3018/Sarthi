@@ -3746,7 +3746,7 @@ function proofTypeMatchesAttribute(attribute: string, proofType: string) {
 }
 
 function sellerCoachProviderStatus(provider: SellerActionBoard["agent"]["provider"], copy: SellerCopy) {
-  if (provider === "gemini") {
+  if (provider === "bedrock" || provider === "gemini") {
     return { label: copy.aiCoachLive, tone: "good" as const };
   }
   if (provider === "fallback_after_llm_error") {

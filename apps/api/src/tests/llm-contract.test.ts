@@ -13,8 +13,12 @@ describe("LLM contract helpers", () => {
   it("keeps the grounded answer shape when Gemini is disabled", async () => {
     const previousProvider = env.llmProvider;
     const previousKey = env.geminiApiKey;
+    const previousBedrockEnabled = env.bedrockEnabled;
+    const previousProviderOrder = env.providerOrder;
     env.llmProvider = "disabled";
     env.geminiApiKey = "";
+    env.bedrockEnabled = false;
+    env.providerOrder = [];
 
     try {
       const answer = await generateGroundedAgentAnswer({
@@ -41,6 +45,8 @@ describe("LLM contract helpers", () => {
     } finally {
       env.llmProvider = previousProvider;
       env.geminiApiKey = previousKey;
+      env.bedrockEnabled = previousBedrockEnabled;
+      env.providerOrder = previousProviderOrder;
     }
   });
 

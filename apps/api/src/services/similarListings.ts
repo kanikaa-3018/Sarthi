@@ -706,5 +706,5 @@ function unique(values: string[]) {
 function publicError(error: unknown) {
   return error instanceof Error
     ? error.message.replace(/\s+/g, " ").slice(0, 180)
-    : "Gemini visual rerank failed";
+    : "AI visual rerank failed";
 }

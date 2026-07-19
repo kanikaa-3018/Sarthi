@@ -4,6 +4,7 @@ import { configuredEmbeddingProviders } from "../services/ai.js";
 import {
   ensureVectorSearchIndexes,
   isAtlasSearchUnsupported,
+  selectedVectorIndexProviders,
   vectorNamespaceForProvider
 } from "../services/vectorSearch.js";
 
@@ -12,11 +13,14 @@ try {
   if (!env.vectorSearchEnabled) {
     console.log("VECTOR_SEARCH_ENABLED=false; skipping Atlas Vector Search index creation. Set it to true only when MONGODB_URI points to MongoDB Atlas.");
   } else {
-    const providers = configuredEmbeddingProviders();
+    const providers = selectedVectorIndexProviders(
+      process.argv.slice(2),
+      configuredEmbeddingProviders()
+    );
     if (!providers.length) {
       console.log("No AI embedding provider is configured; skipping vector index creation.");
     } else {
-      await ensureVectorSearchIndexes(db);
+      await ensureVectorSearchIndexes(db, providers);
       for (const provider of providers) {
         const namespace = vectorNamespaceForProvider(provider);
         const collection = db.collection(namespace.collection);

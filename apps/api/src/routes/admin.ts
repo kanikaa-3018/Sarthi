@@ -28,11 +28,12 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Db) {
     const ai = aiRuntimeStatus();
     return {
       ai,
+      bedrock: ai.bedrock,
       gemini: ai.gemini,
       fallback: {
         enabled: true,
-        active: !ai.configured,
-        reason: ai.configured
+        active: !ai.available,
+        reason: ai.available
           ? `${ai.primary_provider ?? "AI"} is configured for grounded reviewer assistance.`
           : ai.bedrock.last_error ?? ai.gemini.last_error ?? "No AI provider is configured; deterministic reviewer guidance is active."
       },

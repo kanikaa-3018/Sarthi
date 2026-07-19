@@ -138,12 +138,44 @@ export function bedrockRuntimeStatus() {
 }
 
 export function aiRuntimeStatus() {
+  const bedrock = bedrockRuntimeStatus();
+  const gemini = geminiRuntimeStatus();
+  const generationCapability = (capability: "text" | "vision") => {
+    const configuredProviders = env.providerOrder.filter((provider) => productionAdapters[provider].configured(capability));
+    const availableProviders = configuredProviders.filter((provider) => {
+      const status = provider === "bedrock" ? bedrock : gemini;
+      return status.capabilities?.[capability]?.status === "configured";
+    });
+    return {
+      configured: configuredProviders.length > 0,
+      available: availableProviders.length > 0,
+      provider_order: configuredProviders,
+      primary_provider: availableProviders[0] ?? configuredProviders[0] ?? null
+    };
+  };
+  const embeddingProviders = configuredEmbeddingProviders();
+  const availableEmbeddingProviders = embeddingProviders.filter((provider) => {
+    const status = provider === "bedrock" ? bedrock : gemini;
+    return status.capabilities?.embedding?.status === "configured";
+  });
+  const capabilities = {
+    text: generationCapability("text"),
+    vision: generationCapability("vision"),
+    embedding: {
+      configured: embeddingProviders.length > 0,
+      available: availableEmbeddingProviders.length > 0,
+      provider_order: embeddingProviders,
+      primary_provider: availableEmbeddingProviders[0] ?? embeddingProviders[0] ?? null
+    }
+  };
   return {
     provider_order: env.providerOrder,
-    primary_provider: env.providerOrder[0] ?? null,
-    configured: aiConfigured(),
-    bedrock: bedrockRuntimeStatus(),
-    gemini: geminiRuntimeStatus()
+    primary_provider: capabilities.text.primary_provider,
+    configured: capabilities.text.configured,
+    available: capabilities.text.available,
+    capabilities,
+    bedrock,
+    gemini
   };
 }
 

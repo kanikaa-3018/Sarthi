@@ -245,9 +245,17 @@ The smoke command is inert unless `--live` is supplied. The live form makes one 
 ```powershell
 npm run ai:smoke
 npm run ai:smoke -- --live
+npm run ai:smoke -- --live --capability=vision
 ```
 
 AWS Free Tier is credit-based rather than unlimited inference. The code limits output tokens, request duration, retries, image size, and the number of documents embedded per query, but you should still configure an AWS Budget alert for your account.
+
+Atlas vector indexes are provider-specific. The command defaults to the first configured provider; select one explicitly when needed:
+
+```powershell
+npm --prefix apps/api run vector:index -- --provider=bedrock
+npm --prefix apps/api run vector:index -- --provider=gemini
+```
 
 For optional graph and vector retrieval:
 

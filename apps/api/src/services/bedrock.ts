@@ -32,15 +32,17 @@ export function createBedrockProvider(options: BedrockProviderOptions) {
     maxAttempts: 5,
     retryMode: "adaptive"
   });
-  let disabledUntil = 0;
-  let lastPublicError: string | null = null;
-  let activeModel: string | null = null;
-  let lastUsage: GeneratedJson["usage"] = undefined;
+  const states = {
+    text: capabilityState(),
+    vision: capabilityState(),
+    embedding: capabilityState()
+  };
 
   return {
     async generateStructured(input: StructuredGenerationInput): Promise<GeneratedJson> {
-      if (Date.now() < disabledUntil) {
-        throw new AiProviderError("availability", "Bedrock is temporarily unavailable");
+      const state = states[input.capability];
+      if (circuitOpen(state)) {
+        throw new AiProviderError("availability", `Bedrock ${input.capability} is temporarily unavailable`);
       }
       const models = modelCandidates(input, options);
       if (!models.length) throw new AiProviderError("availability", `No Bedrock ${input.capability} model is configured`);
@@ -85,16 +87,19 @@ export function createBedrockProvider(options: BedrockProviderOptions) {
           if (response.stopReason === "content_filtered" || response.stopReason === "guardrail_intervened") {
             throw new AiProviderError("safety", "Bedrock safety policy stopped the response");
           }
+          if (response.stopReason === "max_tokens") {
+            throw new AiProviderError("invalid_output", "Bedrock response reached the output token limit");
+          }
           const toolUse = response.output?.message?.content?.find(
             (block: any) => block.toolUse?.name === input.schemaName
           )?.toolUse;
           if (!isJsonObject(toolUse?.input)) {
             throw new AiProviderError("invalid_output", "Bedrock returned no valid structured output");
           }
-          activeModel = model;
-          lastPublicError = null;
-          disabledUntil = 0;
-          lastUsage = response.usage;
+          state.activeModel = model;
+          state.lastPublicError = null;
+          state.disabledUntil = 0;
+          state.lastUsage = response.usage;
           return {
             value: toolUse.input,
             provider: "bedrock",
@@ -109,8 +114,7 @@ export function createBedrockProvider(options: BedrockProviderOptions) {
         }
       }
 
-      disabledUntil = Date.now() + 60_000;
-      lastPublicError = publicBedrockError(lastAttemptError);
+      tripCircuit(state, lastAttemptError);
       if (lastAttemptError instanceof AiProviderError) throw lastAttemptError;
       throw new AiProviderError("availability", "Configured Bedrock models are unavailable");
     },
@@ -120,6 +124,10 @@ export function createBedrockProvider(options: BedrockProviderOptions) {
     ): Promise<EmbeddedText> {
       if (!options.embeddingModel) {
         throw new AiProviderError("availability", "No Bedrock embedding model is configured");
+      }
+      const state = states.embedding;
+      if (circuitOpen(state)) {
+        throw new AiProviderError("availability", "Bedrock embedding is temporarily unavailable");
       }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
@@ -136,24 +144,37 @@ export function createBedrockProvider(options: BedrockProviderOptions) {
           }))
         }), { abortSignal: controller.signal });
         const payload = JSON.parse(new TextDecoder().decode(response.body));
-        const values = Array.isArray(payload.embedding) ? payload.embedding.map(Number) : [];
-        if (values.length !== options.embeddingDimensions || values.some((value: number) => !Number.isFinite(value))) {
+        const values = Array.isArray(payload.embedding) ? payload.embedding : [];
+        if (values.length !== options.embeddingDimensions || values.some((value: unknown) => typeof value !== "number" || !Number.isFinite(value))) {
           throw new AiProviderError(
             "invalid_output",
             `Bedrock embedding must contain exactly ${options.embeddingDimensions} dimensions`
           );
         }
+        state.activeModel = options.embeddingModel;
+        state.lastPublicError = null;
+        state.disabledUntil = 0;
         return {
-          values,
+          values: values as number[],
           provider: "bedrock",
           model: options.embeddingModel,
           dimensions: options.embeddingDimensions
         };
+      } catch (error) {
+        tripCircuit(state, error);
+        if (error instanceof AiProviderError) throw error;
+        throw new AiProviderError("availability", "Bedrock embedding is unavailable");
       } finally {
         clearTimeout(timeout);
       }
     },
     status() {
+      const capabilityStatus = {
+        text: publicCapabilityStatus(states.text),
+        vision: publicCapabilityStatus(states.vision),
+        embedding: publicCapabilityStatus(states.embedding)
+      };
+      const unavailable = Object.values(states).filter(circuitOpen);
       return {
         enabled: options.textModels.length > 0 || options.visionModels.length > 0,
         provider: "bedrock" as const,
@@ -162,12 +183,47 @@ export function createBedrockProvider(options: BedrockProviderOptions) {
         vision_models: options.visionModels,
         embedding_model: options.embeddingModel,
         embedding_dimensions: options.embeddingDimensions,
-        active_model: activeModel,
-        status: Date.now() < disabledUntil ? "temporarily_unavailable" : "configured",
-        last_error: lastPublicError,
-        last_usage: lastUsage
+        active_model: states.text.activeModel ?? states.vision.activeModel,
+        status: unavailable.length ? "temporarily_unavailable" : "configured",
+        last_error: unavailable[0]?.lastPublicError ?? null,
+        last_usage: states.text.lastUsage ?? states.vision.lastUsage,
+        capabilities: capabilityStatus
       };
     }
+  };
+}
+
+type CapabilityState = {
+  disabledUntil: number;
+  lastPublicError: string | null;
+  activeModel: string | null;
+  lastUsage: GeneratedJson["usage"];
+};
+
+function capabilityState(): CapabilityState {
+  return {
+    disabledUntil: 0,
+    lastPublicError: null,
+    activeModel: null,
+    lastUsage: undefined
+  };
+}
+
+function circuitOpen(state: CapabilityState) {
+  return Date.now() < state.disabledUntil;
+}
+
+function tripCircuit(state: CapabilityState, error: unknown) {
+  state.disabledUntil = Date.now() + 60_000;
+  state.lastPublicError = publicBedrockError(error);
+}
+
+function publicCapabilityStatus(state: CapabilityState) {
+  return {
+    status: circuitOpen(state) ? "temporarily_unavailable" : "configured",
+    active_model: state.activeModel,
+    last_error: circuitOpen(state) ? state.lastPublicError : null,
+    last_usage: state.lastUsage
   };
 }
 

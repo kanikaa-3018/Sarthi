@@ -12,7 +12,12 @@ import type {
 } from "../services/aiTypes.js";
 import { AiProviderError } from "../services/aiTypes.js";
 import { env } from "../config/env.js";
-import { geminiConfigured } from "../services/gemini.js";
+import {
+  embedText,
+  geminiConfigured,
+  geminiSafetyReason,
+  generateGeminiJson
+} from "../services/gemini.js";
 
 const input: StructuredGenerationInput = {
   capability: "text",
@@ -144,6 +149,66 @@ describe("AI generation failover", () => {
 
     assert.equal(result, null);
     assert.equal(geminiCalls, 0);
+  });
+
+  it("treats Gemini block metadata as terminal safety", async () => {
+    assert.equal(
+      geminiSafetyReason({ promptFeedback: { blockReason: "SAFETY" } }),
+      "SAFETY"
+    );
+    assert.equal(
+      geminiSafetyReason({ candidates: [{ finishReason: "PROHIBITED_CONTENT" }] }),
+      "PROHIBITED_CONTENT"
+    );
+
+    let bedrockCalls = 0;
+    const result = await runGenerationChain(input, [
+      adapter("gemini", async () => {
+        throw new AiProviderError("safety", "blocked");
+      }),
+      adapter("bedrock", async () => {
+        bedrockCalls += 1;
+        return generated("bedrock");
+      })
+    ]);
+
+    assert.equal(result, null);
+    assert.equal(bedrockCalls, 0);
+  });
+
+  it("keeps Gemini generation and embedding circuits independent", async () => {
+    const previousOrder = env.providerOrder;
+    const previousKey = env.geminiApiKey;
+    const previousFetch = globalThis.fetch;
+    let embeddingCalls = 0;
+    env.providerOrder = ["gemini"];
+    env.geminiApiKey = "test-key";
+    globalThis.fetch = async (url) => {
+      if (String(url).includes(":embedContent")) {
+        embeddingCalls += 1;
+        return new Response(JSON.stringify({ embedding: { values: Array(768).fill(0.01) } }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response("temporary generation error", { status: 500 });
+    };
+
+    try {
+      await assert.rejects(() => generateGeminiJson({
+        systemInstruction: "test",
+        userText: "test",
+        maxTokens: 10
+      }));
+      const embedding = await embedText("seller proof", "RETRIEVAL_QUERY");
+
+      assert.equal(embedding?.length, 768);
+      assert.equal(embeddingCalls, 1);
+    } finally {
+      env.providerOrder = previousOrder;
+      env.geminiApiKey = previousKey;
+      globalThis.fetch = previousFetch;
+    }
   });
 
   it("returns null without invoking providers when none are configured", async () => {

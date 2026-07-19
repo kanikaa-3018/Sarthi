@@ -874,7 +874,13 @@ function SystemReadinessCard({ readiness, guardrails }: { readiness: SystemReadi
       </div>
       <div className="readiness-status-row">
         <span>AI</span>
-        <strong>{labelize(readiness.runtime_integrations?.gemini.status ?? "disabled")}</strong>
+        <strong>{labelize(
+          readiness.runtime_integrations?.ai.primary_provider === "bedrock"
+            ? readiness.runtime_integrations.bedrock.status
+            : readiness.runtime_integrations?.ai.primary_provider === "gemini"
+              ? readiness.runtime_integrations.gemini.status
+              : "disabled"
+        )}</strong>
       </div>
       <div className="trust-chip-list muted">
         {guardrails.slice(0, 3).map((item) => (

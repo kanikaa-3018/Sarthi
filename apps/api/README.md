@@ -61,14 +61,14 @@ npm run setup:bedrock
 npm run setup:gemini
 ```
 
-AWS credentials come from the standard SDK credential chain; never write access keys to `.env`. Restart the API after updating configuration, then verify `/system/readiness`. `npm run ai:smoke` is inert; `npm run ai:smoke -- --live` makes three bounded live calls.
+AWS credentials come from the standard SDK credential chain; never write access keys to `.env`. Restart the API after updating configuration, then verify `/system/readiness`. `npm run ai:smoke` is inert; `npm run ai:smoke -- --live` makes three bounded live calls. Use `--capability=text`, `--capability=vision`, or `--capability=embedding` to make only one live call.
 
 ## Commands
 
 ```powershell
 npm install
 npm run seed
-npm run vector:index   # optional Atlas index setup; local MongoDB keeps API-side embedding fallback
+npm run vector:index -- --provider=bedrock   # optional Atlas index setup; defaults to the first configured provider
 npm run dev
 ```
 

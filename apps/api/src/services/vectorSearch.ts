@@ -114,6 +114,10 @@ export async function semanticEvidenceSearch(db: Db, graph: any, query: string, 
           }
         }
       ]).toArray();
+      if (!rows.length) {
+        errors.push(`${provider}: vector index returned no matching evidence`);
+        continue;
+      }
       return {
         source: "atlas_vector_search",
         embedding_provider: provider,
@@ -139,8 +143,11 @@ export async function semanticEvidenceSearch(db: Db, graph: any, query: string, 
   };
 }
 
-export async function ensureVectorSearchIndexes(db: Db) {
-  await Promise.all(configuredEmbeddingProviders().map(async (provider) => {
+export async function ensureVectorSearchIndexes(
+  db: Db,
+  providers: AiProvider[] = configuredEmbeddingProviders()
+) {
+  await Promise.all(providers.map(async (provider) => {
     const namespace = vectorNamespaceForProvider(provider);
     const collection = db.collection(namespace.collection);
     await Promise.all([
@@ -149,6 +156,21 @@ export async function ensureVectorSearchIndexes(db: Db) {
       collection.createIndex({ updated_at: -1 })
     ]);
   }));
+}
+
+export function selectedVectorIndexProviders(args: string[], configured: AiProvider[]): AiProvider[] {
+  const inline = args.find((arg) => arg.startsWith("--provider="));
+  const separateIndex = args.indexOf("--provider");
+  const requested = inline?.slice("--provider=".length)
+    ?? (separateIndex >= 0 ? args[separateIndex + 1] : undefined);
+  if (!requested) return configured.slice(0, 1);
+  if (requested !== "bedrock" && requested !== "gemini") {
+    throw new Error(`Invalid vector provider: ${requested}`);
+  }
+  if (!configured.includes(requested)) {
+    throw new Error(`Vector provider is not configured: ${requested}`);
+  }
+  return [requested];
 }
 
 export async function vectorSearchHealth(db: Db) {
@@ -272,8 +294,8 @@ async function ensureGraphEmbeddings(db: Db, docs: EvidenceDoc[], namespace: Vec
       doc_id: doc.doc_id,
       embedding_model: namespace.model,
       embedding_dimensions: namespace.dimensions
-    }, { projection: { _id: 1 } });
-    if (existing) continue;
+    }, { projection: { _id: 1, embedding: 1 } });
+    if (existing && isValidEmbeddingVector(existing.embedding, namespace.dimensions)) continue;
     const embedded = await embedTextWithProvider(namespace.provider, doc.text, "RETRIEVAL_DOCUMENT", doc.title);
     await collection.updateOne(
       { doc_id: doc.doc_id, embedding_model: namespace.model, embedding_dimensions: namespace.dimensions },
@@ -321,7 +343,7 @@ async function localEmbeddingSearch(
   const docsById = new Map(docs.map((doc) => [doc.doc_id, doc]));
   const results = rows
     .map((row: any) => {
-      const embedding = Array.isArray(row.embedding) ? row.embedding.map(Number).filter(Number.isFinite) : [];
+      const embedding = isValidEmbeddingVector(row.embedding, namespace.dimensions) ? row.embedding : [];
       const graphDoc = docsById.get(row.doc_id);
       if (!embedding.length || !graphDoc) return null;
       return {
@@ -347,7 +369,8 @@ async function localEmbeddingSearch(
 }
 
 function cosineSimilarity(left: number[], right: number[]) {
-  const length = Math.min(left.length, right.length);
+  if (left.length !== right.length || !left.length) return 0;
+  const length = left.length;
   let dot = 0;
   let leftNorm = 0;
   let rightNorm = 0;
@@ -360,6 +383,12 @@ function cosineSimilarity(left: number[], right: number[]) {
   }
   if (!leftNorm || !rightNorm) return 0;
   return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+}
+
+export function isValidEmbeddingVector(value: unknown, dimensions: number): value is number[] {
+  return Array.isArray(value)
+    && value.length === dimensions
+    && value.every((item) => typeof item === "number" && Number.isFinite(item));
 }
 
 function lexicalSearch(

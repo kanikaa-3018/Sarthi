@@ -148,6 +148,74 @@ describe("Bedrock provider", () => {
     assert.equal(status.status, "temporarily_unavailable");
   });
 
+  it("keeps text and vision circuit state independent", async () => {
+    const provider = createProvider({
+      send: async (command) => {
+        if (command.input.modelId === "apac.amazon.nova-micro-v1:0") {
+          throw new Error("text unavailable");
+        }
+        if (command.input.messages[0].content.some((part: any) => part.image)) {
+          return {
+            stopReason: "tool_use",
+            output: {
+              message: {
+                content: [{ toolUse: { name: "answer", input: { title: "Vision works" } } }]
+              }
+            }
+          };
+        }
+        throw new Error("text unavailable");
+      }
+    });
+
+    await assert.rejects(() => provider.generateStructured(structuredInput("text")));
+    const vision = await provider.generateStructured({
+      ...structuredInput("vision"),
+      userParts: [{ image: { format: "png", bytes: new Uint8Array([137, 80, 78, 71]) } }]
+    });
+
+    assert.equal(vision.value.title, "Vision works");
+  });
+
+  it("opens an independent embedding circuit after a terminal failure", async () => {
+    let calls = 0;
+    const provider = createProvider({
+      send: async () => {
+        calls += 1;
+        throw new Error("embedding unavailable");
+      }
+    });
+
+    await assert.rejects(() => provider.embedText("seller proof", "RETRIEVAL_QUERY"));
+    await assert.rejects(
+      () => provider.embedText("seller proof", "RETRIEVAL_QUERY"),
+      (error: any) => error?.kind === "availability" && /temporarily unavailable/.test(error.message)
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("sanitizes embedding SDK errors before they leave the adapter", async () => {
+    const privateArn = "arn:aws:iam::123456789012:user/private-user";
+    const provider = createProvider({
+      send: async () => {
+        throw Object.assign(new Error(`denied for ${privateArn}`), {
+          name: "AccessDeniedException",
+          $metadata: { httpStatusCode: 403 }
+        });
+      }
+    });
+
+    await assert.rejects(
+      () => provider.embedText("seller proof", "RETRIEVAL_QUERY"),
+      (error: any) => error?.kind === "availability"
+        && error.message === "Bedrock embedding is unavailable"
+        && !error.message.includes(privateArn)
+    );
+    const serialized = JSON.stringify(provider.status().capabilities.embedding);
+    assert.equal(serialized.includes(privateArn), false);
+    assert.equal(serialized.includes("AccessDeniedException (403)"), true);
+  });
+
   it("requests and validates a 512-dimensional Titan embedding", async () => {
     const values = Array.from({ length: 512 }, (_, index) => index / 512);
     const provider = createProvider({
@@ -187,6 +255,19 @@ describe("Bedrock provider", () => {
       (error: any) => error?.name === "AiProviderError"
         && error?.kind === "invalid_output"
         && /512 dimensions/.test(error.message)
+    );
+  });
+
+  it("rejects Titan vectors containing coerced numeric strings", async () => {
+    const provider = createProvider({
+      send: async () => ({
+        body: new TextEncoder().encode(JSON.stringify({ embedding: Array(512).fill("0.1") }))
+      })
+    });
+
+    await assert.rejects(
+      () => provider.embedText("seller proof", "RETRIEVAL_QUERY"),
+      (error: any) => error?.kind === "invalid_output"
     );
   });
 });

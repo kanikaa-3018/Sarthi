@@ -31,6 +31,7 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
       source_health: health,
       runtime_integrations: {
         ai,
+        bedrock: ai.bedrock,
         gemini: ai.gemini,
         neo4j,
         atlas_vector_search: vector

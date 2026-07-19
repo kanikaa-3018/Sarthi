@@ -39,6 +39,9 @@ describe("AI cache isolation", () => {
       assert.equal(status.bedrock.status, "disabled");
       assert.equal(status.gemini.provider, "gemini");
       assert.deepEqual(status.provider_order, env.providerOrder);
+      assert.equal(status.primary_provider, "gemini");
+      assert.equal(status.available, true);
+      assert.equal(status.capabilities.text.primary_provider, "gemini");
       assert.equal(serialized.includes("do-not-leak-this-test-key"), false);
     } finally {
       env.geminiApiKey = previousKey;
