@@ -1637,11 +1637,12 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
                   proofSubmittingId === proofTaskId(activeProofTask) ||
                   !proofTitle.trim() ||
                   !proofDescription.trim() ||
-                  !proofAssetUrl.trim()
+                  !proofAssetUrl.trim() ||
+                  Boolean(activeProofQuality && activeProofQuality.score < 55)
                 }
               >
                 <Plus size={14} />
-                {proofSubmittingId ? "Submitting proof" : "Submit proof reference"}
+                {proofSubmittingId ? copy.submittingProof : copy.submitProofReference}
               </button>
             </form>
           </div>
