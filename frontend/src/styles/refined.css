@@ -616,8 +616,9 @@ input:focus {
 .trust-center-shell,
 .seller-console-shell,
 .admin-review-shell {
-  max-width: 1160px;
+  max-width: 100%;
   padding: 0;
+  margin: 0;
 }
 
 .trust-hero-section,
