@@ -5,7 +5,7 @@ import { resetMongoSeed } from "../data/seed.js";
 import { requireAccount } from "../middleware/auth.js";
 import { defaultScenarios } from "../services/scenarios.js";
 import { sourceHealth } from "../services/domain.js";
-import { geminiRuntimeStatus } from "../services/gemini.js";
+import { aiRuntimeStatus } from "../services/ai.js";
 import { neo4jHealth } from "../services/neo4jGraph.js";
 import { vectorSearchHealth } from "../services/vectorSearch.js";
 
@@ -23,13 +23,16 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
       neo4jHealth(),
       vectorSearchHealth(db)
     ]);
+    const ai = aiRuntimeStatus();
     return {
       app_env: env.nodeEnv,
       data_mode: "mongodb_atlas",
       user_disclosure: "This build uses MongoDB Atlas-ready evidence documents and seeded demo records until official connectors are attached.",
       source_health: health,
       runtime_integrations: {
-        gemini: geminiRuntimeStatus(),
+        ai,
+        bedrock: ai.bedrock,
+        gemini: ai.gemini,
         neo4j,
         atlas_vector_search: vector
       },
@@ -38,7 +41,7 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
         "MongoDB evidence store",
         "Neo4j evidence graph projection when configured",
         "Atlas Vector Search semantic retrieval when configured",
-        "Gemini grounded answer and confidence scoring when configured",
+        "Bedrock-first grounded answers, confidence scoring, and visual checks with Gemini fallback",
         "buyer fit profile guardrails",
         "weighted confidence scoring",
         "reviewer credibility weighting",

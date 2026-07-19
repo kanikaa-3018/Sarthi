@@ -7,7 +7,9 @@
     "build:test": "npm --prefix apps/api run build && npm --prefix apps/api run test && npm --prefix frontend run build",
     "e2e": "npm --prefix frontend run test:e2e",
     "setup:gemini": "powershell -ExecutionPolicy Bypass -File scripts/setup-gemini-env.ps1",
+    "setup:bedrock": "powershell -ExecutionPolicy Bypass -File scripts/setup-bedrock-env.ps1",
     "gemini:smoke": "npm --prefix apps/api run gemini:smoke",
+    "ai:smoke": "npm --prefix apps/api run ai:smoke --",
     "dev:api": "npm --prefix apps/api run dev",
     "dev:frontend": "npm --prefix frontend run dev"
   }

@@ -10,7 +10,7 @@ test("E2E runs against the isolated auth database", async ({ request }) => {
 });
 
 test("API helpers cannot bypass the owned E2E API port", () => {
-  expect(API_BASE).toBe(`http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`);
+  expect(API_BASE).toBe(`http://127.0.0.1:${process.env.E2E_API_PORT ?? "58001"}`);
 });
 
 test("E2E database guard rejects non-test and production-like names", () => {

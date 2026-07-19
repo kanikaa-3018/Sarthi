@@ -208,12 +208,12 @@ export function KnowledgeGraphExplorer({
   });
   const engineLabel = "Evidence map";
   const similarity = graph.summary.similarity;
-  const aiLabel = answer?.agent?.provider === "gemini"
+  const aiLabel = answer?.agent?.provider === "bedrock" || answer?.agent?.provider === "gemini"
     ? "AI answer"
     : answer
       ? "Proof answer"
       : "Ask Sarthi";
-  const similarityLabel = similarity?.agent?.provider === "gemini"
+  const similarityLabel = similarity?.agent?.provider === "bedrock" || similarity?.agent?.provider === "gemini"
     ? similarity.agent.used
       ? `Image match ${similarity.agent.image_inputs} photos`
       : `Image match ${similarity.agent.status}`

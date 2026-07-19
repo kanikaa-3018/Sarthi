@@ -1,18 +1,22 @@
 import { env } from "../config/env.js";
+import { AiProviderError } from "./aiTypes.js";
 
-type GeminiJsonInput = {
+export type GeminiJsonInput = {
   systemInstruction: string;
   userText: string;
   userParts?: GeminiUserPart[];
   temperature?: number;
+  maxTokens?: number;
 };
 
 export type GeminiUserPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } };
 
-let geminiDisabledUntil = 0;
-let lastGeminiError: string | null = null;
+const geminiCircuits = {
+  generation: { disabledUntil: 0, lastError: null as string | null },
+  embedding: { disabledUntil: 0, lastError: null as string | null }
+};
 let lastGenerateModel: string | null = null;
 let lastEmbeddingModel: string | null = null;
 
@@ -27,36 +31,60 @@ const MODEL_ALIASES: Record<string, string> = {
 };
 
 export function geminiConfigured() {
-  return env.llmProvider === "gemini" && Boolean(env.geminiApiKey);
+  return env.providerOrder.includes("gemini") && Boolean(env.geminiApiKey);
 }
 
 export function geminiRuntimeStatus() {
   const configured = geminiConfigured();
   return {
     enabled: configured,
-    provider: env.llmProvider,
-    model: env.llmModel,
+    provider: "gemini",
+    model: env.geminiModel,
     active_model: lastGenerateModel,
     embedding_model: env.embeddingModel,
     active_embedding_model: lastEmbeddingModel,
     key_present: Boolean(env.geminiApiKey),
     status: configured
-      ? geminiCircuitOpen()
+      ? geminiCircuitOpen("generation")
         ? "temporarily_unavailable"
         : "configured"
       : "disabled",
-    last_error: geminiCircuitOpen() ? lastGeminiError : null
+    last_error: geminiCircuitOpen("generation") ? geminiCircuits.generation.lastError : null,
+    capabilities: {
+      text: {
+        status: configured
+          ? geminiCircuitOpen("generation") ? "temporarily_unavailable" : "configured"
+          : "disabled",
+        last_error: geminiCircuitOpen("generation") ? geminiCircuits.generation.lastError : null
+      },
+      vision: {
+        status: configured
+          ? geminiCircuitOpen("generation") ? "temporarily_unavailable" : "configured"
+          : "disabled",
+        last_error: geminiCircuitOpen("generation") ? geminiCircuits.generation.lastError : null
+      },
+      embedding: {
+        status: configured
+          ? geminiCircuitOpen("embedding") ? "temporarily_unavailable" : "configured"
+          : "disabled",
+        last_error: geminiCircuitOpen("embedding") ? geminiCircuits.embedding.lastError : null
+      }
+    }
   };
 }
 
 export async function generateGeminiJson(input: GeminiJsonInput) {
   if (!geminiConfigured()) return null;
-  if (geminiCircuitOpen()) return null;
+  if (geminiCircuitOpen("generation")) return null;
   let lastError: unknown = null;
   try {
     for (const model of modelCandidates(env.llmModel, GENERATE_MODEL_FALLBACKS)) {
       try {
         const payload = await postGenerateContent(model, input);
+        const safetyReason = geminiSafetyReason(payload);
+        if (safetyReason) {
+          throw new AiProviderError("safety", "Gemini safety policy stopped the response");
+        }
         lastGenerateModel = model;
         return payload.candidates?.[0]?.content?.parts?.map((part: any) => part.text).join("") ?? "";
       } catch (error) {
@@ -66,14 +94,15 @@ export async function generateGeminiJson(input: GeminiJsonInput) {
     }
     throw lastError ?? new Error("Gemini generation failed");
   } catch (error) {
-    tripGeminiCircuit(error);
+    if (error instanceof AiProviderError && error.kind === "safety") throw error;
+    tripGeminiCircuit("generation", error);
     throw error;
   }
 }
 
 export async function embedText(text: string, taskType: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT", title?: string) {
   if (!geminiConfigured()) return null;
-  if (geminiCircuitOpen()) return null;
+  if (geminiCircuitOpen("embedding")) return null;
   let lastError: unknown = null;
   try {
     for (const model of modelCandidates(env.embeddingModel, EMBEDDING_MODEL_FALLBACKS)) {
@@ -89,7 +118,7 @@ export async function embedText(text: string, taskType: "RETRIEVAL_QUERY" | "RET
     }
     throw lastError ?? new Error("Gemini embedding failed");
   } catch (error) {
-    tripGeminiCircuit(error);
+    tripGeminiCircuit("embedding", error);
     throw error;
   }
 }
@@ -109,6 +138,24 @@ export function parseJsonObject(text: string) {
       return null;
     }
   }
+}
+
+export function geminiSafetyReason(payload: unknown) {
+  const promptReason = String((payload as any)?.promptFeedback?.blockReason ?? "").trim().toUpperCase();
+  if (promptReason && promptReason !== "BLOCK_REASON_UNSPECIFIED") return promptReason;
+  const terminalReasons = new Set([
+    "SAFETY",
+    "BLOCKLIST",
+    "PROHIBITED_CONTENT",
+    "SPII",
+    "RECITATION",
+    "IMAGE_SAFETY",
+    "IMAGE_PROHIBITED_CONTENT"
+  ]);
+  const candidate = Array.isArray((payload as any)?.candidates)
+    ? (payload as any).candidates.find((item: any) => terminalReasons.has(String(item?.finishReason ?? "").toUpperCase()))
+    : null;
+  return candidate ? String(candidate.finishReason).toUpperCase() : null;
 }
 
 function modelName(value: string) {
@@ -137,6 +184,7 @@ async function postGenerateContent(model: string, input: GeminiJsonInput) {
       }],
       generationConfig: {
         temperature: input.temperature ?? 0.2,
+        maxOutputTokens: input.maxTokens,
         responseMimeType: "application/json"
       }
     })
@@ -195,14 +243,14 @@ function shouldTryNextModel(error: unknown) {
   return status === 404;
 }
 
-function geminiCircuitOpen() {
-  return Date.now() < geminiDisabledUntil;
+function geminiCircuitOpen(capability: keyof typeof geminiCircuits) {
+  return Date.now() < geminiCircuits[capability].disabledUntil;
 }
 
-function tripGeminiCircuit(error: unknown) {
+function tripGeminiCircuit(capability: keyof typeof geminiCircuits, error: unknown) {
   const detail = error instanceof Error ? error.message.slice(0, 180) : "Gemini request failed";
-  lastGeminiError = `${detail}; using deterministic fallback for 60 seconds`;
-  geminiDisabledUntil = Date.now() + 60_000;
+  geminiCircuits[capability].lastError = `${detail}; using fallback for 60 seconds`;
+  geminiCircuits[capability].disabledUntil = Date.now() + 60_000;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit) {

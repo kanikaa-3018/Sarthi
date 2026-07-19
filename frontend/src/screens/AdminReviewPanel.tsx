@@ -498,11 +498,13 @@ function AgentRoomView({
   const firstQueueItem = queue.automation_plan.first_queue_item_id
     ? queue.active_queue.find((item) => item.queue_item_id === queue.automation_plan.first_queue_item_id)
     : prioritizedItems[0];
-  const providerKicker = queue.automation_plan.agent_provider === "gemini"
-    ? "Gemini assisted triage"
-    : queue.automation_plan.agent_provider === "fallback_after_llm_error"
-      ? "LLM fallback triage"
-      : "Rules fallback triage";
+  const providerKicker = queue.automation_plan.agent_provider === "bedrock"
+    ? "Bedrock assisted triage"
+    : queue.automation_plan.agent_provider === "gemini"
+      ? "Gemini assisted triage"
+      : queue.automation_plan.agent_provider === "fallback_after_llm_error"
+        ? "LLM fallback triage"
+        : "Rules fallback triage";
 
   return (
     <section className="admin-agent-room-view">
@@ -618,8 +620,13 @@ function AiAssistStatusPanel({
   onRefresh: () => void;
   onRunTest: () => void;
 }) {
-  const gemini = health?.gemini;
-  const status = gemini?.status ?? (loading ? "checking" : "unavailable");
+  const primaryProvider = health?.ai.primary_provider;
+  const providerStatus = primaryProvider === "bedrock"
+    ? health?.bedrock.status
+    : primaryProvider === "gemini"
+      ? health?.gemini.status
+      : undefined;
+  const status = providerStatus ?? (loading ? "checking" : "unavailable");
   const fallbackText = health?.fallback.active ? "Safety fallback is active" : "Auto-suggestions are active";
 
   return (
@@ -714,7 +721,7 @@ function PolicyBrainView({ queue }: { queue: AdminReviewQueue }) {
   const prescreens = collectPrescreens(queue);
   const checkCounts = countPrescreenChecks(prescreens);
   const staleSources = queue.source_health.sources.filter((source) => source.effective_status !== "operational" || !source.fresh);
-  const geminiChecks = prescreens.filter((prescreen) => prescreen.agent_provider === "gemini").length;
+  const aiChecks = prescreens.filter((prescreen) => ["bedrock", "gemini"].includes(prescreen.agent_provider)).length;
   const seniorRouted = queue.active_queue.filter((item) => item.route_to === "senior_reviewer").length;
   const blockedDrafts = queue.listing_drafts.filter(
     (draft) => draft.status === "submitted" && draft.verification_status !== "verified"
@@ -758,7 +765,7 @@ function PolicyBrainView({ queue }: { queue: AdminReviewQueue }) {
         <PolicyMetric label="Checks passed" value={String(checkCounts.pass)} tone="good" />
         <PolicyMetric label="Warnings" value={String(checkCounts.warn)} tone={checkCounts.warn ? "warn" : "good"} />
         <PolicyMetric label="Failures" value={String(checkCounts.fail)} tone={checkCounts.fail ? "bad" : "good"} />
-        <PolicyMetric label="Gemini prescreens" value={String(geminiChecks)} tone={geminiChecks ? "good" : "warn"} />
+        <PolicyMetric label="AI prescreens" value={String(aiChecks)} tone={aiChecks ? "good" : "warn"} />
       </div>
 
       <div className="admin-policy-board">
@@ -2523,6 +2530,7 @@ function decisionActionLabel(action: AdminPrescreenSuggestion["suggested_action"
 }
 
 function providerText(provider: AdminPrescreenSuggestion["agent_provider"]) {
+  if (provider === "bedrock") return "Bedrock pre-check";
   if (provider === "gemini") return "Gemini pre-check";
   if (provider === "fallback_after_llm_error") return "Rules fallback";
   return "Rules pre-check";
@@ -2624,8 +2632,9 @@ function SlaPill({ value, ageHours }: { value: string; ageHours: number }) {
 }
 
 function ProviderPill({ provider }: { provider: AdminPrescreenSuggestion["agent_provider"] }) {
-  const label = provider === "gemini" ? "Sarthi checks" : provider === "fallback_after_llm_error" ? "Rules fallback" : "Rule checks";
-  return <span className={`review-provider-pill ${provider === "gemini" ? "gemini" : ""}`}>{label}</span>;
+  const generated = provider === "bedrock" || provider === "gemini";
+  const label = generated ? "Sarthi checks" : provider === "fallback_after_llm_error" ? "Rules fallback" : "Rule checks";
+  return <span className={`review-provider-pill ${generated ? "gemini" : ""}`}>{label}</span>;
 }
 
 function adminTabIcon(tab: AdminTab) {

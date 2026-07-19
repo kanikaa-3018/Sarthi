@@ -21,7 +21,8 @@
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=fff" />
     <img alt="Fastify" src="https://img.shields.io/badge/Fastify-5-111111?logo=fastify&logoColor=fff" />
     <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-Atlas%20or%20Local-47A248?logo=mongodb&logoColor=fff" />
-    <img alt="Gemini" src="https://img.shields.io/badge/Gemini-optional-8E75B2" />
+    <img alt="Amazon Bedrock" src="https://img.shields.io/badge/Amazon_Bedrock-primary-FF9900" />
+    <img alt="Gemini" src="https://img.shields.io/badge/Gemini-fallback-8E75B2" />
     <img alt="Neo4j" src="https://img.shields.io/badge/Neo4j-optional-4581C3?logo=neo4j&logoColor=fff" />
   </p>
 </div>
@@ -79,6 +80,7 @@ flowchart LR
 | Seller Evidence Loop | Sellers upload proofs, submit verification documents, create drafts, and track review state. |
 | Admin Review | Reviewer approves, rejects, or requests revision for applications, documents, proofs, and drafts. |
 | Auditability | Decisions carry tools used, fact IDs, timestamps, graph paths, and unsupported-claim blocking. |
+| AI failover | Uses Amazon Bedrock Nova/Titan first, Gemini when configured as fallback, then deterministic behavior without mixing vector namespaces. |
 
 ## Agentic AI Layer
 
@@ -88,10 +90,10 @@ Sarthi uses agentic AI as tool orchestration, not blind automation.
 | --- | --- |
 | Buyer question routing | Detects compare, fit, fabric, seller, offer, checkout, and return intents. |
 | Grounded retrieval | Pulls product, seller, SKU, proof, source-health, and graph context before answering. |
-| Gemini assistance | Generates concise grounded language when `GEMINI_API_KEY` is configured. |
+| Model assistance | Uses Bedrock Nova first for grounded language and Gemini only as a configured availability fallback. Safety stops never switch providers. |
 | Evidence graph | Connects seller, SKU, returns, reviews, offer, proof, buyer-fit context, and final trust score. |
 | Admin triage | Summarizes risk, SLA, buyer impact, source checks, and suggested reviewer route. |
-| Fallback behavior | If Gemini, Vector Search, or Neo4j is unavailable, deterministic services keep the prototype usable. |
+| Fallback behavior | If Bedrock, Gemini, Vector Search, or Neo4j is unavailable, deterministic services keep the prototype usable. |
 
 AI cannot approve sellers, publish listings, invent product facts, bypass verification gates, or expose buyer private fit memory to sellers.
 
@@ -107,6 +109,144 @@ AI cannot approve sellers, publish listings, invent product facts, bypass verifi
 | Live deployment | Public demo link is at the top; judges can test workflows and model-assisted responses directly. |
 | Code and setup | Local setup, environment, seed, run, and verification commands are listed below. |
 | Open-source attribution | Main libraries, licenses, roles, and external services are documented in [docs/ATTRIBUTION.md](./docs/ATTRIBUTION.md). |
+
+### Prerequisites
+
+- Node.js 20+
+- npm 10+
+- MongoDB running locally, or a MongoDB Atlas connection string
+- AWS CLI credentials or an AWS runtime role for Bedrock; a Gemini key is needed only for fallback
+- Neo4j only if testing optional graph projection
+
+### 1. Configure Environment
+
+From the repository root:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+For local development, this is enough if MongoDB is running on `127.0.0.1:27017`:
+
+```env
+NODE_ENV=development
+PORT=8000
+MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_DB=sarthi
+AUTH_SECRET=change-this-before-sharing
+DEMO_CONTROLS_ENABLED=true
+```
+
+For Bedrock-first automation in `ap-south-1`:
+
+```powershell
+npm run setup:bedrock
+```
+
+The helper writes only non-secret model and region settings to `apps/api/.env`; it preserves any existing Gemini key. The SDK uses the normal AWS credential chain (`aws login` locally, an IAM role in production). Do not put AWS access keys in `.env`.
+
+Key settings are:
+
+```env
+AI_PROVIDER_ORDER=bedrock,gemini
+BEDROCK_ENABLED=true
+AWS_REGION=ap-south-1
+BEDROCK_TEXT_MODELS=apac.amazon.nova-micro-v1:0,apac.amazon.nova-lite-v1:0
+BEDROCK_VISION_MODELS=apac.amazon.nova-lite-v1:0
+BEDROCK_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
+BEDROCK_EMBEDDING_DIMENSIONS=512
+```
+
+Gemini remains the automatic fallback when configured:
+
+```env
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-3.1-flash-lite
+GEMINI_API_KEY=<your-gemini-key>
+```
+
+On Windows, this helper writes the key to `apps/api/.env`, which is one of the exact paths the API reads:
+
+```powershell
+npm run setup:gemini
+```
+
+Restart the API after configuration. `/system/readiness` reports `runtime_integrations.ai`, retains the legacy `runtime_integrations.gemini` object, and never returns credentials.
+
+The smoke command is inert unless `--live` is supplied. The live form makes one bounded text probe (which may try the secondary text model), one bounded vision probe, and one embedding probe:
+
+```powershell
+npm run ai:smoke
+npm run ai:smoke -- --live
+npm run ai:smoke -- --live --capability=vision
+```
+
+AWS Free Tier is credit-based rather than unlimited inference. The code limits output tokens, request duration, retries, image size, and the number of documents embedded per query, but you should still configure an AWS Budget alert for your account.
+
+Atlas vector indexes are provider-specific. The command defaults to the first configured provider; select one explicitly when needed:
+
+```powershell
+npm --prefix apps/api run vector:index -- --provider=bedrock
+npm --prefix apps/api run vector:index -- --provider=gemini
+```
+
+For optional graph and vector retrieval:
+
+```env
+NEO4J_ENABLED=true
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<password>
+
+VECTOR_SEARCH_ENABLED=true
+BEDROCK_VECTOR_SEARCH_COLLECTION=evidence_embeddings_bedrock
+BEDROCK_VECTOR_SEARCH_INDEX=sarthi_evidence_vector_bedrock_512
+VECTOR_SEARCH_COLLECTION=evidence_embeddings
+VECTOR_SEARCH_INDEX=sarthi_evidence_vector
+EMBEDDING_MODEL=gemini-embedding-001
+EMBEDDING_DIMENSIONS=768
+```
+
+Local/community MongoDB cannot create Atlas Search indexes. When `VECTOR_SEARCH_ENABLED=true` on local MongoDB, Sarthi uses API-side cosine similarity. On Atlas it uses provider-specific indexes. Titan 512-dimensional vectors and Gemini 768-dimensional vectors are stored separately and never compared.
+
+### 2. Start Backend
+
+```powershell
+cd apps\api
+npm install
+npm run seed
+npm run dev
+```
+
+The backend runs on:
+
+```text
+http://127.0.0.1:8000
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+### 3. Start Frontend
+
+In a second terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL shown in the terminal, usually:
+
+```text
+http://localhost:5173
+```
+
+The frontend proxies API requests to `http://127.0.0.1:8000`.
 
 ## Demo Accounts
 
@@ -241,6 +381,44 @@ Sarthi/
   scripts/         Local setup helpers
   .env.example     Runtime configuration template
 ```
+
+General checks:
+
+```powershell
+git diff --check
+```
+
+## Security And Privacy
+
+- Do not commit `.env`, API keys, MongoDB credentials, seller documents, or real buyer/seller data.
+- Buyer personal fit memory is not exposed to sellers or admin reviewers.
+- Seller evidence console shows aggregate marketplace evidence and seller-owned proof tasks only.
+- Admin review controls are role-gated and separate from buyer/seller routes.
+- Bedrock, Gemini, Vector Search, and Neo4j are optional; deterministic fallback paths remain available.
+- Audit traces expose facts, tools, timestamps, and blocked unsupported claims, not chain-of-thought.
+- Production launch requires official marketplace connectors, managed auth, secure object storage, observability, and reviewer operations controls.
+
+## Product Readiness
+
+Sarthi is a prototype built to demonstrate a complete commerce trust loop. The current seed data is deterministic demo data, not live marketplace data.
+
+Ready for prototype evaluation:
+
+- end-to-end buyer, seller, and admin journeys;
+- API-backed role separation;
+- reviewable evidence and audit trails;
+- seller proof and admin verification workflow;
+- Bedrock-first AI with Gemini and deterministic fallbacks;
+- setup, demo, and judge-facing documentation.
+
+Still required for production:
+
+- official catalog, order, return, inventory, campaign, seller KYC, and review connectors;
+- secure media/document storage;
+- managed identity, OTP, account recovery, and session risk controls;
+- migration system beyond seeded reset;
+- operational reviewer tooling, retention policies, and observability;
+- accessibility and real-device QA.
 
 ## Documentation
 

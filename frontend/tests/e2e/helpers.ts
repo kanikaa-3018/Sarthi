@@ -5,7 +5,7 @@ import { resolveE2eDatabaseName } from "../../e2eRuntime";
 
 export type { DemoRole };
 
-export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "8200"}`;
+export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "58001"}`;
 
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
 export const E2E_DATABASE_NAME = resolveE2eDatabaseName();
