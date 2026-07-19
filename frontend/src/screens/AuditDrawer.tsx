@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Database, Route, ShieldCheck } from "lucide-react";
 import { getAudit } from "../api/client";
+import type { LanguageCode } from "../i18n";
 import type { AuditTrace } from "../types/api";
 
 type Props = {
   traceId: string | null;
   onClose: () => void;
+  language?: LanguageCode;
 };
 
 export function AuditDrawer({ traceId }: Props) {

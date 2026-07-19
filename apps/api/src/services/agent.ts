@@ -10,7 +10,7 @@ type AgentAnswer = {
 
 type AgentInput = {
   query: string;
-  task: "graph_chat" | "product_advice";
+  task: "graph_chat" | "product_advice" | "return_assistant" | "admin_prescreen" | "admin_automation";
   context: Record<string, unknown>;
   fallback: Omit<AgentAnswer, "source">;
 };
