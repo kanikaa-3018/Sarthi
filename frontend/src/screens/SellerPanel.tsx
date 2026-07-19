@@ -858,29 +858,131 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
     }
   }
 
-  if (loading && !onboarding && !panel) {
-    return <div className="seller-loading-state">Loading seller center...</div>;
+  async function handleProofFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file || !activeProofTask) return;
+    if (!isAllowedUploadFile(file, ["application/pdf", "image/jpeg", "image/png", "image/webp"], 2_000_000)) {
+      setError("Proof must be a PDF or image under 2 MB.");
+      event.currentTarget.value = "";
+      return;
+    }
+    if (!proofTypeAcceptsFile(activeProofTask.recommended_proof_type, file)) {
+      setError(`${proofTypeLabel(activeProofTask.recommended_proof_type)} needs a clear image or PDF proof, not ${file.type || "this file type"}.`);
+      event.currentTarget.value = "";
+      return;
+    }
+    setError(null);
+    setProofAssetUrl(await readFileAsDataUrl(file));
+    if (!proofTitle.trim()) {
+      setProofTitle(suggestedProofTitle(activeProofTask));
+    }
+    if (!proofDescription.trim()) {
+      setProofDescription(`${shortProductTitle(activeProofTask.product_title)}: uploaded ${file.name} as ${proofTypeLabel(activeProofTask.recommended_proof_type)} for ${labelize(activeProofTask.attribute)} review.`);
+    }
   }
 
   const sellerSummary = panel?.seller ?? onboarding?.seller ?? null;
   const currentRating = sellerSummary?.current_rating;
   const ratingText = typeof currentRating === "number" ? currentRating.toFixed(1) : "New";
   const ratingCount = sellerSummary?.rating_count ?? 0;
+  const sellerListings = panel?.seller_all_listings ?? panel?.seller_listings ?? [];
+  const proofTasks = useMemo(
+    () => [...(evidenceCoach?.tasks ?? [])].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)),
+    [evidenceCoach]
+  );
+  const topProofTask = proofTasks[0] ?? null;
+  const verificationStatus = onboarding?.seller_verification.verification_status
+    ?? panel?.seller_verification.verification_status
+    ?? "pending";
+  const liveProductCount = panel?.seller.product_count ?? onboarding?.seller.product_count ?? sellerListings.length;
+  const openRequestCount = evidenceCoach?.open_task_count ?? proofTasks.length;
+  const actionBoard = panel?.action_board ?? null;
+  const sellerInsight = useMemo(
+    () => buildSellerInsight(panel, evidenceCoach, onboarding, copy),
+    [copy, evidenceCoach, onboarding, panel]
+  );
+  const draftReadiness = useMemo(
+    () => draftReadinessScore({
+      title: draftTitle,
+      category: draftCategory,
+      garmentType: draftGarmentType,
+      fabric: draftFabric,
+      color: draftColor,
+      price: Number(draftPrice),
+      imageUrl: draftImageUrl,
+      verified: onboarding?.seller_verification.verification_status === "verified"
+    }, copy),
+    [copy, draftCategory, draftColor, draftFabric, draftGarmentType, draftImageUrl, draftPrice, draftTitle, onboarding?.seller_verification.verification_status]
+  );
+  const sellerTrustOps = useMemo(
+    () => buildSellerTrustOps(sellerListings, proofTasks, actionBoard, verificationStatus, ratingText, copy),
+    [actionBoard, copy, proofTasks, ratingText, sellerListings, verificationStatus]
+  );
+  const activeProofQuality = useMemo(
+    () => activeProofTask
+      ? proofDraftQuality(activeProofTask, { title: proofTitle, description: proofDescription, assetUrl: proofAssetUrl }, copy)
+      : null,
+    [activeProofTask, copy, proofAssetUrl, proofDescription, proofTitle]
+  );
+  const activeProofReuse = useMemo(
+    () => activeProofTask ? proofReuseCandidates(activeProofTask, sellerListings) : [],
+    [activeProofTask, sellerListings]
+  );
+  const activeSuggestedProofDraft = useMemo(() => {
+    if (!activeProofTask) return null;
+    const listing = sellerListings.find((item) => item.product.product_id === activeProofTask.product_id);
+    return suggestedProofDraft(activeProofTask, listing);
+  }, [activeProofTask, sellerListings]);
+  const proofMatchesSuggested = Boolean(
+    activeSuggestedProofDraft &&
+    proofTitle === activeSuggestedProofDraft.title &&
+    proofDescription === activeSuggestedProofDraft.description &&
+    (!activeSuggestedProofDraft.assetUrl || proofAssetUrl === activeSuggestedProofDraft.assetUrl)
+  );
+  const draftWarnings = useMemo(
+    () => productDraftWarnings({
+      title: draftTitle,
+      category: draftCategory,
+      garmentType: draftGarmentType,
+      fabric: draftFabric,
+      color: draftColor,
+      price: Number(draftPrice),
+      imageUrl: draftImageUrl,
+      verificationStatus
+    }, copy),
+    [copy, draftCategory, draftColor, draftFabric, draftGarmentType, draftImageUrl, draftPrice, draftTitle, verificationStatus]
+  );
+  const draftHasBlockingIssue = draftWarnings.some((warning) =>
+    warning.tone === "risk" && warning.key !== "seller-verification"
+  );
+  const activeProofWarnings = useMemo(
+    () => activeProofTask
+      ? proofUploadWarnings(activeProofTask, {
+        title: proofTitle,
+        description: proofDescription,
+        assetUrl: proofAssetUrl
+      }, copy)
+      : [],
+    [activeProofTask, copy, proofAssetUrl, proofDescription, proofTitle]
+  );
+  if (loading && !onboarding && !panel) {
+    return <div className="seller-loading-state">{copy.loadingSellerCenter}</div>;
+  }
 
   return (
     <main className="seller-console-shell">
       <section className="seller-console-toolbar">
         <div className="seller-title-block">
-          <span className="eyebrow">Seller Console</span>
+          <span className="eyebrow">{copy.sellerConsole}</span>
           <div className="seller-title-line">
-            <h2>{sellerSummary?.name ?? "Seller center"}</h2>
+            <h2>{sellerSummary?.name ?? copy.sellerCenter}</h2>
             <span className="seller-current-rating">
               <Star size={15} fill="currentColor" />
               <strong>{ratingText}</strong>
-              <small>{ratingCount ? `${ratingCount.toLocaleString("en-IN")} ratings` : "No ratings yet"}</small>
+              <small>{ratingCount ? `${ratingCount.toLocaleString("en-IN")} ${copy.ratings}` : copy.noRatingsYet}</small>
             </span>
           </div>
-          <p>Fix proof gaps. Add products. Buyer personal data is never shown.</p>
+          <p>{copy.toolbarBody}</p>
         </div>
 
         <div className="seller-toolbar-controls">
