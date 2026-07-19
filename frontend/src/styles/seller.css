@@ -1,10 +1,8 @@
-﻿/* -------------------------------------------------------------
+/* -------------------------------------------------------------
    SELLER CONSOLE
 ------------------------------------------------------------- */
 .seller-console-shell {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -187,7 +185,7 @@
 
 .seller-metric-tile strong {
   color: var(--forest-green);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-sans);
   font-size: 22px;
   line-height: 1;
 }
@@ -265,7 +263,7 @@
 }
 
 .seller-listing-card:hover {
-  border-color: var(--accent-primary);
+  border-color: var(--text-secondary);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
@@ -340,7 +338,7 @@
 }
 
 .rank-dots span.filled {
-  background: var(--accent-primary);
+  background: var(--success);
 }
 
 .seller-rank-line strong {
@@ -409,7 +407,7 @@
 
 .seller-score-box strong {
   color: var(--forest-green);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-sans);
   font-size: 24px;
 }
 
@@ -971,7 +969,7 @@
   background: var(--bg-surface-muted);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  color: var(--accent-primary-hover);
+  color: var(--text-secondary);
   font-size: 11px;
   padding: 5px 8px;
   white-space: nowrap;
@@ -1001,7 +999,7 @@
 }
 
 .seller-proof-task span {
-  color: var(--accent-primary-hover);
+  color: var(--text-secondary);
   display: block;
   font-size: 10px;
   font-weight: 900;
@@ -1088,4 +1086,187 @@
 .seller-proof-form-body textarea {
   min-height: 84px;
   resize: vertical;
+}
+
+.seller-agent-insight {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-beige);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: var(--space-4);
+}
+
+.seller-agent-insight.good {
+  border-color: color-mix(in srgb, var(--forest-green) 24%, var(--border-beige));
+}
+
+.seller-agent-insight.watch {
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-beige));
+}
+
+.seller-agent-insight.risk {
+  border-color: color-mix(in srgb, var(--danger-red) 30%, var(--border-beige));
+}
+
+.seller-agent-insight-icon {
+  align-items: center;
+  background: var(--success-surface);
+  border: 1px solid color-mix(in srgb, var(--forest-green) 22%, var(--border-beige));
+  border-radius: var(--radius-md);
+  color: var(--forest-green);
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.seller-agent-insight strong,
+.seller-agent-insight p {
+  display: block;
+}
+
+.seller-agent-insight strong {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.seller-agent-insight p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: var(--space-1) 0 0;
+}
+
+.seller-agent-insight-action {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-beige);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  padding: var(--space-2) var(--space-3);
+}
+
+.seller-progress-stepper {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.seller-progress-stepper button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-beige);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 70px;
+  padding: var(--space-3);
+  text-align: left;
+}
+
+.seller-progress-stepper button.active {
+  border-color: var(--text-primary);
+}
+
+.seller-progress-stepper button.done span {
+  background: var(--success-surface);
+  color: var(--forest-green);
+}
+
+.seller-progress-stepper button.blocked {
+  opacity: 0.65;
+}
+
+.seller-progress-stepper button > span {
+  align-items: center;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-beige);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 950;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.seller-progress-stepper strong,
+.seller-progress-stepper small {
+  display: block;
+}
+
+.seller-progress-stepper strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.seller-progress-stepper small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+  margin-top: var(--space-1);
+}
+
+.seller-readiness-live {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-beige);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.seller-readiness-live.good {
+  border-color: color-mix(in srgb, var(--forest-green) 28%, var(--border-beige));
+}
+
+.seller-readiness-live.watch {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--border-beige));
+}
+
+.seller-readiness-live.risk {
+  border-color: color-mix(in srgb, var(--danger-red) 34%, var(--border-beige));
+}
+
+.seller-readiness-live div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.seller-readiness-live span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.seller-readiness-live strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.seller-readiness-live p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+  margin: 0;
+}
+
+@media (max-width: 820px) {
+  .seller-agent-insight,
+  .seller-progress-stepper {
+    grid-template-columns: 1fr;
+  }
 }

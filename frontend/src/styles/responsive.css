@@ -147,30 +147,8 @@
   .sarthi-confidence-rail {
     padding: 16px;
   }
-  .buyer-shop-hero {
-    grid-template-columns: 1fr;
-    padding: 2px 0 0;
-  }
-  .shop-trust-row {
-    display: flex;
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-  .shop-search-card {
+  .marketplace-toolbar {
     padding: 10px;
-  }
-  .quick-search-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 7px;
-  }
-  .sarthi-nudge-strip {
-    align-items: flex-start;
-    grid-template-columns: 34px minmax(0, 1fr);
-  }
-  .sarthi-nudge-strip > span:last-child {
-    grid-column: 2;
-    justify-self: start;
   }
   .shop-section-heading {
     align-items: flex-start;
@@ -419,15 +397,6 @@
   .buyer-product-title {
     font-size: 12px;
     min-height: 32px;
-  }
-  .buyer-view-btn,
-  .buyer-save-btn {
-    font-size: 10.5px;
-    min-height: 32px;
-    padding: 7px 6px;
-  }
-  .shop-search-input {
-    min-height: 48px;
   }
   .market-rating-row,
   .market-price-row {
