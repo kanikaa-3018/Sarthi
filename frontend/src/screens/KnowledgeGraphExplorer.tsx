@@ -208,12 +208,12 @@ export function KnowledgeGraphExplorer({
   });
   const engineLabel = "Evidence map";
   const similarity = graph.summary.similarity;
-  const aiLabel = answer?.agent?.provider === "gemini"
+  const aiLabel = answer?.agent?.provider === "bedrock" || answer?.agent?.provider === "gemini"
     ? "AI answer"
     : answer
       ? "Proof answer"
       : "Ask Sarthi";
-  const similarityLabel = similarity?.agent?.provider === "gemini"
+  const similarityLabel = similarity?.agent?.provider === "bedrock" || similarity?.agent?.provider === "gemini"
     ? similarity.agent.used
       ? `Image match ${similarity.agent.image_inputs} photos`
       : `Image match ${similarity.agent.status}`
@@ -579,7 +579,21 @@ export function KnowledgeGraphExplorer({
           </div>
         )}
 
-        {error && <p className="kg-inline-error">{error}</p>}
+        {error && (
+          <div className="kg-answer-fallback" role="alert">
+            <CircleAlert size={16} />
+            <div>
+              <strong>No verified answer yet</strong>
+              <p>I could not ground an answer in the available facts. Your current trust result has not changed.</p>
+            </div>
+            {onRetry && (
+              <button type="button" onClick={onRetry}>
+                <RefreshCw size={13} />
+                Check facts again
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
     </>

@@ -14,7 +14,7 @@ import {
   requestListingRevision
 } from "../services/adminOperations.js";
 import { sourceHealth } from "../services/domain.js";
-import { geminiRuntimeStatus } from "../services/gemini.js";
+import { aiRuntimeStatus } from "../services/ai.js";
 
 export async function registerAdminRoutes(app: FastifyInstance, db: Db) {
   app.get("/admin/review-queue", async (request, reply) => {
@@ -25,15 +25,17 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Db) {
   app.get("/admin/ai-health", async (request, reply) => {
     await requireRole(db, request, reply, "admin");
     const health = await sourceHealth(db);
-    const gemini = geminiRuntimeStatus();
+    const ai = aiRuntimeStatus();
     return {
-      gemini,
+      ai,
+      bedrock: ai.bedrock,
+      gemini: ai.gemini,
       fallback: {
         enabled: true,
-        active: gemini.status !== "configured",
-        reason: gemini.status === "configured"
-          ? "Gemini is configured for grounded reviewer assistance."
-          : gemini.last_error ?? "Gemini is not configured; deterministic reviewer guidance is active."
+        active: !ai.available,
+        reason: ai.available
+          ? `${ai.primary_provider ?? "AI"} is configured for grounded reviewer assistance.`
+          : ai.bedrock.last_error ?? ai.gemini.last_error ?? "No AI provider is configured; deterministic reviewer guidance is active."
       },
       source_health: {
         overall_status: health.overall_status,
@@ -69,7 +71,7 @@ export async function registerAdminRoutes(app: FastifyInstance, db: Db) {
       },
       fallback: {
         title: "Reviewer AI smoke test",
-        summary: "Fallback reviewer automation is available. Gemini is not required for safe queue ranking.",
+        summary: "Fallback reviewer automation is available. A model provider is not required for safe queue ranking.",
         reasons: [
           "Source health can be inspected before a reviewer acts.",
           "Human approval remains required for seller, document, proof, and listing decisions."

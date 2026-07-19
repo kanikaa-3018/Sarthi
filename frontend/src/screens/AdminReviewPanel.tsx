@@ -339,7 +339,7 @@ export function AdminReviewPanel() {
 
 
   return (
-    <main className="seller-report-shell">
+    <main className="seller-report-shell reviewer-workbench" data-testid="reviewer-workbench">
       <section className="seller-report-header">
         <div>
           <span className="seller-report-kicker">{headerMeta.kicker}</span>
@@ -375,8 +375,6 @@ export function AdminReviewPanel() {
                   </button>
                 ))}
               </nav>
-
-              <AgentBriefingStrip queue={queue} onOpenSeller={openSellerInCommand} />
 
               {activeTab === "reports" && (
                 <SellerReportsView
@@ -441,47 +439,6 @@ export function AdminReviewPanel() {
   );
 }
 
-function AgentBriefingStrip({
-  queue,
-  onOpenSeller
-}: {
-  queue: AdminReviewQueue;
-  onOpenSeller: (sellerId: string) => void;
-}) {
-  const firstQueueItem = queue.automation_plan.first_queue_item_id
-    ? queue.active_queue.find((item) => item.queue_item_id === queue.automation_plan.first_queue_item_id)
-    : null;
-  const nextStep = readableNextStep(
-    queue.automation_plan.next_steps[0] ?? "Review the oldest active item first.",
-    firstQueueItem
-  );
-  const nextTarget = firstQueueItem ? readableQueueTitle(firstQueueItem) : queue.automation_plan.headline;
-
-  return (
-    <section className="admin-agent-strip">
-      <div className="admin-agent-orb">
-        <Bot size={17} />
-      </div>
-      <div className="admin-agent-main">
-        <span>Next reviewer step</span>
-        <strong>{nextTarget}</strong>
-        <p>{nextStep}</p>
-      </div>
-      <div className="admin-agent-stats" aria-label="Agent triage counts">
-        <span><b>{queue.summary.active_count}</b> active</span>
-        <span><b>{queue.summary.blocked_items}</b> blocked</span>
-        <span><b>{queue.summary.breached_sla_count}</b> SLA</span>
-      </div>
-      <ProviderPill provider={queue.automation_plan.agent_provider} />
-      {firstQueueItem && (
-        <button className="admin-agent-action" type="button" onClick={() => onOpenSeller(firstQueueItem.seller_id)}>
-          Open recommended seller
-        </button>
-      )}
-    </section>
-  );
-}
-
 function readableQueueTitle(item: AdminReviewQueue["active_queue"][number]) {
   const sellerName = item.seller_name.trim();
   const rawTitle = item.title.trim();
@@ -513,23 +470,6 @@ function readableQueueSubtitle(item: AdminReviewQueue["active_queue"][number]) {
   return rawSubtitle;
 }
 
-function readableNextStep(step: string, item: AdminReviewQueue["active_queue"][number] | null | undefined) {
-  if (!item) return step;
-
-  const sellerName = item.seller_name.trim();
-  const normalizedStep = step.trim();
-  if (!sellerName || !normalizedStep.toLowerCase().startsWith(`${sellerName.toLowerCase()}:`)) {
-    return normalizedStep;
-  }
-
-  const withoutSellerPrefix = normalizedStep.slice(sellerName.length + 1).trim();
-  return withoutSellerPrefix ? sentenceCase(withoutSellerPrefix) : normalizedStep;
-}
-
-function sentenceCase(value: string) {
-  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
-}
-
 function AgentRoomView({
   queue,
   aiHealth,
@@ -558,11 +498,13 @@ function AgentRoomView({
   const firstQueueItem = queue.automation_plan.first_queue_item_id
     ? queue.active_queue.find((item) => item.queue_item_id === queue.automation_plan.first_queue_item_id)
     : prioritizedItems[0];
-  const providerKicker = queue.automation_plan.agent_provider === "gemini"
-    ? "Gemini assisted triage"
-    : queue.automation_plan.agent_provider === "fallback_after_llm_error"
-      ? "LLM fallback triage"
-      : "Rules fallback triage";
+  const providerKicker = queue.automation_plan.agent_provider === "bedrock"
+    ? "Bedrock assisted triage"
+    : queue.automation_plan.agent_provider === "gemini"
+      ? "Gemini assisted triage"
+      : queue.automation_plan.agent_provider === "fallback_after_llm_error"
+        ? "LLM fallback triage"
+        : "Rules fallback triage";
 
   return (
     <section className="admin-agent-room-view">
@@ -678,8 +620,13 @@ function AiAssistStatusPanel({
   onRefresh: () => void;
   onRunTest: () => void;
 }) {
-  const gemini = health?.gemini;
-  const status = gemini?.status ?? (loading ? "checking" : "unavailable");
+  const primaryProvider = health?.ai.primary_provider;
+  const providerStatus = primaryProvider === "bedrock"
+    ? health?.bedrock.status
+    : primaryProvider === "gemini"
+      ? health?.gemini.status
+      : undefined;
+  const status = providerStatus ?? (loading ? "checking" : "unavailable");
   const fallbackText = health?.fallback.active ? "Safety fallback is active" : "Auto-suggestions are active";
 
   return (
@@ -774,7 +721,7 @@ function PolicyBrainView({ queue }: { queue: AdminReviewQueue }) {
   const prescreens = collectPrescreens(queue);
   const checkCounts = countPrescreenChecks(prescreens);
   const staleSources = queue.source_health.sources.filter((source) => source.effective_status !== "operational" || !source.fresh);
-  const geminiChecks = prescreens.filter((prescreen) => prescreen.agent_provider === "gemini").length;
+  const aiChecks = prescreens.filter((prescreen) => ["bedrock", "gemini"].includes(prescreen.agent_provider)).length;
   const seniorRouted = queue.active_queue.filter((item) => item.route_to === "senior_reviewer").length;
   const blockedDrafts = queue.listing_drafts.filter(
     (draft) => draft.status === "submitted" && draft.verification_status !== "verified"
@@ -818,7 +765,7 @@ function PolicyBrainView({ queue }: { queue: AdminReviewQueue }) {
         <PolicyMetric label="Checks passed" value={String(checkCounts.pass)} tone="good" />
         <PolicyMetric label="Warnings" value={String(checkCounts.warn)} tone={checkCounts.warn ? "warn" : "good"} />
         <PolicyMetric label="Failures" value={String(checkCounts.fail)} tone={checkCounts.fail ? "bad" : "good"} />
-        <PolicyMetric label="Gemini prescreens" value={String(geminiChecks)} tone={geminiChecks ? "good" : "warn"} />
+        <PolicyMetric label="AI prescreens" value={String(aiChecks)} tone={aiChecks ? "good" : "warn"} />
       </div>
 
       <div className="admin-policy-board">
@@ -1005,6 +952,9 @@ function SellerReportsView({
 }) {
   const [lane, setLane] = useState<SellerLaneId>("needs_decision");
   const lanes = useMemo(() => buildSellerLanes(queue), [queue]);
+  const recommendedSellerId = queue.automation_plan.first_queue_item_id
+    ? queue.active_queue.find((item) => item.queue_item_id === queue.automation_plan.first_queue_item_id)?.seller_id ?? null
+    : null;
   const visibleLanes = useMemo(() => lanes.filter((item) => item.count > 0 || item.id === lane), [lane, lanes]);
   const clearedSellerCount = queue.seller_dossiers.filter((seller) => sellerMatchesLane(queue, seller, "clear")).length;
   const filteredSellers = useMemo(() => {
@@ -1081,6 +1031,7 @@ function SellerReportsView({
                 seller={seller}
                 laneLabel={sellerLaneLabel(queue, seller)}
                 selected={seller.seller_id === selectedSellerId}
+                recommended={seller.seller_id === recommendedSellerId}
                 onSelect={() => onSelectSeller(seller.seller_id)}
               />
             ))
@@ -1344,12 +1295,12 @@ function SellerPacketSelectedItem({
       </div>
 
       <DecisionBrief prescreen={item.prescreen} readyForReview={item.readyForReview} />
-      <ReviewActionChecklist item={item} />
 
       {item.kind === "application" && (
         <SellerApplicationCard
           application={item.item}
           seller={report.seller}
+          hideHeader
           note={notes[item.item.application_id] ?? ""}
           busyAction={busyAction}
           onNoteChange={(value) => onNoteChange(item.item.application_id, value)}
@@ -1380,6 +1331,7 @@ function SellerPacketSelectedItem({
       {item.kind === "document" && (
         <DocumentReviewCard
           document={item.item}
+          hideHeader
           note={notes[item.item.document_id] ?? ""}
           busyAction={busyAction}
           onNoteChange={(value) => onNoteChange(item.item.document_id, value)}
@@ -1410,6 +1362,7 @@ function SellerPacketSelectedItem({
       {item.kind === "draft" && (
         <ListingDraftCard
           draft={item.item}
+          hideHeader
           note={notes[item.item.draft_id] ?? ""}
           busyAction={busyAction}
           onNoteChange={(value) => onNoteChange(item.item.draft_id, value)}
@@ -1440,6 +1393,7 @@ function SellerPacketSelectedItem({
       {item.kind === "proof" && (
         <ProofAssetCard
           proof={item.item}
+          hideHeader
           note={notes[item.item.proof_id] ?? ""}
           busyAction={busyAction}
           onNoteChange={(value) => onNoteChange(item.item.proof_id, value)}
@@ -1466,6 +1420,8 @@ function SellerPacketSelectedItem({
           }
         />
       )}
+
+      <ReviewActionChecklist item={item} />
     </div>
   );
 }
@@ -1697,6 +1653,7 @@ function UploadsView({
         </div>
 
         {filteredRows.length ? (
+          <>
           <div className="seller-upload-table-wrap">
             <table className="seller-upload-table">
               <thead>
@@ -1746,6 +1703,17 @@ function UploadsView({
               </tbody>
             </table>
           </div>
+          <div className="reviewer-upload-card-list" data-testid="reviewer-upload-cards">
+            {filteredRows.map((row) => (
+              <UploadQueueCard
+                key={row.id}
+                row={row}
+                selected={selectedUploadId === row.id}
+                onSelect={() => setSelectedUploadId(row.id)}
+              />
+            ))}
+          </div>
+          </>
         ) : (
           <EmptyPanel message="No uploads match this view." compact />
         )}
@@ -1759,10 +1727,50 @@ function UploadsView({
             busyAction={busyAction}
             onNoteChange={onNoteChange}
             onRunAction={onRunAction}
+            onClose={() => setSelectedUploadId(null)}
           />
         </aside>
       )}
     </section>
+  );
+}
+
+function UploadQueueCard({
+  row,
+  selected,
+  onSelect
+}: {
+  row: UploadQueueRow;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const checks = uploadCheckSummary(row.prescreen);
+
+  return (
+    <article className={`reviewer-upload-card ${selected ? "selected" : ""}`}>
+      <div className="reviewer-upload-card-head">
+        <div>
+          <span>{row.kind === "document" ? "Verification document" : "Seller proof"}</span>
+          <strong>{row.title}</strong>
+          <p>{row.sellerName}</p>
+        </div>
+        <StatusPill value={row.status} />
+      </div>
+      <p className="reviewer-upload-card-subtitle">{row.subtitle}</p>
+      <dl className="reviewer-upload-card-facts">
+        <div>
+          <dt>Checks</dt>
+          <dd className={checks.tone}>{checks.label}</dd>
+        </div>
+        <div>
+          <dt>Submitted</dt>
+          <dd>{formatDate(row.submittedAt)}</dd>
+        </div>
+      </dl>
+      <button className="seller-upload-review-button" type="button" onClick={onSelect}>
+        Review
+      </button>
+    </article>
   );
 }
 
@@ -1771,12 +1779,14 @@ function UploadReviewPanel({
   notes,
   busyAction,
   onNoteChange,
-  onRunAction
+  onRunAction,
+  onClose
 }: {
   row: UploadQueueRow;
   notes: NotesById;
   busyAction: string | null;
   onNoteChange: (id: string, value: string) => void;
+  onClose: () => void;
   onRunAction: (
     actionKey: string,
     handler: () => Promise<AdminReviewQueue>,
@@ -1786,6 +1796,9 @@ function UploadReviewPanel({
 }) {
   return (
     <div className="seller-upload-review-stack">
+      <button className="reviewer-upload-back" type="button" onClick={onClose}>
+        Back to uploads
+      </button>
       <div className="seller-upload-review-head">
         <div>
           <span>Selected upload</span>
@@ -1798,6 +1811,7 @@ function UploadReviewPanel({
       {row.kind === "document" ? (
         <DocumentReviewCard
           document={row.item}
+          hideHeader
           note={notes[row.item.document_id] ?? ""}
           busyAction={busyAction}
           onNoteChange={(value) => onNoteChange(row.item.document_id, value)}
@@ -1826,6 +1840,7 @@ function UploadReviewPanel({
       ) : (
         <ProofAssetCard
           proof={row.item}
+          hideHeader
           note={notes[row.item.proof_id] ?? ""}
           busyAction={busyAction}
           onNoteChange={(value) => onNoteChange(row.item.proof_id, value)}
@@ -1882,6 +1897,7 @@ function AuditView({ events }: { events: AdminAuditEvent[] }) {
 function SellerApplicationCard({
   application,
   seller,
+  hideHeader = false,
   note,
   busyAction,
   onNoteChange,
@@ -1891,6 +1907,7 @@ function SellerApplicationCard({
 }: {
   application: SellerApplicationReview;
   seller: AdminSellerDossier;
+  hideHeader?: boolean;
   note: string;
   busyAction: string | null;
   onNoteChange: (value: string) => void;
@@ -1907,14 +1924,16 @@ function SellerApplicationCard({
 
   return (
     <article className="seller-review-card">
-      <CardHeader
-        icon={<ShieldCheck size={16} />}
-        eyebrow="Seller application"
-        title={application.business_name}
-        subtitle={`${application.seller_name} | ${application.application_id}`}
-        status={application.status}
-        prescreen={application.prescreen}
-      />
+      {!hideHeader && (
+        <CardHeader
+          icon={<ShieldCheck size={16} />}
+          eyebrow="Seller application"
+          title={application.business_name}
+          subtitle={`${application.seller_name} | ${application.application_id}`}
+          status={application.status}
+          prescreen={application.prescreen}
+        />
+      )}
 
       {missingDocuments.length > 0 && (
         <BlockerNotice text={`Approve required documents first: ${missingDocuments.join(", ")}.`} />
@@ -1954,6 +1973,7 @@ function SellerApplicationCard({
 
 function DocumentReviewCard({
   document,
+  hideHeader = false,
   note,
   busyAction,
   onNoteChange,
@@ -1962,6 +1982,7 @@ function DocumentReviewCard({
   onReject
 }: {
   document: VerificationDocumentReview;
+  hideHeader?: boolean;
   note: string;
   busyAction: string | null;
   onNoteChange: (value: string) => void;
@@ -1976,14 +1997,16 @@ function DocumentReviewCard({
 
   return (
     <article className="seller-review-card">
-      <CardHeader
-        icon={<FileCheck2 size={16} />}
-        eyebrow="Verification document"
-        title={labelize(document.document_type)}
-        subtitle={`${document.seller_name} | ${document.file_name}`}
-        status={document.status}
-        prescreen={document.prescreen}
-      />
+      {!hideHeader && (
+        <CardHeader
+          icon={<FileCheck2 size={16} />}
+          eyebrow="Verification document"
+          title={labelize(document.document_type)}
+          subtitle={`${document.seller_name} | ${document.file_name}`}
+          status={document.status}
+          prescreen={document.prescreen}
+        />
+      )}
 
       <ReviewFoldout title="File details" subtitle={document.file_name} resetKey={document.document_id}>
         <DetailGrid>
@@ -2105,6 +2128,7 @@ function ListingDraftCard({
 
 function ProofAssetCard({
   proof,
+  hideHeader = false,
   note,
   busyAction,
   onNoteChange,
@@ -2113,6 +2137,7 @@ function ProofAssetCard({
   onReject
 }: {
   proof: ProofAssetReview;
+  hideHeader?: boolean;
   note: string;
   busyAction: string | null;
   onNoteChange: (value: string) => void;
@@ -2127,14 +2152,16 @@ function ProofAssetCard({
 
   return (
     <article className="seller-review-card">
-      <CardHeader
-        icon={<ImageIcon size={16} />}
-        eyebrow="Proof upload"
-        title={proof.title}
-        subtitle={`${proof.seller_name} | ${proof.product_title}`}
-        status={proof.status}
-        prescreen={proof.prescreen}
-      />
+      {!hideHeader && (
+        <CardHeader
+          icon={<ImageIcon size={16} />}
+          eyebrow="Proof upload"
+          title={proof.title}
+          subtitle={`${proof.seller_name} | ${proof.product_title}`}
+          status={proof.status}
+          prescreen={proof.prescreen}
+        />
+      )}
 
       <ReviewFoldout title="Proof details" subtitle={`${labelize(proof.attribute)} | ${labelize(proof.proof_type)}`} defaultOpen={canReview} resetKey={proof.proof_id}>
         <div className="seller-media-detail">
@@ -2192,11 +2219,13 @@ function SellerReportButton({
   seller,
   laneLabel,
   selected,
+  recommended,
   onSelect
 }: {
   seller: AdminSellerDossier;
   laneLabel: string;
   selected: boolean;
+  recommended: boolean;
   onSelect: () => void;
 }) {
   const hasAction = seller.open_review_items > 0 || seller.pending_documents.length > 0;
@@ -2204,6 +2233,7 @@ function SellerReportButton({
     <button className={`seller-report-button ${selected ? "selected" : ""}`} type="button" onClick={onSelect}>
       <div className="seller-report-button-top">
         <div>
+          {recommended && <span className="reviewer-recommended-label">Recommended</span>}
           <strong>{seller.seller_name}</strong>
           <span>{seller.seller_id}</span>
         </div>
@@ -2446,14 +2476,20 @@ function ReviewActionChecklist({ item }: { item: SellerPacketItem }) {
       ];
 
   return (
-    <section className="seller-review-checklist" aria-label="Reviewer next steps">
-      {steps.map((step) => (
-        <div key={step.label}>
-          <span>{step.label}</span>
-          <p>{step.detail}</p>
-        </div>
-      ))}
-    </section>
+    <details className="reviewer-guidance">
+      <summary>
+        <span>Review guidance</span>
+        <small>{steps.length} step{steps.length === 1 ? "" : "s"}</small>
+      </summary>
+      <section className="seller-review-checklist" aria-label="Reviewer next steps">
+        {steps.map((step) => (
+          <div key={step.label}>
+            <span>{step.label}</span>
+            <p>{step.detail}</p>
+          </div>
+        ))}
+      </section>
+    </details>
   );
 }
 
@@ -2494,6 +2530,7 @@ function decisionActionLabel(action: AdminPrescreenSuggestion["suggested_action"
 }
 
 function providerText(provider: AdminPrescreenSuggestion["agent_provider"]) {
+  if (provider === "bedrock") return "Bedrock pre-check";
   if (provider === "gemini") return "Gemini pre-check";
   if (provider === "fallback_after_llm_error") return "Rules fallback";
   return "Rules pre-check";
@@ -2595,8 +2632,9 @@ function SlaPill({ value, ageHours }: { value: string; ageHours: number }) {
 }
 
 function ProviderPill({ provider }: { provider: AdminPrescreenSuggestion["agent_provider"] }) {
-  const label = provider === "gemini" ? "Sarthi checks" : provider === "fallback_after_llm_error" ? "Rules fallback" : "Rule checks";
-  return <span className={`review-provider-pill ${provider === "gemini" ? "gemini" : ""}`}>{label}</span>;
+  const generated = provider === "bedrock" || provider === "gemini";
+  const label = generated ? "Sarthi checks" : provider === "fallback_after_llm_error" ? "Rules fallback" : "Rule checks";
+  return <span className={`review-provider-pill ${generated ? "gemini" : ""}`}>{label}</span>;
 }
 
 function adminTabIcon(tab: AdminTab) {

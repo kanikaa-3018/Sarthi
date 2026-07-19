@@ -272,32 +272,41 @@ export function TrustCenter({ buyerId, language }: Props) {
         <>
           <TrustSnapshotBar dashboard={dashboard} privacy={privacy} />
 
-          <section className="trust-control-strip" aria-label="Trust controls">
-            <FitHelpControl
-              enabled={privacy.fit_memory_enabled}
-              memoryCount={privacy.memory_record_count}
-              busy={busy}
-              onToggle={() => void toggleMemory(!privacy.fit_memory_enabled)}
-              copy={copy}
-            />
-
-            {isLearning ? (
-              <FitLearningCard
-                quiz={fitQuiz}
-                open={quizOpen}
-                busy={busy}
-                copy={copy}
-                onOpenChange={setQuizOpen}
-                onQuizChange={setFitQuiz}
-                onSave={() => void saveQuiz()}
-              />
-            ) : (
-              <FitJourneyPreview
-                latestOrder={latestOrder}
+          <section className="trust-controls-group" aria-label="Fit and privacy controls">
+            <header>
+              <div>
+                <span className="eyebrow">Fit and privacy</span>
+                <h3>You control what Sarthi remembers</h3>
+              </div>
+              <p>Use fit memory for better advice, pause it at any time, or delete the saved size facts below.</p>
+            </header>
+            <div className="trust-control-strip">
+              <FitHelpControl
+                enabled={privacy.fit_memory_enabled}
                 memoryCount={privacy.memory_record_count}
-                onOpenOrder={(orderId) => setExpandedOrderId(orderId)}
+                busy={busy}
+                onToggle={() => void toggleMemory(!privacy.fit_memory_enabled)}
+                copy={copy}
               />
-            )}
+
+              {isLearning ? (
+                <FitLearningCard
+                  quiz={fitQuiz}
+                  open={quizOpen}
+                  busy={busy}
+                  copy={copy}
+                  onOpenChange={setQuizOpen}
+                  onQuizChange={setFitQuiz}
+                  onSave={() => void saveQuiz()}
+                />
+              ) : (
+                <FitJourneyPreview
+                  latestOrder={latestOrder}
+                  memoryCount={privacy.memory_record_count}
+                  onOpenOrder={(orderId) => setExpandedOrderId(orderId)}
+                />
+              )}
+            </div>
           </section>
 
           <CheckoutGuidanceLine guidance={dashboard.checkout_guidance} copy={copy} />
@@ -874,7 +883,13 @@ function SystemReadinessCard({ readiness, guardrails }: { readiness: SystemReadi
       </div>
       <div className="readiness-status-row">
         <span>AI</span>
-        <strong>{labelize(readiness.runtime_integrations?.gemini.status ?? "disabled")}</strong>
+        <strong>{labelize(
+          readiness.runtime_integrations?.ai.primary_provider === "bedrock"
+            ? readiness.runtime_integrations.bedrock.status
+            : readiness.runtime_integrations?.ai.primary_provider === "gemini"
+              ? readiness.runtime_integrations.gemini.status
+              : "disabled"
+        )}</strong>
       </div>
       <div className="trust-chip-list muted">
         {guardrails.slice(0, 3).map((item) => (

@@ -1,230 +1,573 @@
+/* ==========================================================================
+   Sarthi Premium Authentication Layout Stylesheet
+   ========================================================================== */
+
+/* 1. Global Page Route Constraints */
 .auth-app-route {
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-canvas);
 }
 
 .auth-app-route .web-header {
   flex: 0 0 auto;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
 }
 
 .auth-app-route .web-content-container {
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  justify-content: center;
+  align-items: center;
   padding: 0 16px !important;
 }
 
-.auth-app-route .auth-entry-shell,
-.auth-app-route .auth-entry-shell * {
-  box-sizing: border-box;
-}
-
-.auth-app-route .mobile-auth-container.auth-entry-shell {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-height: 0 !important;
-  flex: 1 1 auto;
-  padding: 8px !important;
-  overflow: hidden !important;
-}
-
-.auth-app-route .auth-entry-layout {
-  width: 100% !important;
-  max-height: 100%;
+/* 2. Layout Shell & Grid */
+.auth-entry-shell {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   min-height: 0;
 }
 
-.auth-app-route .mobile-auth-card.auth-entry-card {
-  max-height: 100%;
-  overflow-x: hidden !important;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.auth-entry-card .auth-password-control {
-  position: relative;
+.auth-entry-layout {
   width: 100%;
-}
-
-.auth-entry-card .auth-password-control input {
-  width: 100% !important;
-  padding-right: 48px !important;
-}
-
-.auth-entry-card .auth-password-control button {
-  position: absolute;
-  top: 50%;
-  right: 3px;
-  width: 38px;
-  height: 38px;
   display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-secondary);
-  transform: translateY(-50%);
+  grid-template-columns: 1.1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  min-height: 0;
+  max-height: 85dvh;
 }
 
-.auth-entry-card .auth-password-control button:hover,
-.auth-entry-card .auth-password-control button:focus-visible {
-  background: var(--bg-surface);
+/* 3. Left Brand Story Panel (Desktop Only) */
+.auth-story-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--text-primary);
+  padding: 16px 0;
+}
+
+.auth-story-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-logo-mark {
+  color: var(--accent-primary);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.auth-story-brand strong {
+  font-size: 20px;
+  font-weight: 800;
+  display: block;
+}
+
+.auth-story-brand span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.auth-story-panel h2 {
+  font-size: clamp(32px, 3.5vw, 42px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.auth-story-panel p {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.auth-story-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.auth-story-checks span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
-.auth-entry-card .auth-input-group input,
-.auth-entry-card .auth-input-group select {
+.auth-story-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  display: inline-block;
+}
+
+/* 4. Right Authentication Card */
+.auth-app-route .mobile-auth-card.auth-entry-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.04) !important;
+  border-radius: 16px !important;
+  padding: 28px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 20px !important;
+  max-height: 70dvh !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
+}
+
+.auth-card-heading {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-card-heading h1 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.auth-card-heading .brand-logo-sub {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* 5. Role Portal Selector Tabs */
+.auth-portal-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 8px !important;
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  padding: 4px !important;
+}
+
+.auth-portal-card {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+  padding: 10px 6px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center !important;
+  min-height: 76px !important;
+}
+
+.auth-portal-icon {
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  border-radius: 6px !important;
+  background: var(--bg-surface) !important;
+  color: var(--text-secondary) !important;
+  transition: all 0.2s ease;
+}
+
+.auth-portal-card strong {
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  color: var(--text-primary) !important;
+}
+
+.auth-portal-card .auth-portal-info span {
+  display: block !important;
+  font-size: 9px !important;
+  color: var(--text-secondary) !important;
+  line-height: 1.2 !important;
+  margin-top: 2px !important;
+}
+
+.auth-portal-card:hover {
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+.auth-portal-card.active {
+  background: var(--bg-surface) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+.auth-portal-card.active .auth-portal-icon {
+  background: var(--accent-primary) !important;
+  color: #fff !important;
+}
+
+.auth-portal-card.active strong {
+  color: var(--text-primary) !important;
+}
+
+/* 6. Form Tab Groups */
+.auth-tab-group {
+  display: flex !important;
+  background: var(--bg-surface-muted) !important;
+  border-radius: 8px !important;
+  padding: 3px !important;
   width: 100% !important;
-  min-height: 42px !important;
-  height: 42px;
-  padding: 7px 10px !important;
 }
 
-.auth-entry-card .auth-input-group label,
-.auth-entry-card .auth-portal-icon,
-.auth-entry-card .auth-portal-card span:last-child,
-.auth-entry-card .auth-portal-lock,
-.auth-entry-card .demo-credential-box span,
-.auth-entry-card .auth-bottom-banner {
+.auth-tab-btn {
+  flex: 1 !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 7px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--text-secondary) !important;
+  border-radius: 6px !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auth-tab-btn.active {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* 7. Form Step Elements */
+.auth-form-step {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+}
+
+.auth-input-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+
+.auth-input-group label {
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  color: var(--text-secondary) !important;
+}
+
+.auth-input-group input,
+.auth-input-group select {
+  width: 100% !important;
+  height: 40px !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-surface-muted) !important;
+  color: var(--text-primary) !important;
+  font-size: 13.5px !important;
+  outline: none !important;
+  transition: all 0.15s ease;
+  box-sizing: border-box !important;
+}
+
+.auth-input-group input:focus,
+.auth-input-group select:focus {
+  border-color: var(--accent-primary) !important;
+  background: var(--bg-surface) !important;
+  box-shadow: 0 0 0 3px rgba(186, 16, 92, 0.08) !important;
+}
+
+/* Password Eye Button Inside Input */
+.auth-password-control {
+  position: relative !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.auth-password-control input {
+  width: 100% !important;
+  padding-right: 42px !important;
+  box-sizing: border-box !important;
+}
+
+.auth-password-control button {
+  position: absolute !important;
+  top: 50% !important;
+  right: 4px !important;
+  transform: translateY(-50%) !important;
+  width: 32px !important;
+  height: 32px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease;
+}
+
+.auth-password-control button:hover {
+  background: var(--bg-surface-muted) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Demo Credentials Banner */
+.demo-credential-box {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  background: var(--bg-surface-muted) !important;
+  border: 1px dashed var(--accent-primary) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  gap: 12px !important;
+}
+
+.demo-credential-box div {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.demo-credential-box strong {
+  font-size: 12.5px !important;
+  color: var(--text-primary) !important;
+}
+
+.demo-credential-box span {
+  font-size: 11.5px !important;
+  color: var(--text-secondary) !important;
+}
+
+.demo-credential-box button {
+  background: var(--accent-primary) !important;
+  color: #fff !important;
+  border: none !important;
+  padding: 5px 10px !important;
+  border-radius: 6px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: opacity 0.2s !important;
+}
+
+.demo-credential-box button:hover {
+  opacity: 0.9 !important;
+}
+
+/* 8. Feedback Banners */
+.auth-error-banner,
+.auth-success-banner {
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+
+.auth-error-banner {
+  background: rgba(220, 38, 38, 0.08) !important;
+  border: 1px solid rgba(220, 38, 38, 0.2) !important;
+  color: #dc2626 !important;
+}
+
+.auth-success-banner {
+  background: rgba(22, 163, 74, 0.08) !important;
+  border: 1px solid rgba(22, 163, 74, 0.2) !important;
+  color: #16a34a !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
+}
+
+/* 9. Buttons & Footers */
+.auth-primary-btn {
+  height: 44px !important;
+  background: var(--accent-primary) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: opacity 0.2s ease !important;
+  margin-top: 6px !important;
+}
+
+.auth-primary-btn:hover {
+  opacity: 0.95 !important;
+}
+
+.auth-primary-btn:disabled {
+  background: var(--bg-surface-muted) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  cursor: not-allowed !important;
+}
+
+.auth-bottom-banner {
+  font-size: 11px !important;
+  color: var(--text-secondary) !important;
+  text-align: center !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  padding-top: 12px !important;
+  margin-top: 4px !important;
+}
+
+/* Helper signup info text */
+.auth-helper-text {
   font-size: 12px !important;
+  line-height: 1.4 !important;
+  color: var(--text-secondary) !important;
+  background: var(--bg-surface-muted) !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  margin: 0 !important;
 }
 
-.auth-entry-card .auth-portal-card.active span:last-child {
-  color: var(--bg-surface) !important;
-}
+/* ==========================================================================
+   Responsive & Viewport Constraints
+   ========================================================================== */
 
-@media (min-width: 921px) {
-  .auth-app-route .auth-entry-layout {
-    grid-template-columns: minmax(340px, 0.92fr) minmax(390px, 440px) !important;
-    max-width: 1000px !important;
-  }
-
-  .auth-app-route .auth-story-panel {
-    min-height: 0 !important;
-    padding: 24px 50px 24px 0 !important;
-  }
-
-  .auth-app-route .auth-story-brand {
-    margin-bottom: 24px !important;
-  }
-
-  .auth-app-route .auth-story-panel h2 {
-    font-size: clamp(38px, 4vw, 48px) !important;
-    line-height: 1 !important;
-  }
-
-  .auth-app-route .auth-story-checks {
-    gap: 9px !important;
-    margin-top: 24px !important;
-  }
-
-  .auth-app-route .mobile-auth-card.auth-entry-card {
-    margin-left: 38px !important;
-    padding: 18px !important;
-  }
-
-  .auth-app-route .auth-card-heading {
-    margin-bottom: 12px !important;
-    padding-bottom: 12px !important;
-  }
-
-  .auth-app-route .auth-portal-grid {
-    margin-bottom: 12px !important;
-  }
-
-  .auth-app-route .auth-portal-card {
-    min-height: 66px !important;
-    padding: 8px !important;
-  }
-
-  .auth-app-route .auth-portal-summary {
-    gap: 8px !important;
-    margin-bottom: 10px !important;
-  }
-
-  .auth-app-route .auth-tab-group {
-    margin-bottom: 10px !important;
-  }
-
-  .auth-app-route .auth-form-step {
-    gap: 8px !important;
-  }
-
-  .auth-app-route .demo-credential-box {
-    padding-bottom: 8px !important;
-  }
-
-  .auth-app-route .auth-bottom-banner {
-    margin-top: 10px !important;
-    padding-top: 9px !important;
-  }
-}
-
+/* Tablet & Smaller Layout adjustments */
 @media (max-width: 920px) {
-  .auth-app-route .web-content-container {
-    padding-inline: 8px !important;
-  }
-
   .auth-app-route .auth-story-panel {
     display: none !important;
   }
 
   .auth-app-route .auth-entry-layout {
-    display: flex !important;
-    justify-content: center;
-    max-width: 480px !important;
+    grid-template-columns: 1fr !important;
+    max-width: 440px !important;
+    margin: 0 auto !important;
   }
 
-  .auth-app-route .mobile-auth-card.auth-entry-card {
-    width: min(440px, 100%) !important;
-    margin-left: 0 !important;
-    padding: 18px !important;
+  .auth-app-route .auth-entry-card {
+    max-height: 85dvh !important;
+    padding: 24px !important;
   }
 }
 
+/* Mobile Screens (Tighter Height Limits to Prevent Scrolling) */
 @media (max-width: 560px) {
+  .auth-app-route {
+    overflow: hidden !important;
+    height: 100dvh !important;
+  }
+
+  .auth-app-route .web-content-container {
+    padding: 0 8px !important;
+    height: auto !important;
+    align-items: center !important;
+  }
+
   .auth-app-route .mobile-auth-container.auth-entry-shell {
-    padding: 6px 0 !important;
+    padding: 8px 12px !important;
+  }
+
+  .auth-app-route .auth-entry-layout {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
   }
 
   .auth-app-route .mobile-auth-card.auth-entry-card {
     padding: 16px !important;
+    border-radius: 12px !important;
+    gap: 14px !important;
+    max-height: 72dvh !important;
+    overflow-y: auto !important;
   }
 
-  .auth-app-route .auth-card-heading {
-    margin-bottom: 12px !important;
-    padding-bottom: 12px !important;
+  .auth-app-route .auth-card-heading h1 {
+    font-size: 20px !important;
   }
 
+  /* Override refined.css to keep 3 columns in the selector on mobile */
   .auth-app-route .auth-portal-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 5px !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    padding: 4px !important;
     margin-bottom: 12px !important;
   }
 
   .auth-app-route .auth-portal-card {
-    display: grid !important;
-    grid-template-columns: auto minmax(0, 1fr) !important;
-    min-height: 58px !important;
-    padding: 7px 6px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    padding: 8px 4px !important;
+    min-height: 56px !important;
+    text-align: center !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 8px !important;
   }
 
+  .auth-app-route .auth-portal-card.active {
+    background: var(--bg-surface) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .auth-app-route .auth-portal-icon {
+    width: 22px !important;
+    height: 22px !important;
+    border-radius: 5px !important;
+  }
+
+  .auth-app-route .auth-portal-card strong {
+    font-size: 11.5px !important;
+    line-height: 1 !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Completely hide description text on mobile to keep selector compact */
+  .auth-app-route .auth-portal-card .auth-portal-info span,
   .auth-app-route .auth-portal-card span:last-child {
     display: none !important;
   }
 
-  .auth-app-route .auth-portal-summary,
-  .auth-app-route .auth-tab-group {
-    margin-bottom: 10px !important;
+  .auth-app-route .auth-tab-btn {
+    padding: 6px !important;
+    font-size: 12px !important;
   }
 
   .auth-app-route .auth-form-step {
-    gap: 8px !important;
+    gap: 10px !important;
   }
 
-  .auth-app-route .auth-bottom-banner {
-    margin-top: 10px !important;
-    padding-top: 9px !important;
+  .auth-app-route .auth-input-group input,
+  .auth-app-route .auth-input-group select {
+    height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  .auth-app-route .auth-primary-btn {
+    height: 40px !important;
+    font-size: 13.5px !important;
   }
 }

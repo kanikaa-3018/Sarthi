@@ -429,6 +429,81 @@ export function ProductDetailPanel({
             </p>
           </section>
 
+          <section id="verified-facts" className="samvaad-card detail-samvaad-priority" aria-label="Ask from verified facts">
+            <div className="samvaad-card-header">
+              <ShieldCheck size={18} />
+              <div>
+                <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
+                <h3>{t(language, "askFromVerifiedFacts")}</h3>
+              </div>
+            </div>
+            <p>{t(language, "askSimpleQuestion")}</p>
+
+            <div className="samvaad-suggestion-list">
+              <button type="button" onClick={() => setQuery("Mera usual size L hai, yahan kya size standard rahega?")}>
+                {t(language, "sizeQuestionCta")}
+              </button>
+              <button type="button" onClick={() => setQuery("Kapde ka color print mismatch toh nahi hai? Fabric transparency?")}>
+                {t(language, "fabricQuestionCta")}
+              </button>
+            </div>
+
+            <div className="samvaad-input-row">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t(language, "samvaadPlaceholder")}
+              />
+              <button
+                type="button"
+                onClick={submitQuestion}
+                disabled={submitting || !query.trim()}
+                aria-label={t(language, "askAboutListing")}
+              >
+                <Send size={15} />
+              </button>
+            </div>
+
+            {questionError && <div className="notice error samvaad-error">{t(language, "verifiedQuestionError")}</div>}
+
+            {answer && (
+              <div className="samvaad-response-card">
+                <div className="response-conclusion">
+                  <strong>{t(language, "evidenceAnswer")}</strong>
+                  <p>{answer.answer.summary}</p>
+                </div>
+                <div className="response-reasons">
+                  {answer.answer.reasons.map((reason, index) => (
+                    <div key={index} className="reason-bullet">
+                      <CheckCircle2 size={14} />
+                      <span>{reason}</span>
+                    </div>
+                  ))}
+                </div>
+                {answer.answer.caution && (
+                  <div className="response-caution">
+                    <strong>{t(language, "caution")}</strong>
+                    <span>{answer.answer.caution}</span>
+                  </div>
+                )}
+                <div className="response-actions">
+                  <button
+                    className="btn-action-primary"
+                    onClick={() => {
+                      if (answer.answer.primary_action?.variant_id) setSelectedVariantId(answer.answer.primary_action.variant_id);
+                    }}
+                  >
+                    {answer.answer.primary_action?.label || t(language, "applySizeSelection")}
+                  </button>
+                  <button className="btn-action-secondary" onClick={() => onOpenAudit(answer.trace_id)}>
+                    {t(language, "seeProof")}
+                  </button>
+                </div>
+                <AgentReasoningTrace state={scoreRefreshState} reason={scoreRefreshReason} />
+              </div>
+            )}
+          </section>
+
           {detail.avoidable_issue && (
             <section className="avoidable-issue-card" aria-label="Important warning">
               <AlertTriangle size={18} />
@@ -480,9 +555,9 @@ export function ProductDetailPanel({
         <div className="detail-help-actions">
           <button
             type="button"
-            className={activeSupportPanel === "ask" ? "active" : ""}
-            aria-expanded={activeSupportPanel === "ask"}
-            onClick={() => setActiveSupportPanel((panel) => panel === "ask" ? null : "ask")}
+            className="active"
+            aria-expanded="true"
+            onClick={() => document.getElementById("verified-facts")?.scrollIntoView({ behavior: "smooth", block: "center" })}
           >
             <ShieldCheck size={15} />
             {t(language, "askFromVerifiedFacts")}
@@ -557,98 +632,6 @@ export function ProductDetailPanel({
         </section>
       )}
 
-      {activeSupportPanel === "ask" && (
-        <section className="detail-support-panel ask-panel" aria-label="Ask Sarthi">
-          <section className="samvaad-card">
-            <div className="samvaad-card-header">
-              <ShieldCheck size={18} />
-              <div>
-                <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
-                <h3>{t(language, "askFromVerifiedFacts")}</h3>
-              </div>
-            </div>
-            <p>
-              {t(language, "askSimpleQuestion")}
-            </p>
-
-            <div className="samvaad-suggestion-list">
-              <button
-                type="button"
-                onClick={() => setQuery("Mera usual size L hai, yahan kya size standard rahega?")}
-              >
-                {t(language, "sizeQuestionCta")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuery("Kapde ka color print mismatch toh nahi hai? Fabric transparency?")}
-              >
-                {t(language, "fabricQuestionCta")}
-              </button>
-            </div>
-
-            <div className="samvaad-input-row">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t(language, "samvaadPlaceholder")}
-              />
-              <button
-                type="button"
-                onClick={submitQuestion}
-                disabled={submitting || !query.trim()}
-                aria-label={t(language, "askAboutListing")}
-              >
-                <Send size={15} />
-              </button>
-            </div>
-
-            {questionError && (
-              <div className="notice error samvaad-error">
-                {t(language, "verifiedQuestionError")}
-              </div>
-            )}
-
-            {answer && (
-              <div className="samvaad-response-card">
-                <div className="response-conclusion">
-                  <strong>{t(language, "evidenceAnswer")}</strong>
-                  <p>{answer.answer.summary}</p>
-                </div>
-                <div className="response-reasons">
-                  {answer.answer.reasons.map((r, idx) => (
-                    <div key={idx} className="reason-bullet">
-                      <CheckCircle2 size={14} />
-                      <span>{r}</span>
-                    </div>
-                  ))}
-                </div>
-                {answer.answer.caution && (
-                  <div className="response-caution">
-                    <strong>{t(language, "caution")}</strong>
-                    <span>{answer.answer.caution}</span>
-                  </div>
-                )}
-                <div className="response-actions">
-                  <button
-                    className="btn-action-primary"
-                    onClick={() => {
-                      if (answer.answer.primary_action?.variant_id) {
-                        setSelectedVariantId(answer.answer.primary_action.variant_id);
-                      }
-                    }}
-                  >
-                    {answer.answer.primary_action?.label || t(language, "applySizeSelection")}
-                  </button>
-                  <button className="btn-action-secondary" onClick={() => onOpenAudit(answer.trace_id)}>
-                    {t(language, "seeProof")}
-                  </button>
-                </div>
-                <AgentReasoningTrace state={scoreRefreshState} reason={scoreRefreshReason} />
-              </div>
-            )}
-          </section>
-        </section>
-      )}
     </div>
   );
 }

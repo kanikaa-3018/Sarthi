@@ -1,3 +1,6 @@
+export type AiGeneratedProvider = "bedrock" | "gemini";
+export type AiAnswerProvider = AiGeneratedProvider | "deterministic_fallback" | "fallback_after_llm_error";
+
 export type Product = {
   product_id: string;
   cluster_id: string;
@@ -10,6 +13,7 @@ export type Product = {
   color_family: string;
   base_price: number;
   image_url: string;
+  image_urls?: string[];
   rating: number;
   rating_count: number;
   commerce_badge: string;
@@ -99,7 +103,7 @@ export type RankingResult = {
     };
     score_breakdown?: {
       formula: string;
-      confidence_source?: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+      confidence_source?: AiAnswerProvider;
       prompt_version?: string;
       score: number;
       score_percent: number;
@@ -276,7 +280,7 @@ export type KnowledgeGraphChatResponse = {
   answer: KnowledgeGraphAnswer;
   graph_path: GraphPath;
   agent?: {
-    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+    provider: AiAnswerProvider;
   };
   retrieval?: {
     source:
@@ -284,7 +288,9 @@ export type KnowledgeGraphChatResponse = {
       | "local_embedding_fallback"
       | "lexical_fallback"
       | "lexical_fallback_after_vector_error"
+      | "disabled_no_ai_provider"
       | "disabled_no_gemini_key";
+    embedding_provider?: AiGeneratedProvider;
     result_count: number;
     error?: string;
   };
@@ -500,6 +506,40 @@ export type GeminiRuntimeStatus = {
   key_present: boolean;
   status: "disabled" | "configured" | "temporarily_unavailable";
   last_error: string | null;
+  capabilities?: Record<string, { status: string; last_error: string | null }>;
+};
+
+export type BedrockRuntimeStatus = {
+  enabled: boolean;
+  provider: "bedrock";
+  region: string;
+  text_models: string[];
+  vision_models: string[];
+  embedding_model: string;
+  embedding_dimensions: number;
+  active_model: string | null;
+  status: "disabled" | "configured" | "temporarily_unavailable";
+  last_error: string | null;
+  capabilities: Record<string, {
+    status: string;
+    active_model: string | null;
+    last_error: string | null;
+  }>;
+};
+
+export type AiRuntimeStatus = {
+  provider_order: AiGeneratedProvider[];
+  primary_provider: AiGeneratedProvider | null;
+  configured: boolean;
+  available: boolean;
+  capabilities: Record<"text" | "vision" | "embedding", {
+    configured: boolean;
+    available: boolean;
+    provider_order: AiGeneratedProvider[];
+    primary_provider: AiGeneratedProvider | null;
+  }>;
+  bedrock: BedrockRuntimeStatus;
+  gemini: GeminiRuntimeStatus;
 };
 
 export type SystemReadiness = {
@@ -508,6 +548,8 @@ export type SystemReadiness = {
   user_disclosure: string;
   source_health: SourceHealth;
   runtime_integrations?: {
+    ai: AiRuntimeStatus;
+    bedrock: BedrockRuntimeStatus;
     gemini: GeminiRuntimeStatus;
     neo4j: {
       enabled: boolean;
@@ -516,7 +558,7 @@ export type SystemReadiness = {
     };
     atlas_vector_search: {
       enabled: boolean;
-      status: "disabled" | "ready_for_queries" | "waiting_for_gemini_key" | "local_embedding_fallback";
+      status: "disabled" | "ready_for_queries" | "waiting_for_ai_provider" | "waiting_for_gemini_key" | "local_embedding_fallback";
       atlas_status?: "ready_for_queries" | "index_missing" | "unsupported_mongodb" | "unavailable" | null;
       collection: string;
       index: string;
@@ -539,6 +581,8 @@ export type SystemReadiness = {
 };
 
 export type AdminAiHealth = {
+  ai: AiRuntimeStatus;
+  bedrock: BedrockRuntimeStatus;
   gemini: GeminiRuntimeStatus;
   fallback: {
     enabled: boolean;
@@ -559,13 +603,13 @@ export type AdminAiHealth = {
 
 export type AdminAiHealthTest = {
   ok: boolean;
-  provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  provider: AiAnswerProvider;
   answer: {
     title: string;
     summary: string;
     reasons: string[];
     caution: string | null;
-    source: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+    source: AiAnswerProvider;
   };
   checked_at: string;
   required_shape: string[];
@@ -622,7 +666,7 @@ export type AgentResponse = {
   intent: string[];
   answer: AgentAnswer;
   agent?: {
-    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+    provider: AiAnswerProvider;
   };
   cache?: {
     hit: boolean;
@@ -728,7 +772,7 @@ export type SimilarityCandidate = {
   deterministic_score?: number;
   ai_score?: number;
   visual_match?: "same_item" | "same_style" | "different_item" | "unclear";
-  source?: "deterministic" | "gemini" | "gemini_cache" | "deterministic_after_gemini_error";
+  source?: "deterministic" | "bedrock" | "bedrock_cache" | "gemini" | "gemini_cache" | "deterministic_after_gemini_error" | "deterministic_after_ai_error";
   reasons: string[];
   match_signals?: string[];
   risk_flags?: string[];
@@ -743,7 +787,7 @@ export type SimilaritySummary = {
   summary: string;
   candidates: SimilarityCandidate[];
   agent?: {
-    provider: "gemini" | "deterministic";
+    provider: AiGeneratedProvider | "deterministic";
     used: boolean;
     status: "disabled" | "not_enough_candidates" | "used" | "cache_hit" | "error";
     prompt_version: string;
@@ -1052,7 +1096,7 @@ export type ReturnAlternativeResponse = {
     suggested_size?: string | null;
   };
   agent: {
-    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+    provider: AiAnswerProvider;
   };
   evidence: {
     product_title: string;
@@ -1348,7 +1392,7 @@ export type SellerActionBoard = {
   summary: string;
   reasons: string[];
   agent: {
-    provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+    provider: AiAnswerProvider;
   };
   rating_plan?: {
     title: string;
@@ -1596,7 +1640,7 @@ export type AdminPrescreenSuggestion = {
   evidence: Array<{ label: string; value: string; source_id: string }>;
   checks: Array<{ label: string; status: "pass" | "warn" | "fail"; detail: string }>;
   fact_ids: string[];
-  agent_provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  agent_provider: AiAnswerProvider;
 };
 
 export type AdminQueueItem = {
@@ -1621,7 +1665,7 @@ export type AdminQueueItem = {
   blocker: string | null;
   primary_action: string;
   evidence: Array<{ label: string; value: string; source_id: string }>;
-  agent_provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+  agent_provider: AiAnswerProvider;
 };
 
 export type AdminSellerDossier = {
@@ -1669,7 +1713,7 @@ export type AdminReviewQueue = {
     blocked_count: number;
     can_batch_count: number;
     caution: string | null;
-    agent_provider: "gemini" | "deterministic_fallback" | "fallback_after_llm_error";
+    agent_provider: AiAnswerProvider;
   };
   active_queue: AdminQueueItem[];
   seller_dossiers: AdminSellerDossier[];

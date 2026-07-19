@@ -1,4 +1,5 @@
-import { geminiConfigured, generateGeminiJson, parseJsonObject } from "./gemini.js";
+import { aiConfigured, generateStructuredJson } from "./ai.js";
+import type { GeneratedJson, StructuredGenerationInput } from "./aiTypes.js";
 
 export type ConfidenceItem<Key extends string = string> = {
   key: Key;
@@ -32,46 +33,61 @@ export function aggregateConfidenceScore<Key extends string>(items: ConfidenceIt
 
 export async function assignConfidenceItems<Key extends string>(
   context: Record<string, unknown>,
-  fallbackItems: ConfidenceItem<Key>[]
+  fallbackItems: ConfidenceItem<Key>[],
+  generate: (input: StructuredGenerationInput) => Promise<GeneratedJson | null> = generateStructuredJson
 ) {
   const prompt = [
     "You are scoring one marketplace listing for Sarthi.",
     "Assign confidence scores from 0.0 to 1.0 for each key.",
     "Use only the JSON context: item, time of year, seller locality, evidence priority, returns, reviews, price, proof, offer, and dispatch.",
-    "Return JSON only: {\"confidences\":{\"fit_match\":0.0,\"outcome_quality\":0.0,\"seller_trust\":0.0,\"review_signal\":0.0,\"rating_signal\":0.0,\"price_value\":0.0,\"fulfilment_reliability\":0.0,\"proof_coverage\":0.0,\"offer_truth\":0.0}}"
+    "Return JSON only with a confidences object containing the requested keys."
   ].join(" ");
 
-  if (!geminiConfigured()) {
-    return { source: "deterministic_fallback" as const, prompt, items: fallbackItems };
-  }
-
   try {
-    const text = await generateGeminiJson({
+    const generated = await generate({
+      capability: "text",
       systemInstruction: prompt,
       userText: JSON.stringify({
         context,
         fallback_confidences: Object.fromEntries(fallbackItems.map((item) => [item.key, item.confidence]))
       }),
-      temperature: 0.1
+      schemaName: "sarthi_confidence_assignment",
+      schemaDescription: "Confidence values for the requested marketplace evidence keys",
+      schema: {
+        type: "object",
+        properties: {
+          confidences: {
+            type: "object",
+            properties: Object.fromEntries(fallbackItems.map((item) => [item.key, { type: "number" }]))
+          }
+        },
+        required: ["confidences"]
+      },
+      maxTokens: 400
     });
-    const parsed = text ? parseConfidenceJson(text) : null;
-    if (!parsed) throw new Error("Invalid confidence JSON");
+    const parsed = generated?.value.confidences;
+    if (!generated || !parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        source: aiConfigured("text") ? "fallback_after_llm_error" as const : "deterministic_fallback" as const,
+        prompt,
+        items: fallbackItems
+      };
+    }
+    const confidences = parsed as Record<string, unknown>;
     return {
-      source: "gemini" as const,
+      source: generated.provider,
       prompt,
-      items: fallbackItems.map((item) => ({
-        ...item,
-        confidence: typeof parsed[item.key] === "number"
-          ? Math.max(0, Math.min(1, parsed[item.key]))
-          : item.confidence
-      }))
+      items: fallbackItems.map((item) => {
+        const value = confidences[item.key];
+        return {
+          ...item,
+          confidence: typeof value === "number"
+            ? Math.max(0, Math.min(1, value))
+            : item.confidence
+        };
+      })
     };
   } catch {
     return { source: "fallback_after_llm_error" as const, prompt, items: fallbackItems };
   }
-}
-
-function parseConfidenceJson(text: string): Record<string, number> | null {
-  const parsed = parseJsonObject(text) as { confidences?: Record<string, number> } | null;
-  return parsed?.confidences && typeof parsed.confidences === "object" ? parsed.confidences : null;
 }

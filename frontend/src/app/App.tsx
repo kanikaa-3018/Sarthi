@@ -3,6 +3,7 @@ import { LogOut, Sun, Moon, RefreshCcw, User, Globe } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { clearStoredSession, getBuyerProofs, getMe, getStoredSession, logout, storeSession, resetSeed } from "../api/client";
 import { AuthScreen } from "../screens/AuthScreen";
+import { LandingPage } from "../screens/LandingPage";
 import { FeedScreen } from "../screens/FeedScreen";
 import { CheckoutPage } from "../screens/CheckoutPage";
 import { SellerPanel } from "../screens/SellerPanel";
@@ -178,6 +179,23 @@ export function App() {
     }
   }
 
+  const resolvedTheme =
+    theme === "system"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : theme;
+
+  if (location.pathname === "/") {
+    return (
+      <LandingPage
+        theme={resolvedTheme}
+        onToggleTheme={() => setTheme(resolvedTheme === "light" ? "dark" : "light")}
+        onStartDemo={() => navigate(session ? defaultPath(session.account.role) : "/login")}
+      />
+    );
+  }
+
   if (checkingSession) {
     return (
       <div className="app-loading-wrapper" aria-live="polite">
@@ -187,23 +205,16 @@ export function App() {
           </div>
           <div className="app-loading-spinner" />
           <span>{
-            language === "hindi" 
-              ? "सेफ सेशन जांचा जा रहा है..." 
-              : language === "hinglish" 
-                ? "Secure session check ho raha hai..." 
+            language === "hindi"
+              ? "सेफ सेशन जांचा जा रहा है..."
+              : language === "hinglish"
+                ? "Secure session check ho raha hai..."
                 : "Verifying secure session..."
           }</span>
         </div>
       </div>
     );
   }
-
-  const resolvedTheme =
-    theme === "system"
-      ? window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light"
-      : theme;
   const role = session?.account.role;
   const buyerId = session?.account.buyer_id;
   const isCheckoutRoute = location.pathname.startsWith("/shop/checkout");
@@ -229,7 +240,7 @@ export function App() {
   };
 
   return (
-    <div className={`web-app-container${isCheckoutRoute ? " checkout-app-route" : ""}${isAdminRoute ? " admin-app-route" : ""}${isSellerRoute ? " seller-app-route" : ""}${isAuthRoute ? " auth-app-route" : ""}`}>
+    <div className={`web-app-container${role === "buyer" ? " buyer-app-route" : ""}${isCheckoutRoute ? " checkout-app-route" : ""}${isAdminRoute ? " admin-app-route" : ""}${isSellerRoute ? " seller-app-route" : ""}${isAuthRoute ? " auth-app-route" : ""}`}>
       <header className="web-header commerce-header">
         <div className="web-header-container commerce-header-container">
           <button

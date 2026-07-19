@@ -283,6 +283,16 @@ export function CheckoutPage({ buyerId, language }: Props) {
         </div>
       </header>
 
+      <nav className="checkout-progress" aria-label="Checkout steps">
+        <span className="active"><b>1</b> Review item</span>
+        <span><b>2</b> Choose payment</span>
+        <span><b>3</b> Place order</span>
+      </nav>
+      <p className="checkout-continuity-note">
+        <ShieldCheck size={15} />
+        Your item, payment choice, and buyer protection stay visible until you place the order.
+      </p>
+
       {error && <div className="notice error">{error}</div>}
       {contractError && <div className="notice error">{contractError}</div>}
 

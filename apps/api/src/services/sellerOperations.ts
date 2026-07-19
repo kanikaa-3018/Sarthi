@@ -10,7 +10,8 @@ import {
   variantsForProduct
 } from "./domain.js";
 import { label, withoutId } from "./format.js";
-import { geminiConfigured, generateGeminiJson, parseJsonObject } from "./gemini.js";
+import { aiConfigured, generateStructuredJson } from "./ai.js";
+import type { GeneratedJson, StructuredGenerationInput } from "./aiTypes.js";
 import { suggestClusterFromSimilarListings } from "./similarListings.js";
 import { nowIso } from "./time.js";
 
@@ -246,14 +247,16 @@ async function sellerActionBoard(db: Db, sellerId: string, listings: any[], task
   };
 }
 
-async function generateSellerCoach(cards: any[], openProofRequests: number) {
+export async function generateSellerCoach(
+  cards: any[],
+  openProofRequests: number,
+  generate: (input: StructuredGenerationInput) => Promise<GeneratedJson | null> = generateStructuredJson
+) {
   const fallback = fallbackSellerCoach(cards, openProofRequests);
-  if (!geminiConfigured()) {
-    return { ...fallback, provider: "deterministic_fallback" as const };
-  }
   try {
     const topCards = cards.slice(0, 8);
-    const text = await generateGeminiJson({
+    const generated = await generate({
+      capability: "text",
       systemInstruction: [
         "You are Sarthi seller coach for a Meesho-style marketplace.",
         "Use only the provided JSON evidence. Do not invent numbers, policies, guarantees, or offers.",
@@ -279,12 +282,56 @@ async function generateSellerCoach(cards: any[], openProofRequests: number) {
           evidence_reason: card.why
         }))
       }),
-      temperature: 0.18
+      schemaName: "sarthi_seller_coach",
+      schemaDescription: "Grounded seller coaching for only the supplied products",
+      schema: {
+        type: "object",
+        properties: {
+          headline: { type: "string" },
+          summary: { type: "string" },
+          reasons: { type: "array", items: { type: "string" } },
+          product_coaching: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                product_id: { type: "string" },
+                issue_summary: { type: "string" },
+                buyer_impact: { type: "string" },
+                next_step: { type: "string" },
+                rating_lift: { type: "string" },
+                trust_steps: { type: "array", items: { type: "string" } }
+              },
+              required: ["product_id", "issue_summary", "buyer_impact", "next_step", "rating_lift", "trust_steps"]
+            }
+          },
+          rating_plan: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              summary: { type: "string" },
+              steps: { type: "array", items: { type: "string" } }
+            },
+            required: ["title", "summary", "steps"]
+          }
+        },
+        required: ["headline", "summary", "reasons", "product_coaching", "rating_plan"]
+      },
+      maxTokens: 900
     });
-    const parsed = text ? parseJsonObject(text) : null;
-    if (!parsed) return { ...fallback, provider: "fallback_after_llm_error" as const };
+    const parsed = generated?.value;
+    if (!generated || !parsed) {
+      return {
+        ...fallback,
+        provider: aiConfigured("text") ? "fallback_after_llm_error" as const : "deterministic_fallback" as const
+      };
+    }
+    const knownProductIds = new Set(topCards.map((card) => card.product_id));
     const parsedCards = Array.isArray(parsed.product_coaching)
-      ? parsed.product_coaching.map((item: any) => normalizeProductCoach(item)).filter(Boolean)
+      ? parsed.product_coaching
+        .map((item: any) => normalizeProductCoach(item))
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+        .filter((item) => knownProductIds.has(item.product_id))
       : [];
     return {
       headline: cleanText(parsed.headline, fallback.headline),
@@ -292,7 +339,7 @@ async function generateSellerCoach(cards: any[], openProofRequests: number) {
       reasons: cleanList(parsed.reasons, fallback.reasons, 4),
       cards: parsedCards.length ? parsedCards : fallback.cards,
       rating_plan: normalizeRatingPlan(parsed.rating_plan, fallback.rating_plan),
-      provider: "gemini" as const
+      provider: generated.provider
     };
   } catch {
     return { ...fallback, provider: "fallback_after_llm_error" as const };

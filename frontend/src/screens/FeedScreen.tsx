@@ -101,10 +101,38 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
   const [safetyCheckingProduct, setSafetyCheckingProduct] = useState<Product | null>(null);
   const [safetyCheckingStep, setSafetyCheckingStep] = useState(0);
+  const overlayDialogRef = useRef<HTMLDivElement | null>(null);
   
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const safetyProgressOpen = autoScan.status === "scanning";
+
+  useEffect(() => {
+    if (!compareSheetOpen && !auditDrawerOpen && !safetyProgressOpen) return;
+    const scrollY = window.scrollY;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.documentElement.classList.add("buyer-scroll-lock");
+    document.body.classList.add("buyer-scroll-lock");
+
+    function closeTopOverlay(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (auditDrawerOpen) setAuditDrawerOpen(false);
+      else if (compareSheetOpen) setCompareSheetOpen(false);
+    }
+
+    document.addEventListener("keydown", closeTopOverlay);
+    window.requestAnimationFrame(() => overlayDialogRef.current?.querySelector<HTMLElement>("button")?.focus());
+    return () => {
+      document.removeEventListener("keydown", closeTopOverlay);
+      document.documentElement.classList.remove("buyer-scroll-lock");
+      document.body.classList.remove("buyer-scroll-lock");
+      window.scrollTo(0, scrollY);
+      window.requestAnimationFrame(() => previouslyFocused?.focus());
+    };
+  }, [auditDrawerOpen, compareSheetOpen, safetyProgressOpen]);
 
   // Load feed products
   useEffect(() => {
@@ -524,14 +552,39 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         )
       )}
 
+      {autoScan.status === "scanning" && !safetyCheckingProduct && (
+        <div className="buyer-safety-progress-backdrop">
+          <section className="buyer-safety-progress" role="status" aria-label="Checking product safety" aria-live="assertive">
+            <span className="buyer-safety-spinner" aria-hidden="true" />
+            <div>
+              <span className="eyebrow">Safety check in progress</span>
+              <h2>Checking seller and proof records</h2>
+              <p>Comparing fit, return, offer, and seller evidence for {autoScan.title}.</p>
+            </div>
+            <ol aria-label="Safety check steps">
+              <li className="complete">Product identified</li>
+              <li className="active">Evidence being checked</li>
+              <li>Safer choice next</li>
+            </ol>
+          </section>
+        </div>
+      )}
+
       {/* Screen 2: Modal Comparison Sheet */}
       {compareSheetOpen && comparison && (
         <div className="bottom-sheet-overlay" onClick={() => setCompareSheetOpen(false)}>
-          <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={overlayDialogRef}
+            className="bottom-sheet-content compare-sheet-content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="buyer-compare-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="bottom-sheet-header">
               <div>
                 <span className="eyebrow sheet-eyebrow-success">{t(language, "evidencePickedMatch")}</span>
-                <h3 className="sheet-title">{t(language, "listingsResolved")}</h3>
+                <h3 className="sheet-title" id="buyer-compare-dialog-title">Compare safer choices</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setCompareSheetOpen(false)}>
                 <X size={16} />
@@ -545,6 +598,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
               experienceMode={experienceMode}
               onOpenAudit={() => {
                 setAuditTraceId(comparison.trace_id);
+                setCompareSheetOpen(false);
                 setAuditDrawerOpen(true);
               }}
               onContinue={() => handleViewProductDetail(comparison.selected_product_id, comparison.ranking.winner)}
@@ -556,11 +610,18 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       {/* Diagnostic Audit Drawer */}
       {auditDrawerOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setAuditDrawerOpen(false)}>
-          <div className="bottom-sheet-content audit-sheet-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={overlayDialogRef}
+            className="bottom-sheet-content audit-sheet-content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="buyer-proof-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="bottom-sheet-header">
               <div>
                 <span className="eyebrow sheet-eyebrow-primary">{t(language, "prePurchaseDiagnosticLogs")}</span>
-                <h3 className="sheet-title">{t(language, "howScoreWasDecided")}</h3>
+                <h3 className="sheet-title" id="buyer-proof-dialog-title">{t(language, "howScoreWasDecided")}</h3>
               </div>
               <button className="bottom-sheet-close" onClick={() => setAuditDrawerOpen(false)}>
                 <X size={16} />
@@ -576,51 +637,22 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         </div>
       )}
 
-      {/* Saved radar ready toast */}
-      {wishlistedProduct && autoScan.status === "ready" && step !== "saved" && (
-        <div
-          className="sarthi-scan-toast"
-        >
-          <ShieldCheck size={16} />
-          <div className="sarthi-toast-content">
-            <span>{t(language, "savedRadarReady")}</span>
-              <button
-                type="button"
-                onClick={() => openSavedProofLayer(wishlistedProduct)}
-                className="sarthi-toast-action"
-              >
-              {t(language, "seeProof")}
-              </button>
-          </div>
-        </div>
-      )}
-
-      {/* Floating trust check trigger */}
-      {wishlistedProduct && step !== "saved" && (
-        <button
-          type="button"
-          className="sarthi-floating-trigger"
-          onClick={() => openSavedProofLayer(wishlistedProduct)}
-        >
-          <ShieldCheck size={18} className={autoScan.status === "scanning" ? "spin-icon" : ""} />
-          <span>{t(language, "radar")}</span>
-          {autoScan.status === "ready" && (
-            <span className="floating-ready-count">1</span>
-          )}
-        </button>
-      )}
-
       {/* Sarthi Safety Check Premium Overlay */}
       {safetyCheckingProduct && (
         <div className="safety-check-loading-overlay">
-          <div className="safety-check-loading-card">
+          <div
+            className="safety-check-loading-card"
+            role="status"
+            aria-label="Checking product safety"
+            aria-live="assertive"
+          >
             <div className="safety-check-loading-icon-wrapper">
               <ShieldCheck size={32} className="safety-check-shield-anim" />
               <div className="safety-check-loading-spinner" />
             </div>
             
             <span className="eyebrow">{getSafetyCheckTranslation("sarthiSafetyCheck", language)}</span>
-            <h2>{getSafetyCheckTranslation("verifyingProductSafety", language)}</h2>
+            <h2>Checking seller and proof records</h2>
             
             <div className="safety-check-steps-progress">
               <div className="progress-bar-track">
@@ -875,9 +907,16 @@ function OrdersWorkspace({
   const [loading, setLoading] = useState(true);
   const [feedbackOrderId, setFeedbackOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [orderFilter, setOrderFilter] = useState<"all" | "action" | "progress" | "complete">("all");
   const copy = ordersLearningCopy(language);
   const placedCount = orders.filter(isPlacedOrder).length;
   const learntCount = orders.filter(isLearntOrder).length;
+  const filteredOrders = orders.filter((order) => {
+    if (orderFilter === "action") return order.can_submit_outcome;
+    if (orderFilter === "progress") return isPlacedOrder(order);
+    if (orderFilter === "complete") return isLearntOrder(order);
+    return true;
+  });
 
   useEffect(() => {
     void loadOrders();
@@ -942,8 +981,15 @@ function OrdersWorkspace({
             </span>
           </div>
 
+          <div className="buyer-filter-bar" role="group" aria-label="Filter orders">
+            <button type="button" className={orderFilter === "all" ? "active" : ""} onClick={() => setOrderFilter("all")}>All <b>{orders.length}</b></button>
+            <button type="button" className={orderFilter === "action" ? "active" : ""} onClick={() => setOrderFilter("action")}>Needs action <b>{pendingCount}</b></button>
+            <button type="button" className={orderFilter === "progress" ? "active" : ""} onClick={() => setOrderFilter("progress")}>In progress <b>{placedCount}</b></button>
+            <button type="button" className={orderFilter === "complete" ? "active" : ""} onClick={() => setOrderFilter("complete")}>Completed <b>{learntCount}</b></button>
+          </div>
+
           <div className="orders-card-list">
-            {orders.map((order) => (
+            {filteredOrders.map((order) => (
               <article key={order.order_id} className={`order-product-card ${order.can_submit_outcome ? "pending" : ""}`}>
                 <div className="order-product-main">
                   <img
@@ -1014,6 +1060,9 @@ function OrdersWorkspace({
                 )}
               </article>
             ))}
+            {filteredOrders.length === 0 && (
+              <div className="workspace-filter-empty">No orders in this view.</div>
+            )}
           </div>
         </>
       )}
@@ -1097,9 +1146,15 @@ function ProofsWorkspace({
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [proofFilter, setProofFilter] = useState<"action" | "ready" | "all">("action");
   const totalOpen = summary.waiting_seller + summary.admin_review + summary.needs_more_proof;
   const totalLift = items.reduce((sum, item) => sum + item.trust_impact.lift_points, 0);
   const copy = proofLedgerCopy(language);
+  const filteredItems = items.filter((item) => {
+    if (proofFilter === "action") return item.status !== "approved";
+    if (proofFilter === "ready") return item.status === "approved";
+    return true;
+  });
 
   useEffect(() => {
     let active = true;
@@ -1135,7 +1190,7 @@ function ProofsWorkspace({
         </div>
       </div>
 
-      <div className="proof-tracker-hero" aria-label="Proof check summary">
+      <div className="proof-tracker-hero" role="status" aria-label="Proof request summary">
         <div className={totalOpen > 0 ? "needs-action" : "all-clear"}>
           <span>{copy.openChecks}</span>
           <strong>{totalOpen}</strong>
@@ -1168,8 +1223,14 @@ function ProofsWorkspace({
           <button type="button" onClick={onBack}>{t(language, "shopNow")}</button>
         </div>
       ) : (
-        <div className="proof-ledger-list proof-tracker-list">
-          {items.map((item) => (
+        <>
+          <div className="buyer-filter-bar proof-filter-bar" role="group" aria-label="Filter proof requests">
+            <button type="button" className={proofFilter === "action" ? "active" : ""} onClick={() => setProofFilter("action")}>Needs action <b>{totalOpen}</b></button>
+            <button type="button" className={proofFilter === "ready" ? "active" : ""} onClick={() => setProofFilter("ready")}>Ready to use <b>{summary.approved}</b></button>
+            <button type="button" className={proofFilter === "all" ? "active" : ""} onClick={() => setProofFilter("all")}>All <b>{items.length}</b></button>
+          </div>
+          <div className="proof-ledger-list proof-tracker-list">
+          {filteredItems.map((item) => (
             <article key={item.request.request_id} className={`proof-ledger-card proof-tracker-card ${item.status}`}>
               <div className="proof-card-topline">
                 <div className="proof-ledger-product">
@@ -1193,7 +1254,7 @@ function ProofsWorkspace({
 
               <div className="proof-safe-action">
                 <div>
-                  <span>{copy.nextSafeStep}</span>
+                  <span>What to do next</span>
                   <strong>{proofNextSafeAction(item.status, language)}</strong>
                   <p>{proofLedgerSummary(item.status, item.trust_impact.lift_points, language)}</p>
                 </div>
@@ -1248,7 +1309,11 @@ function ProofsWorkspace({
               </div>
             </article>
           ))}
-        </div>
+          {filteredItems.length === 0 && (
+            <div className="workspace-filter-empty">No proof requests in this view.</div>
+          )}
+          </div>
+        </>
       )}
     </section>
   );
@@ -1589,6 +1654,8 @@ function MarketplaceHome({
   onOpenSavedItem: (product: Product) => void;
   onOpenOrders: () => void;
 }) {
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [compactCatalog, setCompactCatalog] = useState(() => window.matchMedia("(max-width: 720px)").matches);
   const quickSearches = [
     { label: t(language, "quickSearchCottonKurti"), value: "cotton kurti" },
     { label: t(language, "quickSearchKurtaSet"), value: "kurta set" },
@@ -1596,6 +1663,22 @@ function MarketplaceHome({
     { label: t(language, "quickSearchWorkBag"), value: "work bag" }
   ];
   const visibleCategories = categories.slice(0, 7);
+  const pageSize = compactCatalog ? 6 : 8;
+  const pageCount = Math.max(1, Math.ceil(products.length / pageSize));
+  const currentPage = Math.min(catalogPage, pageCount);
+  const pageStart = products.length ? (currentPage - 1) * pageSize : 0;
+  const pagedProducts = products.slice(pageStart, pageStart + pageSize);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 720px)");
+    const update = () => setCompactCatalog(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [searchTerm, selectedCategory, pageSize]);
   const possibleComparableCount = new Set(
     products.filter((product) => product.is_sarthi_eligible).map((product) => product.cluster_id)
   ).size;
@@ -1692,7 +1775,7 @@ function MarketplaceHome({
 
       {products.length > 0 && (
         <div className="web-product-grid">
-          {products.map((p) => {
+          {pagedProducts.map((p) => {
             const isSaved = wishlistedProduct?.product_id === p.product_id;
             const trustBadge = productTrustBadge(p, isSaved, allProducts, language);
             return (
@@ -1701,18 +1784,7 @@ function MarketplaceHome({
                 className={`buyer-product-card ${isSaved ? "saved" : ""}`}
               >
                 <div className="buyer-product-image">
-                  <button
-                    type="button"
-                    className="buyer-product-open-area"
-                    onClick={() => onProductOpen(p)}
-                    aria-label={`${t(language, "view")} ${p.title}`}
-                  >
-                    <img
-                      src={productImageSource(p)}
-                      alt={p.title}
-                      onError={(e) => { e.currentTarget.src = fallbackProductImage(p.color_family); }}
-                    />
-                  </button>
+                  <BuyerProductImageGallery product={p} onOpen={() => onProductOpen(p)} viewLabel={t(language, "view")} />
                   <button
                     type="button"
                     className={`product-trust-badge ${trustBadge.tone}`}
@@ -1793,10 +1865,91 @@ function MarketplaceHome({
         </div>
       )}
 
+      {products.length > 0 && (
+        <nav className="catalog-pagination" aria-label="Catalog pages">
+          <p>Showing {pageStart + 1}–{Math.min(pageStart + pageSize, products.length)} of {products.length}</p>
+          <div>
+            <button
+              type="button"
+              onClick={() => setCatalogPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+            >
+              Previous
+            </button>
+            {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
+              <button
+                key={page}
+                type="button"
+                className={page === currentPage ? "active" : ""}
+                aria-label={`Page ${page}`}
+                aria-current={page === currentPage ? "page" : undefined}
+                onClick={() => setCatalogPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setCatalogPage((page) => Math.min(pageCount, page + 1))}
+              disabled={currentPage === pageCount}
+              aria-label="Next page"
+            >
+              Next
+            </button>
+          </div>
+        </nav>
+      )}
+
       {products.length === 0 && (
         <div className="catalog-empty-state">
           <strong>{t(language, "noMatchingProductsFound")}</strong>
           <p>{t(language, "broaderSearchTip")}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BuyerProductImageGallery({
+  product,
+  onOpen,
+  viewLabel
+}: {
+  product: Product;
+  onOpen: () => void;
+  viewLabel: string;
+}) {
+  const images = productImageSources(product);
+  const [activeImage, setActiveImage] = useState(0);
+
+  useEffect(() => {
+    setActiveImage(0);
+  }, [product.product_id]);
+
+  const showControls = images.length > 1;
+  const selectImage = (direction: -1 | 1) => {
+    setActiveImage((current) => (current + direction + images.length) % images.length);
+  };
+
+  return (
+    <div
+      className="buyer-product-media"
+      role={showControls ? "group" : undefined}
+      aria-label={showControls ? `Product images for ${product.title}` : undefined}
+    >
+      <button type="button" className="buyer-product-open-area" onClick={onOpen} aria-label={`${viewLabel} ${product.title}`}>
+        <img
+          src={images[activeImage]}
+          alt={product.title}
+          onError={(event) => { event.currentTarget.src = fallbackProductImage(product.color_family); }}
+        />
+      </button>
+      {showControls && (
+        <div className="buyer-product-gallery-controls">
+          <button type="button" aria-label="Previous image" onClick={() => selectImage(-1)}>‹</button>
+          <span>{activeImage + 1} / {images.length}</span>
+          <button type="button" aria-label="Next image" onClick={() => selectImage(1)}>›</button>
         </div>
       )}
     </div>
@@ -2005,10 +2158,14 @@ function fallbackProductImage(color: string) {
   return "/product-blue.svg";
 }
 
-function productImageSource(product: Pick<Product, "image_url" | "color_family">) {
-  const source = product.image_url?.trim() ?? "";
-  if (!source || source.includes("placehold.co") || source.includes("text=")) {
-    return fallbackProductImage(product.color_family);
-  }
-  return source;
+function productImageSources(product: Pick<Product, "image_url" | "image_urls" | "color_family">) {
+  const candidates = [...(product.image_urls ?? []), product.image_url]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value) && !value.includes("placehold.co") && !value.includes("text="));
+  const unique = Array.from(new Set(candidates));
+  return unique.length ? unique : [fallbackProductImage(product.color_family)];
+}
+
+function productImageSource(product: Pick<Product, "image_url" | "image_urls" | "color_family">) {
+  return productImageSources(product)[0];
 }

@@ -25,6 +25,7 @@ test("admin route workspaces and guarded review routes are available", async ({ 
   await expect(page.getByText("Seller review queue")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Sellers needing action")).toBeVisible();
   await expect(page.getByText("Needs decision")).toBeVisible();
+  await page.getByText("Review guidance", { exact: true }).click();
   await expect(page.getByText("1. Check").first()).toBeVisible();
 
   await page.goto("/admin/agent");

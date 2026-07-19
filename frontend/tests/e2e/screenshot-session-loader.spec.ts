@@ -9,16 +9,29 @@ test("capture session loader screenshot", async ({ page }) => {
     }));
   });
 
+  let resolveAuthRequest!: () => void;
+  let rejectAuthRequest!: (error: unknown) => void;
+  const authRequestCompleted = new Promise<void>((resolve, reject) => {
+    resolveAuthRequest = resolve;
+    rejectAuthRequest = reject;
+  });
+
   // Mock and delay the auth verification API call
   await page.route("**/api/auth/me", async (route) => {
-    await page.waitForTimeout(4000);
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        account: { role: "buyer", buyer_id: "buyer_asha" }
-      })
-    });
+    try {
+      await page.waitForTimeout(4000);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          account: { role: "buyer", buyer_id: "buyer_asha" }
+        })
+      });
+      resolveAuthRequest();
+    } catch (error) {
+      rejectAuthRequest(error);
+      throw error;
+    }
   });
 
   await page.goto("/shop");
@@ -34,6 +47,9 @@ test("capture session loader screenshot", async ({ page }) => {
     path: "../safety_session_loader.png",
     fullPage: false
   });
+
+  await authRequestCompleted;
+  await expect(page.locator(".app-loading-wrapper")).toBeHidden();
 
   console.log("Screenshot safety_session_loader.png saved successfully at root!");
 });
