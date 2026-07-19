@@ -776,7 +776,11 @@ function WishlistWorkspace({
 
       {error && <div className="notice error">{error}</div>}
       {loading ? (
-        <div className="workspace-empty-state">{t(language, "checkingEllipsis")}</div>
+        <div className="wishlist-card-grid loading-skeleton" aria-hidden="true">
+          <div className="skeleton-card" style={{ height: "160px" }} />
+          <div className="skeleton-card" style={{ height: "160px" }} />
+          <div className="skeleton-card" style={{ height: "160px" }} />
+        </div>
       ) : items.length === 0 ? (
         <div className="workspace-empty-state">
           <Heart size={28} />
@@ -907,7 +911,11 @@ function OrdersWorkspace({
 
       {error && <div className="notice error">{error}</div>}
       {loading ? (
-        <div className="workspace-empty-state">{t(language, "checkingEllipsis")}</div>
+        <div className="orders-list-skeleton loading-skeleton" aria-hidden="true" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div className="skeleton-card" style={{ height: "120px" }} />
+          <div className="skeleton-card" style={{ height: "120px" }} />
+          <div className="skeleton-card" style={{ height: "120px" }} />
+        </div>
       ) : orders.length === 0 ? (
         <div className="workspace-empty-state">
           <PackageCheck size={28} />
@@ -1147,7 +1155,11 @@ function ProofsWorkspace({
 
       {error && <div className="notice error">{error}</div>}
       {loading ? (
-        <div className="workspace-empty-state">{copy.checkingProofStatus}</div>
+        <div className="proof-ledger-list loading-skeleton" aria-hidden="true" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div className="skeleton-card" style={{ height: "100px" }} />
+          <div className="skeleton-card" style={{ height: "100px" }} />
+          <div className="skeleton-card" style={{ height: "100px" }} />
+        </div>
       ) : items.length === 0 ? (
         <div className="workspace-empty-state">
           <ClipboardCheck size={28} />
