@@ -2079,25 +2079,25 @@ function SellerTrustCoachPage({
 
       <div className="seller-copilot-summary">
         <article>
-          <ListChecks size={18} />
+          <ListChecks size={13} />
           <span>{copy.thingsToFix}</span>
           <strong>{manualWork}</strong>
           <p>{copy.groupedWork}</p>
         </article>
         <article>
-          <ClipboardCheck size={18} />
+          <ClipboardCheck size={13} />
           <span>{copy.trustPoints}</span>
           <strong>+{proofNav?.trust_lift_points ?? 0}</strong>
           <p>{proofNav?.rating_forecast ?? copy.approvedProofReducesDoubt}</p>
         </article>
         <article>
-          <LineChart size={18} />
+          <LineChart size={13} />
           <span>{copy.ratingChance}</span>
           <strong>{ratingText}</strong>
           <p>{ratingCount ? `${ratingCount.toLocaleString("en-IN")} ${copy.ratings}. ${forecast.detail}` : forecast.detail}</p>
         </article>
         <article className={blockerCount ? "risk" : "good"}>
-          {blockerCount ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+          {blockerCount ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
           <span>{copy.accountReady}</span>
           <strong>{blockerCount ? copy.review : copy.clear}</strong>
           <p>{verificationStatus === "verified" ? `${liveProductCount} ${copy.productsTracked}` : copy.finishVerificationBeforeProof}</p>

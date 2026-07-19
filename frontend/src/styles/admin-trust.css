@@ -8263,4 +8263,55 @@
   }
 }
 
+/* Note Editor and Textarea Focus Overrides */
+.seller-report-shell .seller-note-editor textarea,
+.admin-app-route .seller-note-editor textarea {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 6px !important;
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  padding: 10px 12px !important;
+  font-family: inherit !important;
+  font-size: 13.5px !important;
+  transition: all 0.2s ease !important;
+}
+
+.seller-report-shell .seller-note-editor textarea:focus,
+.admin-app-route .seller-note-editor textarea:focus {
+  border-color: var(--stamp-verified) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--stamp-verified) 15%, transparent) !important;
+  outline: none !important;
+}
+
+/* Admin Shell Review Button Color Overrides */
+.seller-report-shell .seller-primary-action,
+.admin-app-route .seller-primary-action {
+  background: var(--stamp-verified) !important;
+  border: 1px solid var(--stamp-verified) !important;
+  color: var(--bg-surface) !important;
+  border-radius: 6px !important;
+  font-weight: 800 !important;
+  transition: all 0.2s ease !important;
+}
+
+.seller-report-shell .seller-primary-action:hover:not(:disabled),
+.admin-app-route .seller-primary-action:hover:not(:disabled) {
+  filter: brightness(1.1) !important;
+}
+
+.seller-report-shell .seller-danger-action,
+.admin-app-route .seller-danger-action {
+  background: color-mix(in srgb, var(--stamp-danger) 8%, var(--bg-surface)) !important;
+  border: 1px solid var(--stamp-danger) !important;
+  color: var(--stamp-danger) !important;
+  border-radius: 6px !important;
+  font-weight: 800 !important;
+  transition: all 0.2s ease !important;
+}
+
+.seller-report-shell .seller-danger-action:hover:not(:disabled),
+.admin-app-route .seller-danger-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--stamp-danger) 15%, var(--bg-surface)) !important;
+}
+
 

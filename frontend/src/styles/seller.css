@@ -1285,3 +1285,13 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* -------------------------------------------------------------
+   SELLER COPILOT STATS SMALL ICON OVERRIDES
+------------------------------------------------------------- */
+.seller-copilot-summary article > svg {
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 6px !important;
+  padding: 0 !important;
+}
