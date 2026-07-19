@@ -64,61 +64,6 @@ flowchart LR
 | Seller | Evidence console, proof tasks, document upload, listing drafts, measurement correction, admin status. | Clear actions to improve trust without seeing buyer private memory. |
 | Admin reviewer | Review Desk, AI Triage, Risk & Policy, Work Saved, seller dossiers, proofs, documents, drafts, audit events. | Less manual reading, cleaner routing, final decisions still human-in-loop. |
 
-## Snapshots
-
-These are the main images to use for the submission portal snapshots. Each asset in `docs/assets` is below the 3 MB upload limit shown in the hackathon form.
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="./docs/assets/sarthi-landing.png" alt="Sarthi landing page with kept-order trust promise" />
-      <br />
-      <strong>Landing</strong>
-      <br />
-      The product promise is clear before the judge enters the workspace.
-    </td>
-    <td width="50%">
-      <img src="./docs/assets/sarthi-buyer-feed.png" alt="Buyer feed with proof-aware product cards and safety checks" />
-      <br />
-      <strong>Buyer feed</strong>
-      <br />
-      Similar listings are surfaced with proof state, seller signal, and safety actions.
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./docs/assets/sarthi-product-decision.png" alt="Product detail page with proof, size, trust, and checkout guidance" />
-      <br />
-      <strong>Product decision</strong>
-      <br />
-      Size, proof, seller risk, and payment guidance are shown as one decision flow.
-    </td>
-    <td width="50%">
-      <img src="./docs/assets/sarthi-proof-tracker.png" alt="Buyer proof tracker showing proof status and trust lift" />
-      <br />
-      <strong>Proof tracker</strong>
-      <br />
-      Buyers can see which proof requests are waiting, approved, or under review.
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./docs/assets/sarthi-seller-console.png" alt="Seller console showing proof tasks and admin approval status" />
-      <br />
-      <strong>Seller console</strong>
-      <br />
-      Sellers receive precise proof tasks, admin status, and trust-lift guidance without seeing private buyer fit memory.
-    </td>
-    <td width="50%">
-      <img src="./docs/assets/sarthi-admin-review.png" alt="Admin reviewer upload queue with seller documents and proof checks" />
-      <br />
-      <strong>Admin review</strong>
-      <br />
-      Reviewers process seller documents, proof uploads, listing drafts, and audit context.
-    </td>
-  </tr>
-</table>
-
 ## Core Features
 
 | Area | Implemented functionality |
