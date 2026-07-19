@@ -68,6 +68,7 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
                 <p className="seller-kicker">Best next improvement</p>
                 <h3 id="seller-market-recommendation-title">{comparison.recommendation.title}</h3>
                 <p>{comparison.recommendation.reason}</p>
+                <small>{comparison.recommendation.meta}</small>
               </div>
               <button type="button" className="seller-button seller-button-primary" onClick={() => onAction(comparison.recommendation)}>{comparison.recommendation.actionLabel}<ArrowRight size={16} aria-hidden="true" /></button>
             </div>

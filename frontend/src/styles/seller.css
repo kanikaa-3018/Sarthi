@@ -1671,8 +1671,13 @@ body.seller-scroll-lock {
 
   .seller-market-position > .seller-market-next {
     order: -1;
+    gap: 9px;
     padding: 0;
     border: 0;
+  }
+
+  .seller-market-position {
+    padding: 16px;
   }
 
   .seller-market-position > .seller-market-product {

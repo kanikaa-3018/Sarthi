@@ -139,6 +139,7 @@ test("Market Compare explains evidence and one best improvement", async ({ page,
   await expect(page.getByRole("row", { name: /Fit feedback/i })).toBeVisible();
   await expect(page.getByText("Why this position")).toBeVisible();
   await expect(page.getByText("Best next improvement")).toBeVisible();
+  await expect(page.locator(".seller-market-recommendation")).toContainText("Solid Cotton Daily Top Office Ready");
   const recommendationBox = await page.locator(".seller-market-recommendation").boundingBox();
   expect(recommendationBox).not.toBeNull();
   expect((recommendationBox?.y ?? 0) + (recommendationBox?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
@@ -256,6 +257,9 @@ test("seller mobile routes keep their focused hierarchy without horizontal overf
       expect(recommendation).not.toBeNull();
       expect(selectedProduct).not.toBeNull();
       expect(recommendation?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(selectedProduct?.y ?? 0);
+      const recommendationAction = await page.locator(".seller-market-recommendation").getByRole("button").boundingBox();
+      expect(recommendationAction).not.toBeNull();
+      expect((recommendationAction?.y ?? 0) + (recommendationAction?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
     }
 
     if (path === "/seller/proofs") {
