@@ -146,9 +146,47 @@ git commit -m "test: isolate browser test runtime"
 - Modify: `frontend/src/screens/AuthScreen.tsx`
 - Modify: `frontend/tests/e2e/helpers.ts`
 
-- [ ] **Step 1: Write the failing role-login test**
+- [ ] **Step 1: Create a temporary read-only config for the actually broken UI**
 
-Create `frontend/tests/e2e/auth-session.spec.ts`:
+Create `frontend/playwright.live.config.ts` with no `webServer` and base URL `http://127.0.0.1:5173`. It must use only the existing main UI and must not reset seed data:
+
+```ts
+import { defineConfig, devices } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./tests/e2e",
+  workers: 1,
+  use: { baseURL: "http://127.0.0.1:5173" },
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }]
+});
+```
+
+- [ ] **Step 2: Write the minimal failing buyer test**
+
+Create `frontend/tests/e2e/auth-session.spec.ts` with no seed reset:
+
+```ts
+import { expect, test } from "@playwright/test";
+
+test("buyer demo account signs in through the UI", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Use demo" }).click();
+  await expect(page.locator('input[autocomplete="username"]')).toHaveValue("asha.buyer");
+  await expect(page.locator('input[autocomplete="current-password"]')).toHaveValue("buyer-asha-pass");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL("/shop");
+});
+```
+
+- [ ] **Step 3: Verify the real regression is red**
+
+Run `npm --prefix frontend run test:e2e -- auth-session.spec.ts --config playwright.live.config.ts`.
+
+Expected: FAIL because the actual UI on port 5173 fills `buyerpassword123` instead of `buyer-asha-pass`. This run performs no database reset and stops before login submission.
+
+- [ ] **Step 4: Expand the test to all roles using the shared contract**
+
+Replace `frontend/tests/e2e/auth-session.spec.ts` with:
 
 ```ts
 import { expect, test, type Page } from "@playwright/test";
@@ -187,13 +225,7 @@ async function loginThroughDemo(page: Page, portal: AuthPortal) {
 }
 ```
 
-- [ ] **Step 2: Verify the test is red**
-
-Run `npm --prefix frontend run test:e2e -- auth-session.spec.ts`.
-
-Expected: FAIL because `frontend/src/demoAccounts.ts` does not exist.
-
-- [ ] **Step 3: Add the canonical contract**
+- [ ] **Step 5: Add the canonical contract**
 
 Create `frontend/src/demoAccounts.ts`:
 
@@ -235,7 +267,7 @@ export function getDemoAccountForRole(role: DemoRole) {
 }
 ```
 
-- [ ] **Step 4: Consume the contract in runtime and test helpers**
+- [ ] **Step 6: Consume the contract in runtime and test helpers**
 
 In `AuthScreen.tsx`, import `DEMO_ACCOUNTS` and `AuthPortal`, delete the local portal type and credential object, and use:
 
@@ -251,7 +283,9 @@ const account = getDemoAccountForRole(role);
 
 No signup, portal-copy, layout, password hashing, or seed code changes are permitted.
 
-- [ ] **Step 5: Verify and commit**
+Delete the temporary `frontend/playwright.live.config.ts` with `apply_patch`; it is not part of the implementation.
+
+- [ ] **Step 7: Verify and commit**
 
 Run `npm --prefix frontend run test:e2e -- auth-session.spec.ts`.
 
