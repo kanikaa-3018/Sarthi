@@ -387,26 +387,15 @@ input:focus {
 
 .buyer-product-title {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 12.5px;
   line-height: 1.25;
-  min-height: 35px;
+  min-height: 32px;
 }
 
-.buyer-product-seller-row span,
-.product-rating-row small,
-.product-price-row span,
-.product-delivery-row span {
-  color: var(--text-secondary);
-}
-
-.product-rating-row span,
-.product-price-row strong,
-.buyer-product-seller-row strong {
+.product-price-row strong {
   color: var(--success);
 }
 
-.buyer-view-btn,
-.buyer-save-btn,
 .lens-secondary-action,
 .radar-action-row button,
 .btn-secondary,
