@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { assignConfidenceItems } from "../services/confidenceScoring.js";
 import { generateSellerCoach } from "../services/sellerOperations.js";
+import { buildVisualAiRequest } from "../services/similarListings.js";
 
 describe("provider-neutral AI callers", () => {
   it("normalizes Bedrock confidence output without accepting unknown keys", async () => {
@@ -79,5 +80,31 @@ describe("provider-neutral AI callers", () => {
     assert.equal(result.provider, "bedrock");
     assert.equal(result.headline, "Fix fit proof first");
     assert.deepEqual(result.cards.map((card: any) => card.product_id), ["product_1"]);
+  });
+
+  it("builds one provider-neutral image payload for Bedrock and Gemini", async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(new Uint8Array([137, 80, 78, 71]), {
+      status: 200,
+      headers: { "content-type": "image/png" }
+    });
+
+    try {
+      const request = await buildVisualAiRequest(
+        { product_id: "seed", image_url: "https://example.com/seed.png" },
+        [{ product_id: "candidate", image_url: "https://example.com/candidate.png" } as any]
+      );
+
+      assert.equal(request.imageInputs, 2);
+      const images = request.userParts?.filter((part) => "image" in part) ?? [];
+      assert.equal(images.length, 2);
+      assert.equal(images[0] && "image" in images[0] ? images[0].image.format : null, "png");
+      assert.deepEqual(
+        images[0] && "image" in images[0] ? [...images[0].image.bytes] : [],
+        [137, 80, 78, 71]
+      );
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 });
