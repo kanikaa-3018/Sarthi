@@ -966,8 +966,900 @@ function SellerReportsView({
   );
 }
 
-function formatBytes(value: number) {
-  if (!value) return "0 B";
-  if (value < 1024) return `${value} B`;
-  return `${Math.round(value / 1024)} KB`;
+function SellerReportDetail({
+  report,
+  notes,
+  busyAction,
+  onNoteChange,
+  onRunAction
+}: {
+  report: SellerReport;
+  notes: NotesById;
+  busyAction: string | null;
+  onNoteChange: (id: string, value: string) => void;
+  onRunAction: (
+    actionKey: string,
+    handler: () => Promise<AdminReviewQueue>,
+    message: string,
+    noteId?: string
+  ) => Promise<void>;
+}) {
+  const seller = report.seller;
+
+  return (
+    <div className="seller-report-detail-stack">
+      <section className="seller-selected-summary-card">
+        <div>
+          <span>Current seller</span>
+          <h3>{seller.seller_name}</h3>
+          <p>
+            {seller.pending_documents.length
+              ? "Seller approval is blocked until required documents are reviewed."
+              : seller.open_review_items > 0
+                ? seller.next_action
+                : "No action needed."}
+          </p>
+          <div className="seller-selected-summary-counts">
+            <span>{seller.open_review_items} open</span>
+            {seller.pending_documents.length > 0 && <span>{seller.pending_documents.length} doc blocker{seller.pending_documents.length === 1 ? "" : "s"}</span>}
+            {seller.submitted_draft_count > 0 && <span>{seller.submitted_draft_count} draft{seller.submitted_draft_count === 1 ? "" : "s"}</span>}
+            {seller.submitted_proof_count > 0 && <span>{seller.submitted_proof_count} proof{seller.submitted_proof_count === 1 ? "" : "s"}</span>}
+          </div>
+        </div>
+        <div className="seller-selected-summary-meta">
+          <StatusPill value={seller.verification_status} />
+          <RiskPill level={riskLevelFromScore(seller.highest_risk_score)} score={seller.highest_risk_score} />
+        </div>
+      </section>
+
+      <SellerPacketReview
+        report={report}
+        notes={notes}
+        busyAction={busyAction}
+        onNoteChange={onNoteChange}
+        onRunAction={onRunAction}
+      />
+
+    </div>
+  );
+}
+
+function SellerPacketReview({
+  report,
+  notes,
+  busyAction,
+  onNoteChange,
+  onRunAction
+}: {
+  report: SellerReport;
+  notes: NotesById;
+  busyAction: string | null;
+  onNoteChange: (id: string, value: string) => void;
+  onRunAction: (
+    actionKey: string,
+    handler: () => Promise<AdminReviewQueue>,
+    message: string,
+    noteId?: string
+  ) => Promise<void>;
+}) {
+  const packetItems = useMemo(() => buildSellerPacketItems(report), [report]);
+  const actionItems = useMemo(() => packetItems.filter((item) => item.readyForReview), [packetItems]);
+  const historyItems = useMemo(() => packetItems.filter((item) => !item.readyForReview), [packetItems]);
+  const [selectedPacketId, setSelectedPacketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!packetItems.length) {
+      if (selectedPacketId) setSelectedPacketId(null);
+      return;
+    }
+    const selectedExists = Boolean(selectedPacketId && packetItems.some((item) => item.id === selectedPacketId));
+    const selectedNeedsAction = Boolean(selectedPacketId && actionItems.some((item) => item.id === selectedPacketId));
+    if (selectedExists && (selectedNeedsAction || actionItems.length === 0)) {
+      return;
+    }
+    setSelectedPacketId(actionItems[0]?.id ?? null);
+  }, [actionItems, packetItems, selectedPacketId]);
+
+  const selectedItem = packetItems.find((item) => item.id === selectedPacketId) ?? null;
+  const actionGroups = buildPacketGroups(actionItems);
+  const historyGroups = buildPacketGroups(historyItems);
+
+  return (
+    <section className="seller-packet-layout">
+      <div className="seller-packet-list-panel">
+        <div className="seller-packet-head">
+          <div>
+            <h3>Needs decision</h3>
+            <p>{actionItems.length ? `${actionItems.length} item${actionItems.length === 1 ? "" : "s"} waiting. Start at the top.` : "Nothing needs reviewer action."}</p>
+          </div>
+          <span>{actionItems.length}</span>
+        </div>
+
+        {actionGroups.length ? (
+          <SellerPacketGroups groups={actionGroups} selectedPacketId={selectedPacketId} onSelect={setSelectedPacketId} />
+        ) : (
+          <div className="seller-packet-clear-state">
+            <CheckCircle2 size={18} />
+            <div>
+              <strong>No action needed</strong>
+              <span>Completed uploads and documents are kept in history.</span>
+            </div>
+          </div>
+        )}
+
+        {historyItems.length > 0 && (
+          <details className="seller-packet-history">
+            <summary>
+              <span>History</span>
+              <em>{historyItems.length}</em>
+            </summary>
+            <SellerPacketGroups groups={historyGroups} selectedPacketId={selectedPacketId} onSelect={setSelectedPacketId} />
+          </details>
+        )}
+      </div>
+
+      {selectedItem && (
+        <aside className="seller-packet-review-panel">
+          <SellerPacketSelectedItem
+            report={report}
+            item={selectedItem}
+            notes={notes}
+            busyAction={busyAction}
+            onNoteChange={onNoteChange}
+            onRunAction={onRunAction}
+          />
+        </aside>
+      )}
+    </section>
+  );
+}
+
+function SellerPacketGroups({
+  groups,
+  selectedPacketId,
+  onSelect
+}: {
+  groups: Array<{ group: string; items: SellerPacketItem[] }>;
+  selectedPacketId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="seller-packet-groups">
+      {groups.map((group) => (
+        <div className="seller-packet-group" key={group.group}>
+          <div className="seller-packet-group-title">
+            <strong>{group.group}</strong>
+            <span>{group.items.length}</span>
+          </div>
+          <div className="seller-packet-row-list">
+            {group.items.map((item) => (
+              <SellerPacketRow
+                key={item.id}
+                item={item}
+                selected={selectedPacketId === item.id}
+                onSelect={() => onSelect(item.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function SellerPacketRow({
+  item,
+  selected,
+  onSelect
+}: {
+  item: SellerPacketItem;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const checks = uploadCheckSummary(item.prescreen);
+  return (
+    <button className={`seller-packet-row ${selected ? "selected" : ""} ${item.readyForReview ? "" : "history"}`} type="button" onClick={onSelect}>
+      <ItemTypeIcon itemType={packetKindToItemType(item.kind)} />
+      <div>
+        <strong>{item.title}</strong>
+        <span>{item.subtitle}</span>
+      </div>
+      <div className="seller-packet-row-meta">
+        <StatusPill value={item.status} />
+        {item.readyForReview && <span className={`seller-upload-check ${checks.tone}`}>{checks.label}</span>}
+      </div>
+    </button>
+  );
+}
+
+function SellerPacketSelectedItem({
+  report,
+  item,
+  notes,
+  busyAction,
+  onNoteChange,
+  onRunAction
+}: {
+  report: SellerReport;
+  item: SellerPacketItem;
+  notes: NotesById;
+  busyAction: string | null;
+  onNoteChange: (id: string, value: string) => void;
+  onRunAction: (
+    actionKey: string,
+    handler: () => Promise<AdminReviewQueue>,
+    message: string,
+    noteId?: string
+  ) => Promise<void>;
+}) {
+  return (
+    <div className="seller-packet-selected-stack">
+      <div className="seller-packet-selected-head">
+        <div>
+          <span>{item.group}</span>
+          <h3>{item.title}</h3>
+          <p>{item.readyForReview ? "Review the brief, confirm the evidence, then take the final action." : "No action needed right now."}</p>
+        </div>
+        <StatusPill value={item.status} />
+      </div>
+
+      <DecisionBrief prescreen={item.prescreen} readyForReview={item.readyForReview} />
+
+      {item.kind === "application" && (
+        <SellerApplicationCard
+          application={item.item}
+          seller={report.seller}
+          note={notes[item.item.application_id] ?? ""}
+          busyAction={busyAction}
+          onNoteChange={(value) => onNoteChange(item.item.application_id, value)}
+          onUseSuggestedNote={() => onNoteChange(item.item.application_id, suggestedAuditNote(item.item.prescreen, "Seller application reviewed."))}
+          onApprove={() =>
+            onRunAction(
+              `approve-app-${item.item.application_id}`,
+              () =>
+                approveSellerApplication(
+                  item.item.application_id,
+                  notes[item.item.application_id]?.trim() || suggestedAuditNote(item.item.prescreen, "Seller identity reviewed and approved.")
+                ),
+              "Seller application approved.",
+              item.item.application_id
+            )
+          }
+          onReject={() =>
+            onRunAction(
+              `reject-app-${item.item.application_id}`,
+              () => rejectSellerApplication(item.item.application_id, notes[item.item.application_id].trim()),
+              "Seller application rejected with audit note.",
+              item.item.application_id
+            )
+          }
+        />
+      )}
+
+      {item.kind === "document" && (
+        <DocumentReviewCard
+          document={item.item}
+          note={notes[item.item.document_id] ?? ""}
+          busyAction={busyAction}
+          onNoteChange={(value) => onNoteChange(item.item.document_id, value)}
+          onUseSuggestedNote={() => onNoteChange(item.item.document_id, suggestedAuditNote(item.item.prescreen, "Document reviewed."))}
+          onApprove={() =>
+            onRunAction(
+              `approve-doc-${item.item.document_id}`,
+              () =>
+                approveSellerDocument(
+                  item.item.document_id,
+                  notes[item.item.document_id]?.trim() || suggestedAuditNote(item.item.prescreen, "Document metadata and reference reviewed.")
+                ),
+              "Verification document approved.",
+              item.item.document_id
+            )
+          }
+          onReject={() =>
+            onRunAction(
+              `reject-doc-${item.item.document_id}`,
+              () => rejectSellerDocument(item.item.document_id, notes[item.item.document_id].trim()),
+              "Verification document rejected with seller note.",
+              item.item.document_id
+            )
+          }
+        />
+      )}
+
+      {item.kind === "draft" && (
+        <ListingDraftCard
+          draft={item.item}
+          note={notes[item.item.draft_id] ?? ""}
+          busyAction={busyAction}
+          onNoteChange={(value) => onNoteChange(item.item.draft_id, value)}
+          onUseSuggestedNote={() => onNoteChange(item.item.draft_id, suggestedAuditNote(item.item.prescreen, "Listing draft reviewed."))}
+          onPublish={() =>
+            onRunAction(
+              `publish-draft-${item.item.draft_id}`,
+              () =>
+                approveListingDraft(
+                  item.item.draft_id,
+                  notes[item.item.draft_id]?.trim() || suggestedAuditNote(item.item.prescreen, "Catalog draft reviewed and published.")
+                ),
+              "Listing published to the buyer feed.",
+              item.item.draft_id
+            )
+          }
+          onRevision={() =>
+            onRunAction(
+              `revision-draft-${item.item.draft_id}`,
+              () => requestListingRevision(item.item.draft_id, notes[item.item.draft_id].trim()),
+              "Listing sent back for seller revision.",
+              item.item.draft_id
+            )
+          }
+        />
+      )}
+
+      {item.kind === "proof" && (
+        <ProofAssetCard
+          proof={item.item}
+          note={notes[item.item.proof_id] ?? ""}
+          busyAction={busyAction}
+          onNoteChange={(value) => onNoteChange(item.item.proof_id, value)}
+          onUseSuggestedNote={() => onNoteChange(item.item.proof_id, suggestedAuditNote(item.item.prescreen, "Proof upload reviewed."))}
+          onApprove={() =>
+            onRunAction(
+              `approve-proof-${item.item.proof_id}`,
+              () =>
+                approveSellerEvidenceAsset(
+                  item.item.proof_id,
+                  notes[item.item.proof_id]?.trim() || suggestedAuditNote(item.item.prescreen, "Proof reviewed and approved.")
+                ),
+              "Seller proof approved.",
+              item.item.proof_id
+            )
+          }
+          onReject={() =>
+            onRunAction(
+              `reject-proof-${item.item.proof_id}`,
+              () => rejectSellerEvidenceAsset(item.item.proof_id, notes[item.item.proof_id].trim()),
+              "Seller proof rejected with seller note.",
+              item.item.proof_id
+            )
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function DraftsView({
+  queue,
+  notes,
+  busyAction,
+  onNoteChange,
+  onRunAction
+}: {
+  queue: AdminReviewQueue;
+  notes: NotesById;
+  busyAction: string | null;
+  onNoteChange: (id: string, value: string) => void;
+  onRunAction: (
+    actionKey: string,
+    handler: () => Promise<AdminReviewQueue>,
+    message: string,
+    noteId?: string
+  ) => Promise<void>;
+}) {
+  const drafts = sortByReviewState(queue.listing_drafts);
+  const firstReviewDraftId = drafts.find((draft) => draft.status === "submitted")?.draft_id ?? null;
+  return (
+    <section className="seller-single-column">
+      <ReportSection
+        icon={<Store size={17} />}
+        title="Product drafts"
+        subtitle="Open only the draft you want to inspect."
+        count={drafts.length}
+      >
+        {drafts.length ? (
+          drafts.map((draft) => (
+            <DraftAccordionItem
+              key={draft.draft_id}
+              draft={draft}
+              defaultOpen={draft.draft_id === firstReviewDraftId}
+              note={notes[draft.draft_id] ?? ""}
+              busyAction={busyAction}
+              onNoteChange={(value) => onNoteChange(draft.draft_id, value)}
+              onUseSuggestedNote={() => onNoteChange(draft.draft_id, suggestedAuditNote(draft.prescreen, "Listing draft reviewed."))}
+              onPublish={() =>
+                onRunAction(
+                  `publish-draft-${draft.draft_id}`,
+                  () =>
+                    approveListingDraft(
+                      draft.draft_id,
+                      notes[draft.draft_id]?.trim() || suggestedAuditNote(draft.prescreen, "Catalog draft reviewed and published.")
+                    ),
+                  "Listing published to the buyer feed.",
+                  draft.draft_id
+                )
+              }
+              onRevision={() =>
+                onRunAction(
+                  `revision-draft-${draft.draft_id}`,
+                  () => requestListingRevision(draft.draft_id, notes[draft.draft_id].trim()),
+                  "Listing sent back for seller revision.",
+                  draft.draft_id
+                )
+              }
+            />
+          ))
+        ) : (
+          <EmptyPanel message="No product drafts found." compact />
+        )}
+      </ReportSection>
+    </section>
+  );
+}
+
+function DraftAccordionItem({
+  draft,
+  defaultOpen,
+  note,
+  busyAction,
+  onNoteChange,
+  onUseSuggestedNote,
+  onPublish,
+  onRevision
+}: {
+  draft: ListingDraftReview;
+  defaultOpen: boolean;
+  note: string;
+  busyAction: string | null;
+  onNoteChange: (value: string) => void;
+  onUseSuggestedNote: () => void;
+  onPublish: () => void;
+  onRevision: () => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const checks = uploadCheckSummary(draft.prescreen);
+  const submitted = draft.status === "submitted";
+  const sellerVerified = draft.verification_status === "verified";
+  const draftSignal = draftReviewSignal(draft, checks.label);
+
+  return (
+    <article className={`seller-draft-accordion ${open ? "open" : ""}`}>
+      <button
+        className="seller-draft-accordion-toggle"
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ChevronDown size={17} className="seller-foldout-chevron" />
+        <div className="seller-draft-thumb">
+          {isRenderableImage(draft.image_url) ? (
+            <img src={draft.image_url} alt="" />
+          ) : (
+            <Store size={17} />
+          )}
+        </div>
+        <div className="seller-draft-row-copy">
+          <strong>{draft.title}</strong>
+          <span>{draft.seller_name} | {labelize(draft.category)} | {formatPrice(draft.base_price)}</span>
+          <small>{draftSignal}</small>
+        </div>
+        <div className="seller-draft-row-meta">
+          <StatusPill value={draft.status} />
+          {submitted && !sellerVerified ? (
+            <span className="seller-upload-check warn">Seller blocked</span>
+          ) : (
+            <span className={`seller-upload-check ${checks.tone}`}>{checks.label}</span>
+          )}
+        </div>
+      </button>
+
+      {open && (
+        <div className="seller-draft-accordion-body">
+          <ListingDraftCard
+            draft={draft}
+            note={note}
+            busyAction={busyAction}
+            onNoteChange={onNoteChange}
+            onUseSuggestedNote={onUseSuggestedNote}
+            onPublish={onPublish}
+            onRevision={onRevision}
+            hideHeader
+          />
+        </div>
+      )}
+    </article>
+  );
+}
+
+function UploadsView({
+  queue,
+  notes,
+  busyAction,
+  onNoteChange,
+  onRunAction
+}: {
+  queue: AdminReviewQueue;
+  notes: NotesById;
+  busyAction: string | null;
+  onNoteChange: (id: string, value: string) => void;
+  onRunAction: (
+    actionKey: string,
+    handler: () => Promise<AdminReviewQueue>,
+    message: string,
+    noteId?: string
+  ) => Promise<void>;
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<UploadFilter>("needs_review");
+  const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null);
+  const uploadRows = useMemo(() => buildUploadRows(queue), [queue]);
+  const filteredRows = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return uploadRows.filter((row) => {
+      const matchesFilter =
+        filter === "all" ||
+        (filter === "needs_review" && row.readyForReview) ||
+        (filter === "documents" && row.kind === "document") ||
+        (filter === "proofs" && row.kind === "proof");
+      if (!matchesFilter) return false;
+      return !normalizedQuery || row.searchText.includes(normalizedQuery);
+    });
+  }, [filter, query, uploadRows]);
+
+  useEffect(() => {
+    if (selectedUploadId && !filteredRows.some((row) => row.id === selectedUploadId)) {
+      setSelectedUploadId(null);
+    }
+  }, [filteredRows, selectedUploadId]);
+
+  const selectedRow = filteredRows.find((row) => row.id === selectedUploadId) ?? null;
+  const filters: Array<{ id: UploadFilter; label: string; count: number }> = [
+    { id: "needs_review", label: "Needs review", count: uploadRows.filter((row) => row.readyForReview).length },
+    { id: "documents", label: "Documents", count: uploadRows.filter((row) => row.kind === "document").length },
+    { id: "proofs", label: "Proof", count: uploadRows.filter((row) => row.kind === "proof").length },
+    { id: "all", label: "All", count: uploadRows.length }
+  ];
+
+  return (
+    <section className={`seller-uploads-layout ${selectedRow ? "has-selection" : ""}`}>
+      <section className="seller-uploads-table-panel">
+        <div className="seller-uploads-head">
+          <div>
+            <h3>Uploads queue</h3>
+            <p>Documents and seller proof uploads in one review list.</p>
+          </div>
+          <span>{filteredRows.length}</span>
+        </div>
+
+        <div className="seller-uploads-controls">
+          <label className="seller-report-search" aria-label="Search uploads">
+            <Search size={15} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search seller, document, product"
+            />
+          </label>
+          <div className="seller-upload-filters" aria-label="Upload filters">
+            {filters.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={filter === item.id ? "active" : ""}
+                onClick={() => setFilter(item.id)}
+              >
+                <span>{item.label}</span>
+                <em>{item.count}</em>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredRows.length ? (
+          <div className="seller-upload-table-wrap">
+            <table className="seller-upload-table">
+              <thead>
+                <tr>
+                  <th>Seller</th>
+                  <th>Upload</th>
+                  <th>Status</th>
+                  <th>Checks</th>
+                  <th>Submitted</th>
+                  <th>Open</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => {
+                  const checks = uploadCheckSummary(row.prescreen);
+                  return (
+                    <tr key={row.id} className={selectedUploadId === row.id ? "selected" : ""}>
+                      <td>
+                        <strong>{row.sellerName}</strong>
+                        <span>{row.kind === "document" ? "Verification doc" : "Seller proof"}</span>
+                      </td>
+                      <td>
+                        <strong>{row.title}</strong>
+                        <span>{row.subtitle}</span>
+                      </td>
+                      <td>
+                        <StatusPill value={row.status} />
+                      </td>
+                      <td>
+                        <span className={`seller-upload-check ${checks.tone}`}>{checks.label}</span>
+                      </td>
+                      <td>
+                        <span>{formatDate(row.submittedAt)}</span>
+                      </td>
+                      <td>
+                        <button
+                          className="seller-upload-review-button"
+                          type="button"
+                          onClick={() => setSelectedUploadId(row.id)}
+                        >
+                          Review
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyPanel message="No uploads match this view." compact />
+        )}
+      </section>
+
+      {selectedRow && (
+        <aside className="seller-upload-review-panel">
+          <UploadReviewPanel
+            row={selectedRow}
+            notes={notes}
+            busyAction={busyAction}
+            onNoteChange={onNoteChange}
+            onRunAction={onRunAction}
+          />
+        </aside>
+      )}
+    </section>
+  );
+}
+
+function UploadReviewPanel({
+  row,
+  notes,
+  busyAction,
+  onNoteChange,
+  onRunAction
+}: {
+  row: UploadQueueRow;
+  notes: NotesById;
+  busyAction: string | null;
+  onNoteChange: (id: string, value: string) => void;
+  onRunAction: (
+    actionKey: string,
+    handler: () => Promise<AdminReviewQueue>,
+    message: string,
+    noteId?: string
+  ) => Promise<void>;
+}) {
+  return (
+    <div className="seller-upload-review-stack">
+      <div className="seller-upload-review-head">
+        <div>
+          <span>Selected upload</span>
+          <h3>{row.title}</h3>
+          <p>{row.subtitle}</p>
+        </div>
+        <StatusPill value={row.status} />
+      </div>
+
+      {row.kind === "document" ? (
+        <DocumentReviewCard
+          document={row.item}
+          note={notes[row.item.document_id] ?? ""}
+          busyAction={busyAction}
+          onNoteChange={(value) => onNoteChange(row.item.document_id, value)}
+          onUseSuggestedNote={() => onNoteChange(row.item.document_id, suggestedAuditNote(row.item.prescreen, "Document reviewed."))}
+          onApprove={() =>
+            onRunAction(
+              `approve-doc-${row.item.document_id}`,
+              () =>
+                approveSellerDocument(
+                  row.item.document_id,
+                  notes[row.item.document_id]?.trim() || suggestedAuditNote(row.item.prescreen, "Document metadata and reference reviewed.")
+                ),
+              "Verification document approved.",
+              row.item.document_id
+            )
+          }
+          onReject={() =>
+            onRunAction(
+              `reject-doc-${row.item.document_id}`,
+              () => rejectSellerDocument(row.item.document_id, notes[row.item.document_id].trim()),
+              "Verification document rejected with seller note.",
+              row.item.document_id
+            )
+          }
+        />
+      ) : (
+        <ProofAssetCard
+          proof={row.item}
+          note={notes[row.item.proof_id] ?? ""}
+          busyAction={busyAction}
+          onNoteChange={(value) => onNoteChange(row.item.proof_id, value)}
+          onUseSuggestedNote={() => onNoteChange(row.item.proof_id, suggestedAuditNote(row.item.prescreen, "Proof upload reviewed."))}
+          onApprove={() =>
+            onRunAction(
+              `approve-proof-${row.item.proof_id}`,
+              () =>
+                approveSellerEvidenceAsset(
+                  row.item.proof_id,
+                  notes[row.item.proof_id]?.trim() || suggestedAuditNote(row.item.prescreen, "Proof reviewed and approved.")
+                ),
+              "Seller proof approved.",
+              row.item.proof_id
+            )
+          }
+          onReject={() =>
+            onRunAction(
+              `reject-proof-${row.item.proof_id}`,
+              () => rejectSellerEvidenceAsset(row.item.proof_id, notes[row.item.proof_id].trim()),
+              "Seller proof rejected with seller note.",
+              row.item.proof_id
+            )
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function AuditView({ events }: { events: AdminAuditEvent[] }) {
+  return (
+    <section className="seller-single-column">
+      <ReportSection
+        icon={<ClipboardCheck size={17} />}
+        title="Audit trail"
+        subtitle="Reviewer decisions written after seller, document, draft, and proof actions."
+        count={events.length}
+      >
+        {events.length ? (
+          <div className="seller-audit-list">
+            {events.map((event) => (
+              <AuditRow key={event.event_id} event={event} />
+            ))}
+          </div>
+        ) : (
+          <EmptyPanel message="No reviewer decisions have been recorded yet." compact />
+        )}
+      </ReportSection>
+    </section>
+  );
+}
+
+function SellerApplicationCard({
+  application,
+  seller,
+  note,
+  busyAction,
+  onNoteChange,
+  onUseSuggestedNote,
+  onApprove,
+  onReject
+}: {
+  application: SellerApplicationReview;
+  seller: AdminSellerDossier;
+  note: string;
+  busyAction: string | null;
+  onNoteChange: (value: string) => void;
+  onUseSuggestedNote: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const pending = application.status === "pending_review";
+  const missingDocuments = seller.pending_documents.map(labelize);
+  const canApprove = pending && missingDocuments.length === 0;
+  const canReject = pending && note.trim().length >= MIN_REJECT_NOTE_LENGTH;
+  const approveActionKey = `approve-app-${application.application_id}`;
+  const rejectActionKey = `reject-app-${application.application_id}`;
+
+  return (
+    <article className="seller-review-card">
+      <CardHeader
+        icon={<ShieldCheck size={16} />}
+        eyebrow="Seller application"
+        title={application.business_name}
+        subtitle={`${application.seller_name} | ${application.application_id}`}
+        status={application.status}
+        prescreen={application.prescreen}
+      />
+
+      {missingDocuments.length > 0 && (
+        <BlockerNotice text={`Approve required documents first: ${missingDocuments.join(", ")}.`} />
+      )}
+
+      <ReviewFoldout title="Seller details" subtitle={`${application.gst_number} | ${application.pickup_pincode}`} resetKey={application.application_id}>
+        <DetailGrid>
+          <DetailTile label="GST number" value={application.gst_number} />
+          <DetailTile label="Pickup pincode" value={application.pickup_pincode} />
+          <DetailTile label="Support contact" value={application.support_contact} />
+          <DetailTile label="Verification" value={labelize(application.verification_status ?? "not started")} />
+          <DetailTile label="Created" value={formatDate(application.created_at)} />
+        </DetailGrid>
+      </ReviewFoldout>
+
+      <PrescreenBox prescreen={application.prescreen} />
+
+      <NoteEditor note={note} onNoteChange={onNoteChange} onUseSuggestedNote={onUseSuggestedNote} />
+
+      <ActionRow>
+        <button className="seller-primary-action" type="button" disabled={!canApprove || busyAction === approveActionKey} onClick={onApprove}>
+          <CheckCircle2 size={14} />
+          Approve seller
+        </button>
+        <button className="seller-danger-action" type="button" disabled={!canReject || busyAction === rejectActionKey} onClick={onReject}>
+          <XCircle size={14} />
+          Reject seller
+        </button>
+      </ActionRow>
+
+      {!pending && <ActionHint text={`No seller action is available because status is ${labelize(application.status)}.`} />}
+      {pending && !canApprove && <ActionHint text="Seller approval unlocks only after all required documents are approved." />}
+      {pending && note.trim().length < MIN_REJECT_NOTE_LENGTH && <ActionHint text="Rejection needs a short seller-facing note." />}
+    </article>
+  );
+}
+
+function DocumentReviewCard({
+  document,
+  note,
+  busyAction,
+  onNoteChange,
+  onUseSuggestedNote,
+  onApprove,
+  onReject
+}: {
+  document: VerificationDocumentReview;
+  note: string;
+  busyAction: string | null;
+  onNoteChange: (value: string) => void;
+  onUseSuggestedNote: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const canReview = document.status === "submitted" || document.status === "under_review";
+  const canReject = canReview && note.trim().length >= MIN_REJECT_NOTE_LENGTH;
+  const approveActionKey = `approve-doc-${document.document_id}`;
+  const rejectActionKey = `reject-doc-${document.document_id}`;
+
+  return (
+    <article className="seller-review-card">
+      <CardHeader
+        icon={<FileCheck2 size={16} />}
+        eyebrow="Verification document"
+        title={labelize(document.document_type)}
+        subtitle={`${document.seller_name} | ${document.file_name}`}
+        status={document.status}
+        prescreen={document.prescreen}
+      />
+
+      <ReviewFoldout title="File details" subtitle={document.file_name} resetKey={document.document_id}>
+        <DetailGrid>
+          <DetailTile label="Reference" value={document.reference} />
+          <DetailTile label="File" value={document.file_name} />
+          <DetailTile label="Size" value={formatBytes(document.file_size_bytes)} />
+          <DetailTile label="Hash" value={document.sha256 ? document.sha256.slice(0, 16) : "Missing"} />
+          <DetailTile label="Storage" value={document.storage_uri} />
+          <DetailTile label="Submitted" value={formatDate(document.submitted_at)} />
+        </DetailGrid>
+      </ReviewFoldout>
+
+      <PrescreenBox prescreen={document.prescreen} />
+
+      <NoteEditor note={note} onNoteChange={onNoteChange} onUseSuggestedNote={onUseSuggestedNote} />
+
+      <ActionRow>
+        <button className="seller-primary-action" type="button" disabled={!canReview || busyAction === approveActionKey} onClick={onApprove}>
+          <CheckCircle2 size={14} />
+          Approve document
 }
