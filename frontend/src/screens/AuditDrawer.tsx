@@ -19,6 +19,8 @@ type ProofCopy = {
   heroEyebrow: string;
   readyTitle: string;
   cautionTitle: string;
+  readyStatus: string;
+  cautionStatus: string;
   readyBody: string;
   cautionBody: string;
   simpleTab: string;
@@ -36,7 +38,6 @@ type ProofCopy = {
   reviewerDetails: string;
   factIds: string;
   graphRoutes: string;
-  mostUsefulProof: string;
   noRoute: string;
   close: string;
   questionNode: string;
@@ -52,8 +53,10 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     heroEyebrow: "Buyer proof",
     readyTitle: "Sarthi checked this for you",
     cautionTitle: "Check one thing before buying",
+    readyStatus: "Ready",
+    cautionStatus: "Check size",
     readyBody: "The answer is supported by real product and order evidence. You can use this proof to decide faster.",
-    cautionBody: "Some evidence is limited or points to a return risk. Read the next safe step before paying.",
+    cautionBody: "Some evidence points to size return risk. Recheck size once before paying.",
     simpleTab: "Simple",
     mapTab: "Proof map",
     factsChecked: "facts checked",
@@ -65,11 +68,10 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     mapBody: "Tap this when you want to see the evidence path.",
     nextStep: "Next safe step",
     nextStepReady: "Use this proof with the product photo, size suggestion and checkout offer check.",
-    nextStepCaution: "Do not rush. Check size or seller proof once more before paying.",
+    nextStepCaution: "Choose the recommended size or ask seller for clearer proof. Do not rush payment.",
     reviewerDetails: "Reviewer details",
     factIds: "Fact IDs",
     graphRoutes: "Graph routes",
-    mostUsefulProof: "Most useful proof",
     noRoute: "Direct fact match",
     close: "Done",
     questionNode: "Your question",
@@ -83,8 +85,10 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     heroEyebrow: "Buyer proof",
     readyTitle: "Sarthi ne check kar diya",
     cautionTitle: "Buy se pehle ek cheez check karo",
+    readyStatus: "Ready",
+    cautionStatus: "Size check",
     readyBody: "Answer real product aur order proof se supported hai. Isse decision fast ho sakta hai.",
-    cautionBody: "Kuch proof limited hai ya return risk dikh raha hai. Payment se pehle next step dekho.",
+    cautionBody: "Kuch evidence size return risk dikha raha hai. Payment se pehle size ek baar check karo.",
     simpleTab: "Simple",
     mapTab: "Proof map",
     factsChecked: "facts checked",
@@ -96,11 +100,10 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     mapBody: "Evidence path dekhna ho tab yahan dekho.",
     nextStep: "Safe next step",
     nextStepReady: "Product photo, size suggestion aur checkout offer check ke saath ye proof use karo.",
-    nextStepCaution: "Rush mat karo. Payment se pehle size ya seller proof ek baar aur check karo.",
+    nextStepCaution: "Recommended size choose karo ya seller se clearer proof maango. Payment rush mat karo.",
     reviewerDetails: "Reviewer details",
     factIds: "Fact IDs",
     graphRoutes: "Graph routes",
-    mostUsefulProof: "Most useful proof",
     noRoute: "Direct fact match",
     close: "Done",
     questionNode: "Aapka sawaal",
@@ -114,8 +117,10 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     heroEyebrow: "Buyer proof",
     readyTitle: "Sarthi ne ye check kiya",
     cautionTitle: "Buy se pehle ek check karo",
+    readyStatus: "Ready",
+    cautionStatus: "Size check",
     readyBody: "Answer real product aur order proof se supported hai. Isse decision easy ho jayega.",
-    cautionBody: "Kuch evidence limited hai ya return risk dikh raha hai. Payment se pehle next safe step dekho.",
+    cautionBody: "Kuch evidence size return risk dikha raha hai. Payment se pehle size ek baar check karo.",
     simpleTab: "Simple",
     mapTab: "Proof map",
     factsChecked: "facts checked",
@@ -127,11 +132,10 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     mapBody: "Evidence path dekhna ho toh yahan dekho.",
     nextStep: "Safe next step",
     nextStepReady: "Product photo, size suggestion aur checkout offer check ke saath ye proof use karo.",
-    nextStepCaution: "Rush mat karo. Payment se pehle size ya seller proof ek baar aur check karo.",
+    nextStepCaution: "Recommended size choose karo ya seller se clearer proof maango. Payment rush mat karo.",
     reviewerDetails: "Reviewer details",
     factIds: "Fact IDs",
     graphRoutes: "Graph routes",
-    mostUsefulProof: "Most useful proof",
     noRoute: "Direct fact match",
     close: "Done",
     questionNode: "Aapka question",
@@ -207,7 +211,6 @@ function ProofContent({
 }) {
   const insight = useMemo(() => buildProofInsight(trace), [trace]);
   const tone = insight.needsCaution ? "attention" : "safe";
-  const createdAt = new Date(trace.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
     <>
@@ -220,7 +223,7 @@ function ProofContent({
           <h4>{insight.needsCaution ? copy.cautionTitle : copy.readyTitle}</h4>
           <p>{insight.needsCaution ? copy.cautionBody : copy.readyBody}</p>
         </div>
-        <span className={`proof-status-pill ${tone}`}>{createdAt}</span>
+        <span className={`proof-status-pill ${tone}`}>{insight.needsCaution ? copy.cautionStatus : copy.readyStatus}</span>
       </section>
 
       <div className="proof-popup-summary-row" aria-label="Proof summary">
@@ -239,7 +242,7 @@ function ProofContent({
       </div>
 
       {view === "simple" ? (
-        <SimpleProof trace={trace} insight={insight} copy={copy} />
+        <SimpleProof insight={insight} copy={copy} />
       ) : (
         <ProofMap trace={trace} insight={insight} copy={copy} />
       )}
@@ -280,37 +283,37 @@ function ProofContent({
   );
 }
 
-function SimpleProof({ trace, insight, copy }: { trace: AuditTrace; insight: ProofInsight; copy: ProofCopy }) {
+function SimpleProof({ insight, copy }: { insight: ProofInsight; copy: ProofCopy }) {
   const checks = [
     {
       label: "Seller",
-      title: insight.sellerChecked ? "Seller and listing checked" : "Seller proof needs a check",
+      title: insight.sellerChecked ? "Seller looked checked" : "Seller proof needs a check",
       body: insight.sellerChecked
-        ? "Sarthi looked at seller/listing signals before answering."
-        : "Seller-specific proof was not strong in this trace.",
+        ? "Sarthi checked seller and listing signals before answering."
+        : "Ask seller for clearer proof before trusting this item.",
       tone: insight.sellerChecked ? "safe" : "attention"
     },
     {
       label: "Size",
-      title: insight.returnRisk ? "Size return signal found" : "Size and return history checked",
+      title: insight.returnRisk ? "Size may be risky" : "Size history checked",
       body: insight.returnRisk
-        ? "Some past orders mention size returns. Recheck the recommended size."
-        : "Order outcomes were used to reduce size guesswork.",
+        ? "Past orders show size returns. Recheck the recommended size."
+        : "Past orders were used to reduce size guesswork.",
       tone: insight.returnRisk ? "attention" : "safe"
     },
     {
       label: "Reviews",
-      title: insight.reviewChecked ? "Review evidence checked" : "Review proof was limited",
+      title: insight.reviewChecked ? "Reviews were checked" : "Reviews are limited",
       body: insight.reviewChecked
-        ? "Relevant reviews were part of the answer."
+        ? "Relevant review signals were used in the answer."
         : "Use product photos and seller proof carefully.",
       tone: insight.reviewChecked ? "safe" : "attention"
     },
     {
       label: "Offer",
-      title: insight.offerChecked ? "Offer or price facts checked" : "Offer proof not used here",
+      title: insight.offerChecked ? "Offer was checked" : "Offer not checked here",
       body: insight.offerChecked
-        ? "Sarthi included offer/price evidence where available."
+        ? "Price or offer evidence was included where available."
         : "Run checkout offer check before prepaid payment.",
       tone: insight.offerChecked ? "safe" : "attention"
     }
@@ -337,12 +340,6 @@ function SimpleProof({ trace, insight, copy }: { trace: AuditTrace; insight: Pro
               <p>{check.body}</p>
             </div>
           </article>
-        ))}
-      </div>
-      <div className="proof-simple-path-list">
-        <strong>{copy.mostUsefulProof}</strong>
-        {trace.fact_details.slice(0, 3).map((fact) => (
-          <FactRow fact={fact} key={fact.fact_id} hideCode />
         ))}
       </div>
     </section>
