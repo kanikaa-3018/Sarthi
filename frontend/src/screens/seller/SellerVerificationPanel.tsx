@@ -71,7 +71,7 @@ export function SellerVerificationPanel({ onboarding, submitting, apiError, onSu
           <p className="seller-kicker">Visibility blocker</p>
           <h3 id="seller-verification-heading">Complete seller verification</h3>
           <p>{onboarding.seller_verification.restricted_reason || "Listings can be saved, but they cannot become buyer-visible until the required business documents are approved."}</p>
-          <span>{reviewedDocuments} approved · {onboarding.documents.length} submitted</span>
+          <span>{reviewedDocuments} approved · {onboarding.documents.length} documents on file</span>
         </div>
       </div>
 

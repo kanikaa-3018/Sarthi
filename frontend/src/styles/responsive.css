@@ -59,6 +59,35 @@
   min-width: 0 !important;
 }
 
+.auth-password-control {
+  position: relative;
+}
+
+.auth-password-control input {
+  padding-right: 50px !important;
+}
+
+.auth-password-control button {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  transform: translateY(-50%);
+}
+
+.auth-password-control button:hover,
+.auth-password-control button:focus-visible {
+  background: var(--bg-surface-muted);
+  color: var(--text-primary);
+}
+
 @media (max-width: 1024px) {
   .auth-shell {
     grid-template-columns: 1fr;

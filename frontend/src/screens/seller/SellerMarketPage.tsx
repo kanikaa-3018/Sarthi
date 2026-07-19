@@ -2,6 +2,7 @@ import { ArrowRight, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { SellerPanelListing } from "../../types/api";
 import { buildMarketComparison, type SellerActionItem } from "./sellerModel";
+import { SellerProductImage } from "./SellerProductImage";
 
 type SellerMarketPageProps = {
   listings: SellerPanelListing[];
@@ -54,7 +55,7 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
         <>
           <section className="seller-market-position" aria-labelledby="seller-market-position-title">
             <div className="seller-market-product">
-              <img src={selected.product.image_url} alt="" />
+              <SellerProductImage src={selected.product.image_url} title={selected.product.title} size="market" />
               <div><span>Your listing</span><h3>{selected.product.title}</h3><p>{selected.seller.name}</p></div>
             </div>
             <div>
@@ -84,12 +85,6 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
             <button type="button" className="seller-button seller-button-primary" onClick={() => onAction(comparison.recommendation)}>{comparison.recommendation.actionLabel}<ArrowRight size={16} aria-hidden="true" /></button>
           </section>
 
-          {comparison.secondary.length > 0 && (
-            <section className="seller-market-secondary" aria-labelledby="seller-market-secondary-title">
-              <div className="seller-section-heading"><div><p className="seller-kicker">After that</p><h3 id="seller-market-secondary-title">Other useful improvements</h3></div></div>
-              <ol>{comparison.secondary.map((action) => <li key={action.id}><div><strong>{action.title}</strong><p>{action.reason}</p></div><button type="button" className="seller-button seller-button-text" onClick={() => onAction(action)}>{action.actionLabel}</button></li>)}</ol>
-            </section>
-          )}
         </>
       )}
     </div>

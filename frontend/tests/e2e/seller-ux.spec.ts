@@ -5,6 +5,20 @@ test.beforeEach(async ({ request }) => {
   await resetSeed(request);
 });
 
+test("seller demo account signs in through the visible login flow", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: /Seller.*Aggregate evidence only/i }).click();
+  await page.getByRole("button", { name: "Use demo" }).click();
+  await expect(page.getByLabel("Username")).toHaveValue("seller.a");
+  await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Show password" }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(page).toHaveURL(/\/seller$/);
+  await expect(page.getByRole("heading", { name: "NayiDisha Fashions" })).toBeVisible();
+});
+
 test("seller Today page leads with one next action", async ({ page, request }) => {
   await loginAs(page, request, "seller");
   await page.goto("/seller");
@@ -101,8 +115,11 @@ test("Market Compare explains evidence and one best improvement", async ({ page,
 
   await expect(page.getByLabel("Product to compare")).toBeVisible();
   await expect(page.getByRole("table", { name: "Market evidence comparison" })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Buyer rating/i })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Fit feedback/i })).toBeVisible();
   await expect(page.getByText("Why this position")).toBeVisible();
   await expect(page.getByText("Best next improvement")).toBeVisible();
+  await expect(page.getByText("Other useful improvements")).toHaveCount(0);
   await expect(page.getByText(/percentile|AI score/i)).toHaveCount(0);
   await expect(page.getByText(/Stronger evidence than 0 of/i)).toHaveCount(0);
 });
@@ -111,12 +128,18 @@ test("Products keeps issue language readable and preserves measurement correctio
   await loginAs(page, request, "seller");
   await page.goto("/seller/products");
 
+  await expect(page.getByRole("button", { name: "New listing" })).toHaveCount(1);
   await expect(page.getByLabel("Search products")).toBeVisible();
   await expect(page.getByText("Search products", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/too_large|color_different|fabric_different/)).toHaveCount(0);
+  await expect.poll(() => page.locator(".seller-product-identity img").evaluateAll((images) => images.filter((image) => !image.complete || image.naturalWidth === 0).length)).toBe(0);
 
   const comparisonRow = page.getByRole("row").filter({ hasText: "Printed Cotton Bedsheet Set Everyday Wear" });
-  await comparisonRow.getByRole("button", { name: "Market compare" }).click();
+  await comparisonRow.getByRole("button", { name: "Upload proof" }).click();
+  await expect(page.getByRole("dialog", { name: "Upload proof" })).toContainText("Recent returns");
+  await expect(page.getByRole("dialog", { name: "Upload proof" })).not.toContainText("Buyer demand");
+  await page.keyboard.press("Escape");
+  await comparisonRow.getByRole("button", { name: "Compare" }).click();
   await expect(page).toHaveURL(/\/seller\/market\?product=kurti_8_1$/);
   await expect(page.getByLabel("Product to compare")).toHaveValue("kurti_8_1");
   await page.goto("/seller/products");
@@ -189,6 +212,11 @@ test("seller mobile routes keep their focused hierarchy without horizontal overf
     expect(overflow, `${path} horizontal overflow: ${JSON.stringify(overflowSources)}`).toBeLessThanOrEqual(2);
 
     if (path === "/seller/proofs") {
+      const clippedTabs = await page.getByRole("tab").evaluateAll((tabs) => tabs.filter((tab) => {
+        const box = tab.getBoundingClientRect();
+        return box.left < -1 || box.right > window.innerWidth + 1;
+      }).length);
+      expect(clippedTabs).toBe(0);
       const clippedRows = await page.locator(".seller-proof-row").evaluateAll((rows) => rows.filter((row) => {
         const box = row.getBoundingClientRect();
         return box.left < -1 || box.right > window.innerWidth + 1;

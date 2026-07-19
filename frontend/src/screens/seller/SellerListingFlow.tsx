@@ -227,7 +227,7 @@ function focusFirstError(errors: DraftErrors, container: HTMLElement | null) {
 }
 
 function isAllowedImageReference(value: string): boolean {
-  return value.startsWith("data:image/") || value.startsWith("https://") || value.startsWith("seeded://") || value.startsWith("seller-asset://");
+  return /^data:image\/(jpeg|png|webp);base64,/i.test(value) || value.startsWith("https://") || value.startsWith("seeded://") || value.startsWith("seller-asset://");
 }
 
 function verificationLabel(status: string): string {

@@ -1,7 +1,7 @@
 import { FileText, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SellerEvidenceCoachTask } from "../../types/api";
-import { proofTaskReason, proofTypeLabel } from "./sellerModel";
+import { proofTaskContext, proofTaskReason, proofTypeLabel } from "./sellerModel";
 import { useDialogLock } from "./useDialogLock";
 
 export type SellerProofSubmission = {
@@ -25,6 +25,9 @@ export function SellerProofDialog({ task, submitting, apiError, onClose, onSubmi
   const [assetUrl, setAssetUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [errors, setErrors] = useState<{ title?: string; description?: string; assetUrl?: string }>({});
+  const context = proofTaskContext(task);
+  const isReturnEvidence = context === "return-signal";
+  const isRejectedEvidence = context === "rejected-proof";
   useDialogLock(true, dialogRef, onClose, submitting);
 
   useEffect(() => {
@@ -81,21 +84,24 @@ export function SellerProofDialog({ task, submitting, apiError, onClose, onSubmi
       >
         <header className="seller-dialog-header">
           <div>
-            <p className="seller-kicker">Proof request</p>
+            <p className="seller-kicker">{isRejectedEvidence ? "Reviewer feedback" : isReturnEvidence ? "Listing evidence gap" : "Proof request"}</p>
             <h2 id="seller-proof-dialog-title">Upload proof</h2>
-            <p id="seller-proof-dialog-description">Answer the buyer concern with evidence a reviewer can verify.</p>
+            <p id="seller-proof-dialog-description">{isRejectedEvidence ? "Replace the rejected proof with clearer evidence for the reviewer." : isReturnEvidence ? "Address the repeated return issue with evidence a reviewer can verify." : "Answer the buyer concern with evidence a reviewer can verify."}</p>
           </div>
           <button type="button" className="seller-icon-button" aria-label="Close proof dialog" onClick={onClose} disabled={submitting}><X size={18} /></button>
         </header>
 
         <form id="seller-proof-form" className="seller-dialog-body" onSubmit={handleSubmit}>
-          <section className="seller-proof-request-context" aria-label="Buyer concern">
+          <section className="seller-proof-request-context" aria-label={isRejectedEvidence ? "Reviewer feedback" : isReturnEvidence ? "Return issue" : "Buyer concern"}>
             <span>{task.product_title}</span>
             <h3>{task.title}</h3>
             <p>{proofTaskReason(task)}</p>
             <dl>
               <div><dt>Required proof</dt><dd>{proofTypeLabel(task.recommended_proof_type)}</dd></div>
-              <div><dt>Buyer demand</dt><dd>{task.buyer_demand} {task.buyer_demand === 1 ? "request" : "requests"}</dd></div>
+              <div>
+                <dt>{isRejectedEvidence ? "Review status" : isReturnEvidence ? "Recent returns" : "Buyer demand"}</dt>
+                <dd>{isRejectedEvidence ? "Replacement needed" : `${task.buyer_demand} ${isReturnEvidence ? (task.buyer_demand === 1 ? "return" : "returns") : (task.buyer_demand === 1 ? "request" : "requests")}`}</dd>
+              </div>
             </dl>
           </section>
 
@@ -147,7 +153,7 @@ export function SellerProofDialog({ task, submitting, apiError, onClose, onSubmi
 }
 
 function isAllowedProofReference(value: string): boolean {
-  return value.startsWith("data:") || value.startsWith("https://") || value.startsWith("seeded://") || value.startsWith("seller-asset://");
+  return /^data:(image\/(jpeg|png|webp)|application\/pdf);base64,/i.test(value) || value.startsWith("https://") || value.startsWith("seeded://") || value.startsWith("seller-asset://");
 }
 
 function readFile(file: File): Promise<string> {

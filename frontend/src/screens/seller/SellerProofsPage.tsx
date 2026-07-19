@@ -66,7 +66,7 @@ function ProofTaskRow({ task, rejected = false, onOpen }: { task: SellerEvidence
         <span>{task.product_title}</span>
         <h3>{task.title}</h3>
         <p>{proofTaskReason(task)}</p>
-        <small>{proofTypeLabel(task.recommended_proof_type)} · {task.buyer_demand} buyer {task.buyer_demand === 1 ? "request" : "requests"}</small>
+        <small>{proofTypeLabel(task.recommended_proof_type)} · {rejected ? "Reviewer asked for replacement" : `${task.buyer_demand} buyer ${task.buyer_demand === 1 ? "request" : "requests"}`}</small>
       </div>
       <button type="button" className="seller-button seller-button-primary" onClick={onOpen}>{rejected ? "Replace proof" : "Upload proof"}</button>
     </article>
@@ -89,7 +89,7 @@ function ProofEmpty({ icon, title, detail }: { icon: React.ReactNode; title: str
 
 function taskFromRejected(asset: SellerProofAsset): SellerEvidenceCoachTask {
   return {
-    type: "missing_buyer_proof",
+    type: "broken_expectation",
     priority: "high",
     product_id: asset.product_id,
     product_title: asset.product_title,

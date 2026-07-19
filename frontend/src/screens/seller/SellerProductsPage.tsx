@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { SellerCopy } from "./sellerCopy";
 import type { SellerProductRow } from "./sellerModel";
+import { SellerProductImage } from "./SellerProductImage";
 
 type ProductFilter = "all" | SellerProductRow["state"];
 
@@ -9,10 +10,10 @@ type SellerProductsPageProps = {
   rows: SellerProductRow[];
   copy: SellerCopy;
   onAction: (row: SellerProductRow) => void;
-  onNewListing: () => void;
+  onCompare: (row: SellerProductRow) => void;
 };
 
-export function SellerProductsPage({ rows, copy, onAction, onNewListing }: SellerProductsPageProps) {
+export function SellerProductsPage({ rows, copy, onAction, onCompare }: SellerProductsPageProps) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ProductFilter>("all");
   const visibleRows = useMemo(() => {
@@ -31,7 +32,6 @@ export function SellerProductsPage({ rows, copy, onAction, onNewListing }: Selle
           <h2>Products</h2>
           <p>See what is blocking buyer trust and take one clear action for each listing.</p>
         </div>
-        <button type="button" className="seller-button seller-button-primary" onClick={onNewListing}>{copy.newListing}</button>
       </header>
 
       <div className="seller-product-tools">
@@ -72,7 +72,7 @@ export function SellerProductsPage({ rows, copy, onAction, onNewListing }: Selle
                 <tr key={row.listing.product.product_id}>
                   <td data-label={copy.product}>
                     <div className="seller-product-identity">
-                      <img src={row.listing.product.image_url} alt="" />
+                      <SellerProductImage src={row.listing.product.image_url} title={row.listing.product.title} />
                       <div>
                         <strong>{row.listing.product.title}</strong>
                         <span>{row.listing.product.product_id}</span>
@@ -84,7 +84,10 @@ export function SellerProductsPage({ rows, copy, onAction, onNewListing }: Selle
                   <td data-label={copy.evidence}>{row.evidence}</td>
                   <td data-label={copy.position}>{row.position}</td>
                   <td data-label={copy.action}>
-                    <button type="button" className="seller-button seller-button-secondary" onClick={() => onAction(row)}>{row.actionLabel}</button>
+                    <div className="seller-product-actions">
+                      <button type="button" className="seller-button seller-button-secondary" onClick={() => onAction(row)}>{row.actionLabel}</button>
+                      {row.actionKind !== "market" && <button type="button" className="seller-button seller-button-text" onClick={() => onCompare(row)}>Compare</button>}
+                    </div>
                   </td>
                 </tr>
               ))}

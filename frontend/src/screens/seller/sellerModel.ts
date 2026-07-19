@@ -55,7 +55,6 @@ export type MarketComparison = {
   reason: string;
   dimensions: MarketDimension[];
   recommendation: SellerActionItem;
-  secondary: SellerActionItem[];
 };
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 } as const;
@@ -189,11 +188,12 @@ export function buildProductRows(
   tasks: SellerEvidenceCoachTask[]
 ): SellerProductRow[] {
   return listings.map((listing) => {
-    const task = tasks.find((item) => item.product_id === listing.product.product_id);
+    const requestedTask = tasks.find((item) => item.product_id === listing.product.product_id);
+    const task = requestedTask ?? proofTaskFromIssue(listing);
     const firstAction = listing.action_items[0];
     const attention = Boolean(task || listing.decision_status === "needs_seller_action" || firstAction?.priority === "high");
     const review = !attention && listing.decision_status === "insufficient_evidence";
-    const actionKind = task?.recommended_proof_type === "measurement_chart"
+    const actionKind = requestedTask?.recommended_proof_type === "measurement_chart"
       ? "measurement"
       : task
         ? "proof"
@@ -210,6 +210,39 @@ export function buildProductRows(
       proofTask: task
     };
   });
+}
+
+function proofTaskFromIssue(listing: SellerPanelListing): SellerEvidenceCoachTask | undefined {
+  const issue = listing.top_issue;
+  if (!issue) return undefined;
+  const proofByReason: Record<string, {
+    attribute: SellerEvidenceCoachTask["attribute"];
+    proofType: SellerEvidenceCoachTask["recommended_proof_type"];
+    title: string;
+  }> = {
+    too_large: { attribute: "size", proofType: "measurement_chart", title: "Clarify product measurements" },
+    too_small: { attribute: "size", proofType: "measurement_chart", title: "Clarify product measurements" },
+    color_different: { attribute: "color", proofType: "daylight_photo", title: "Show the product's real colour" },
+    fabric_different: { attribute: "fabric", proofType: "fabric_closeup", title: "Show the actual fabric" },
+    damaged: { attribute: "packaging", proofType: "packaging_photo", title: "Show how the product is packed" },
+    wrong_item: { attribute: "packaging", proofType: "packaging_photo", title: "Show product and dispatch labels" }
+  };
+  const proof = proofByReason[issue.return_reason];
+  if (!proof) return undefined;
+  return {
+    type: "broken_expectation",
+    priority: "high",
+    product_id: listing.product.product_id,
+    product_title: listing.product.title,
+    attribute: proof.attribute,
+    title: proof.title,
+    rationale: `Evidence from ${issue.count} recent ${issue.count === 1 ? "return" : "returns"} indicates ${labelize(issue.return_reason).toLowerCase()}. Add evidence that a reviewer can check.`,
+    recommended_proof_type: proof.proofType,
+    buyer_demand: issue.count,
+    first_seen_at: "",
+    last_seen_at: "",
+    fact_ids: issue.fact_ids
+  };
 }
 
 export function buildProofLanes(coach: SellerEvidenceCoachResponse | null): SellerProofLanes {
@@ -236,6 +269,8 @@ export function buildMarketComparison(
       : "Evidence is level with or behind comparable listings"
     : "Comparable listing evidence is not available";
   const clusterReturnRates = pool.map((candidate) => candidate.metrics.return_rate).filter(isNumber);
+  const clusterRatings = pool.map((candidate) => candidate.product.rating).filter((rating) => Number.isFinite(rating) && rating > 0);
+  const clusterFitRates = pool.map((candidate) => candidate.metrics.fit_as_expected_rate).filter(isNumber);
   const clusterDispatch = pool.map((candidate) => candidate.metrics.median_dispatch_hours).filter(isNumber);
   const recommendation = actions.find((action) => action.action.id === listing.product.product_id) ?? {
     id: `market-${listing.product.product_id}`,
@@ -258,10 +293,24 @@ export function buildMarketComparison(
         tone: "neutral"
       },
       {
+        label: "Buyer rating",
+        yourValue: listing.product.rating_count
+          ? `${listing.product.rating.toFixed(1)} from ${listing.product.rating_count.toLocaleString("en-IN")} ratings`
+          : "No ratings yet",
+        marketValue: clusterRatings.length ? `${average(clusterRatings).toFixed(1)} average` : "Not available",
+        tone: listing.product.rating_count ? compareHigher(listing.product.rating, clusterRatings) : "neutral"
+      },
+      {
         label: "Return behavior",
         yourValue: formatPercent(listing.metrics.return_rate),
         marketValue: clusterReturnRates.length ? `${formatPercent(average(clusterReturnRates))} average` : "Not available",
         tone: compareLower(listing.metrics.return_rate, clusterReturnRates)
+      },
+      {
+        label: "Fit feedback",
+        yourValue: formatPercent(listing.metrics.fit_as_expected_rate),
+        marketValue: clusterFitRates.length ? `${formatPercent(average(clusterFitRates))} average` : "Not available",
+        tone: compareHigher(listing.metrics.fit_as_expected_rate, clusterFitRates)
       },
       {
         label: "Dispatch",
@@ -280,14 +329,18 @@ export function buildMarketComparison(
         tone: listing.metrics.evidence_strength === "strong" ? "good" : "watch"
       }
     ],
-    recommendation,
-    secondary: actions.filter((action) => action.id !== recommendation.id).slice(0, 3)
+    recommendation
   };
 }
 
 function compareLower(value: number | null, comparison: number[]): MarketDimension["tone"] {
   if (!isNumber(value) || !comparison.length) return "neutral";
   return value <= average(comparison) ? "good" : "watch";
+}
+
+function compareHigher(value: number | null, comparison: number[]): MarketDimension["tone"] {
+  if (!isNumber(value) || !comparison.length) return "neutral";
+  return value >= average(comparison) ? "good" : "watch";
 }
 
 function evidenceRank(value: SellerPanelListing["metrics"]["evidence_strength"]): number {
@@ -330,4 +383,9 @@ export function proofTaskReason(task: SellerEvidenceCoachTask): string {
     return `${task.buyer_demand} buyer ${task.buyer_demand === 1 ? "request is" : "requests are"} waiting for verifiable product evidence.`;
   }
   return task.rationale.replace(/\bbuyer doubt\(s\)\b/gi, task.buyer_demand === 1 ? "buyer question" : "buyer questions");
+}
+
+export function proofTaskContext(task: SellerEvidenceCoachTask): "buyer-request" | "return-signal" | "rejected-proof" {
+  if (task.type === "missing_buyer_proof") return "buyer-request";
+  return task.fact_ids.length ? "return-signal" : "rejected-proof";
 }

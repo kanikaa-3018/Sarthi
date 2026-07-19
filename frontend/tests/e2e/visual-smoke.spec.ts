@@ -51,6 +51,7 @@ test("seller and admin core screens stay visually stable", async ({ page, reques
 
   await page.getByTitle("Toggle Theme").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.waitForTimeout(300);
   await page.screenshot({ path: `${screenshotDir}/seller-market-compare-dark.png`, fullPage: true });
   await page.getByTitle("Toggle Theme").click();
 

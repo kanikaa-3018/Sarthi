@@ -140,6 +140,10 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
       setActiveProofTask(row.proofTask);
       return;
     }
+    openMarketComparison(row);
+  }
+
+  function openMarketComparison(row: SellerProductRow) {
     setStatusMessage(null);
     navigate(`/seller/market?product=${encodeURIComponent(row.listing.product.product_id)}`);
   }
@@ -274,7 +278,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
       {statusMessage && <div ref={statusRef} className="seller-inline-status" role="status" tabIndex={-1}>{statusMessage}</div>}
 
       {activeRoute === "today" && <SellerTodayPage actions={actions} facts={facts} copy={copy} onAction={handleAction} />}
-      {activeRoute === "products" && <SellerProductsPage rows={productRows} copy={copy} onAction={handleProductAction} onNewListing={() => navigateSeller("new")} />}
+      {activeRoute === "products" && <SellerProductsPage rows={productRows} copy={copy} onAction={handleProductAction} onCompare={openMarketComparison} />}
       {activeRoute === "new" && <SellerListingFlow onboarding={onboarding} submitting={listingSubmitting} verificationSubmitting={verificationSubmitting} verificationError={verificationError} onCreateDraft={handleCreateDraft} onSubmitDraft={handleSubmitDraft} onSubmitVerification={handleVerificationSubmit} />}
       {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} copy={copy} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
       {activeRoute === "market" && <SellerMarketPage listings={listings} competitors={panel?.competing_listings ?? []} actions={actions} initialProductId={new URLSearchParams(location.search).get("product")} onAction={handleAction} />}
