@@ -1541,8 +1541,8 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
           <div className="bottom-sheet-content" onClick={(event) => event.stopPropagation()}>
             <div className="bottom-sheet-header">
               <div>
-                <span className="eyebrow sheet-eyebrow-primary">Seller Proof</span>
-                <h3 className="sheet-title">Attach Evidence Reference</h3>
+                <span className="eyebrow sheet-eyebrow-primary">{copy.proofAdminReview}</span>
+                <h3 className="sheet-title">{copy.reviewAndSubmit}</h3>
               </div>
               <button className="bottom-sheet-close" onClick={closeProofTask}>
                 <X size={16} />
