@@ -179,7 +179,23 @@ export function App() {
   }
 
   if (checkingSession) {
-    return <div className="app-loading">Checking secure session...</div>;
+    return (
+      <div className="app-loading-wrapper" aria-live="polite">
+        <div className="app-loading-card">
+          <div className="app-loading-logo">
+            <SarthiMark />
+          </div>
+          <div className="app-loading-spinner" />
+          <span>{
+            language === "hindi" 
+              ? "सेफ सेशन जांचा जा रहा है..." 
+              : language === "hinglish" 
+                ? "Secure session check ho raha hai..." 
+                : "Verifying secure session..."
+          }</span>
+        </div>
+      </div>
+    );
   }
 
   const resolvedTheme =
