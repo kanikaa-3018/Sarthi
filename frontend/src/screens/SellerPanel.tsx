@@ -1395,7 +1395,7 @@ export function SellerPanel({ language = "english" }: { language?: LanguageCode 
 
             <div className="seller-why-body">
               <p>
-                This is a second view into Sarthi's evidence ranking. These factors reflect comparable listing performance.
+                Uses aggregate returns, size feedback, dispatch, and proof gaps. Buyer private fit memory is not shown.
               </p>
 
               <div className="seller-why-metrics">
