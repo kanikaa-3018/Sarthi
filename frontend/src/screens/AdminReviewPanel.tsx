@@ -1862,4 +1862,880 @@ function DocumentReviewCard({
         <button className="seller-primary-action" type="button" disabled={!canReview || busyAction === approveActionKey} onClick={onApprove}>
           <CheckCircle2 size={14} />
           Approve document
+        </button>
+        <button className="seller-danger-action" type="button" disabled={!canReject || busyAction === rejectActionKey} onClick={onReject}>
+          <XCircle size={14} />
+          Reject document
+        </button>
+      </ActionRow>
+
+      {!canReview && <ActionHint text={`Document is already ${labelize(document.status)}.`} />}
+      {canReview && note.trim().length < MIN_REJECT_NOTE_LENGTH && <ActionHint text="Rejection needs a short seller-facing note." />}
+    </article>
+  );
+}
+
+function ListingDraftCard({
+  draft,
+  note,
+  busyAction,
+  onNoteChange,
+  onUseSuggestedNote,
+  onPublish,
+  onRevision,
+  hideHeader = false
+}: {
+  draft: ListingDraftReview;
+  note: string;
+  busyAction: string | null;
+  onNoteChange: (value: string) => void;
+  onUseSuggestedNote: () => void;
+  onPublish: () => void;
+  onRevision: () => void;
+  hideHeader?: boolean;
+}) {
+  const submitted = draft.status === "submitted";
+  const sellerVerified = draft.verification_status === "verified";
+  const canPublish = submitted && sellerVerified;
+  const canRequestRevision = submitted && note.trim().length >= MIN_REJECT_NOTE_LENGTH;
+  const publishActionKey = `publish-draft-${draft.draft_id}`;
+  const revisionActionKey = `revision-draft-${draft.draft_id}`;
+
+  return (
+    <article className="seller-review-card">
+      {!hideHeader && (
+        <CardHeader
+          icon={<Store size={16} />}
+          eyebrow="Product draft"
+          title={draft.title}
+          subtitle={`${draft.seller_name} | ${draft.draft_id}`}
+          status={draft.status}
+          prescreen={draft.prescreen}
+        />
+      )}
+
+      {!sellerVerified && <BlockerNotice text={`Seller verification is ${labelize(draft.verification_status ?? "missing")}. Publish is blocked.`} />}
+      {!submitted && <BlockerNotice text={`Seller has not submitted this draft for review yet. Current status: ${labelize(draft.status)}.`} />}
+
+      <ReviewFoldout title="Product facts" subtitle={`${draft.garment_type} | ${draft.fabric} | ${formatPrice(draft.base_price)}`} resetKey={draft.draft_id}>
+        <div className="seller-media-detail">
+          {isRenderableImage(draft.image_url) ? (
+            <img src={draft.image_url} alt={draft.title} />
+          ) : (
+            <div className="seller-file-preview">
+              <ImageIcon size={18} />
+              <span>No preview</span>
+            </div>
+          )}
+          <DetailGrid>
+            <DetailTile label="Category" value={draft.category} />
+            <DetailTile label="Garment" value={draft.garment_type} />
+            <DetailTile label="Fabric" value={draft.fabric} />
+            <DetailTile label="Color" value={draft.color_family} />
+            <DetailTile label="Price" value={formatPrice(draft.base_price)} />
+            <DetailTile label="Cluster" value={draft.target_cluster_id ?? "New catalog item"} />
+            <DetailTile label="Readiness" value={labelize(draft.readiness_status)} />
+            <DetailTile label="Submitted" value={formatDate(draft.submitted_at)} />
+          </DetailGrid>
+        </div>
+      </ReviewFoldout>
+
+      <PrescreenBox prescreen={draft.prescreen} />
+
+      <NoteEditor note={note} onNoteChange={onNoteChange} onUseSuggestedNote={onUseSuggestedNote} />
+
+      <ActionRow>
+        <button className="seller-primary-action" type="button" disabled={!canPublish || busyAction === publishActionKey} onClick={onPublish}>
+          <Send size={14} />
+          Publish draft
+        </button>
+        <button className="seller-secondary-action" type="button" disabled={!canRequestRevision || busyAction === revisionActionKey} onClick={onRevision}>
+          <XCircle size={14} />
+          Request revision
+        </button>
+      </ActionRow>
+
+      {submitted && !sellerVerified && <ActionHint text="Publish becomes available after seller verification is approved." />}
+      {submitted && note.trim().length < MIN_REJECT_NOTE_LENGTH && <ActionHint text="Revision needs a clear seller-facing note." />}
+    </article>
+  );
+}
+
+function ProofAssetCard({
+  proof,
+  note,
+  busyAction,
+  onNoteChange,
+  onUseSuggestedNote,
+  onApprove,
+  onReject
+}: {
+  proof: ProofAssetReview;
+  note: string;
+  busyAction: string | null;
+  onNoteChange: (value: string) => void;
+  onUseSuggestedNote: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const canReview = proof.status === "submitted";
+  const canReject = canReview && note.trim().length >= MIN_REJECT_NOTE_LENGTH;
+  const approveActionKey = `approve-proof-${proof.proof_id}`;
+  const rejectActionKey = `reject-proof-${proof.proof_id}`;
+
+  return (
+    <article className="seller-review-card">
+      <CardHeader
+        icon={<ImageIcon size={16} />}
+        eyebrow="Proof upload"
+        title={proof.title}
+        subtitle={`${proof.seller_name} | ${proof.product_title}`}
+        status={proof.status}
+        prescreen={proof.prescreen}
+      />
+
+      <ReviewFoldout title="Proof details" subtitle={`${labelize(proof.attribute)} | ${labelize(proof.proof_type)}`} defaultOpen={canReview} resetKey={proof.proof_id}>
+        <div className="seller-media-detail">
+          {isRenderableImage(proof.asset_url) ? (
+            <img src={proof.asset_url} alt={proof.title} />
+          ) : (
+            <div className="seller-file-preview">
+              <FileText size={18} />
+              <span>{proof.asset_url || "File reference"}</span>
+            </div>
+          )}
+          <div className="seller-proof-copy">
+            <p>{proof.description}</p>
+            {isRenderableImage(proof.product_image_url) && (
+              <div className="seller-product-reference">
+                <img src={proof.product_image_url ?? ""} alt={proof.product_title} />
+                <span>{proof.product_title}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DetailGrid>
+          <DetailTile label="Attribute" value={labelize(proof.attribute)} />
+          <DetailTile label="Proof type" value={labelize(proof.proof_type)} />
+          <DetailTile label="Buyer asks" value={proof.open_request_count} />
+          <DetailTile label="Product id" value={proof.product_id} />
+          <DetailTile label="Submitted" value={formatDate(proof.submitted_at ?? proof.created_at)} />
+          <DetailTile label="Reviewed" value={formatDate(proof.reviewed_at)} />
+        </DetailGrid>
+      </ReviewFoldout>
+
+      <PrescreenBox prescreen={proof.prescreen} />
+
+      <NoteEditor note={note} onNoteChange={onNoteChange} onUseSuggestedNote={onUseSuggestedNote} />
+
+      <ActionRow>
+        <button className="seller-primary-action" type="button" disabled={!canReview || busyAction === approveActionKey} onClick={onApprove}>
+          <CheckCircle2 size={14} />
+          Approve proof
+        </button>
+        <button className="seller-danger-action" type="button" disabled={!canReject || busyAction === rejectActionKey} onClick={onReject}>
+          <XCircle size={14} />
+          Reject proof
+        </button>
+      </ActionRow>
+
+      {!canReview && <ActionHint text={`Proof is already ${labelize(proof.status)}.`} />}
+      {canReview && note.trim().length < MIN_REJECT_NOTE_LENGTH && <ActionHint text="Rejection needs a clear seller-facing note." />}
+    </article>
+  );
+}
+
+function SellerReportButton({
+  seller,
+  laneLabel,
+  selected,
+  onSelect
+}: {
+  seller: AdminSellerDossier;
+  laneLabel: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const hasAction = seller.open_review_items > 0 || seller.pending_documents.length > 0;
+  return (
+    <button className={`seller-report-button ${selected ? "selected" : ""}`} type="button" onClick={onSelect}>
+      <div className="seller-report-button-top">
+        <div>
+          <strong>{seller.seller_name}</strong>
+          <span>{seller.seller_id}</span>
+        </div>
+        <StatusPill value={seller.verification_status} />
+      </div>
+      <p>{hasAction ? seller.next_action : "No action needed"}</p>
+      <div className="seller-report-button-metrics">
+        <span>{laneLabel}</span>
+        {seller.open_review_items > 0 && <span>{seller.open_review_items} open</span>}
+        {seller.pending_documents.length > 0 && <span>{seller.pending_documents.length} docs</span>}
+        {seller.submitted_draft_count > 0 && <span>{seller.submitted_draft_count} drafts</span>}
+        {seller.submitted_proof_count > 0 && <span>{seller.submitted_proof_count} proofs</span>}
+      </div>
+    </button>
+  );
+}
+
+function ReportSection({
+  icon,
+  title,
+  subtitle,
+  count,
+  children
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="seller-report-section">
+      <SectionHeader icon={icon} title={title} subtitle={subtitle} count={count} />
+      <div className="seller-review-stack">{children}</div>
+    </section>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+  count
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  count: number;
+}) {
+  return (
+    <div className="seller-section-header">
+      <div className="seller-section-icon">{icon}</div>
+      <div>
+        <h3>{title}</h3>
+        <p>{subtitle}</p>
+      </div>
+      <span>{count}</span>
+    </div>
+  );
+}
+
+function CardHeader({
+  icon,
+  eyebrow,
+  title,
+  subtitle,
+  status,
+  prescreen
+}: {
+  icon: ReactNode;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  prescreen: AdminPrescreenSuggestion;
+}) {
+  return (
+    <div className="seller-card-header">
+      <div className="seller-card-icon">{icon}</div>
+      <div className="seller-card-title">
+        <span>{eyebrow}</span>
+        <h4>{title}</h4>
+        <p>{subtitle}</p>
+      </div>
+      <div className="seller-card-badges">
+        <StatusPill value={status} />
+        <RiskPill level={prescreen.risk_level} score={prescreen.risk_score} />
+      </div>
+    </div>
+  );
+}
+
+function ReviewFoldout({
+  title,
+  subtitle,
+  count,
+  defaultOpen = false,
+  resetKey,
+  children
+}: {
+  title: string;
+  subtitle?: string;
+  count?: ReactNode;
+  defaultOpen?: boolean;
+  resetKey?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen, resetKey]);
+
+  return (
+    <section className={`seller-review-foldout ${open ? "open" : ""}`}>
+      <button className="seller-review-foldout-toggle" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <ChevronDown size={16} className="seller-foldout-chevron" />
+        <div>
+          <strong>{title}</strong>
+          {subtitle && <span>{subtitle}</span>}
+        </div>
+        {count && <em>{count}</em>}
+      </button>
+      {open && <div className="seller-review-foldout-body">{children}</div>}
+    </section>
+  );
+}
+
+function PrescreenBox({ prescreen }: { prescreen: AdminPrescreenSuggestion }) {
+  const issueCount = prescreen.checks.filter((check) => check.status !== "pass").length;
+  const summary = issueCount
+    ? `${issueCount} issue${issueCount === 1 ? "" : "s"} found`
+    : "Checks passed";
+
+  return (
+    <ReviewFoldout
+      title="Validation checks"
+      subtitle={summary}
+      count={<ProviderPill provider={prescreen.agent_provider} />}
+      defaultOpen={issueCount > 0 || prescreen.risk_level !== "low"}
+      resetKey={prescreen.queue_item_id}
+    >
+      <div className="seller-prescreen-box">
+        <div className="seller-prescreen-head">
+          <div>
+            <span>Suggested action</span>
+            <strong>{prescreen.act}</strong>
+          </div>
+        </div>
+        <p>{prescreen.reason}</p>
+        <div className="seller-check-list">
+          {prescreen.checks.slice(0, 5).map((check) => (
+            <div className={`seller-check-row ${check.status}`} key={`${check.label}-${check.detail}`}>
+              {check.status === "pass" ? <CheckCircle2 size={15} /> : check.status === "warn" ? <AlertTriangle size={15} /> : <XCircle size={15} />}
+              <div>
+                <strong>{check.label}</strong>
+                <span>{check.detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ReviewFoldout>
+  );
+}
+
+function DecisionBrief({
+  prescreen,
+  readyForReview
+}: {
+  prescreen: AdminPrescreenSuggestion;
+  readyForReview: boolean;
+}) {
+  const failedChecks = prescreen.checks.filter((check) => check.status === "fail");
+  const warningChecks = prescreen.checks.filter((check) => check.status === "warn");
+  const passedChecks = prescreen.checks.filter((check) => check.status === "pass").length;
+  const totalChecks = prescreen.checks.length;
+  const issue = failedChecks[0] ?? warningChecks[0] ?? null;
+  const tone = decisionBriefTone(prescreen, failedChecks.length, warningChecks.length);
+  const providerLabel = providerText(prescreen.agent_provider);
+
+  return (
+    <section className={`seller-decision-brief ${tone}`} aria-label="Review decision brief">
+      <div className="seller-decision-brief-main">
+        <span>{providerLabel}</span>
+        <h4>{decisionBriefHeadline(prescreen, readyForReview, failedChecks.length)}</h4>
+        <p>{prescreen.act}</p>
+      </div>
+
+      <div className="seller-decision-brief-grid">
+        <DecisionBriefMetric label="Suggestion" value={decisionActionLabel(prescreen.suggested_action)} />
+        <DecisionBriefMetric label="Confidence" value={labelize(prescreen.confidence)} />
+        <DecisionBriefMetric label="Checks" value={`${passedChecks}/${totalChecks || 0} passed`} />
+        <DecisionBriefMetric label="Route" value={prescreen.route_to === "senior_reviewer" ? "Senior review" : "Standard"} />
+      </div>
+
+      <div className="seller-decision-brief-note">
+        {issue ? (
+          <>
+            <AlertTriangle size={15} />
+            <span>{issue.label}: {issue.detail}</span>
+          </>
+        ) : (
+          <>
+            <CheckCircle2 size={15} />
+            <span>No blocking validation issue found. Human approval is still required.</span>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DecisionBriefMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function decisionBriefTone(prescreen: AdminPrescreenSuggestion, failedCount: number, warningCount: number) {
+  if (prescreen.route_to === "senior_reviewer" || prescreen.risk_level === "high" || failedCount > 0) return "hold";
+  if (warningCount > 0 || prescreen.confidence !== "high") return "review";
+  return "fast";
+}
+
+function decisionBriefHeadline(prescreen: AdminPrescreenSuggestion, readyForReview: boolean, failedCount: number) {
+  if (!readyForReview) return "Already handled";
+  if (prescreen.route_to === "senior_reviewer") return "Needs senior reviewer";
+  if (failedCount > 0) return "Do not approve yet";
+  if (prescreen.confidence === "high" && prescreen.risk_level === "low") return "Fast review candidate";
+  return "Human check needed";
+}
+
+function decisionActionLabel(action: AdminPrescreenSuggestion["suggested_action"]) {
+  const labels: Record<AdminPrescreenSuggestion["suggested_action"], string> = {
+    approve: "Approve seller",
+    reject: "Reject seller",
+    approve_document: "Approve document",
+    reject_document: "Reject document",
+    publish: "Publish draft",
+    request_revision: "Request fixes",
+    manual_check: "Manual check"
+  };
+  return labels[action];
+}
+
+function providerText(provider: AdminPrescreenSuggestion["agent_provider"]) {
+  if (provider === "gemini") return "Gemini pre-check";
+  if (provider === "fallback_after_llm_error") return "Rules fallback";
+  return "Rules pre-check";
+}
+
+function NoteEditor({
+  note,
+  onNoteChange,
+  onUseSuggestedNote
+}: {
+  note: string;
+  onNoteChange: (value: string) => void;
+  onUseSuggestedNote: () => void;
+}) {
+  return (
+    <div className="seller-note-editor">
+      <div>
+        <span>Audit note</span>
+        <button type="button" onClick={onUseSuggestedNote}>
+          Use suggested note
+        </button>
+      </div>
+      <textarea
+        value={note}
+        onChange={(event) => onNoteChange(event.target.value)}
+        placeholder="Write what the seller or audit team needs to know"
+        rows={3}
+      />
+    </div>
+  );
+}
+
+function ActionRow({ children }: { children: ReactNode }) {
+  return <div className="seller-action-row">{children}</div>;
+}
+
+function ActionHint({ text }: { text: string }) {
+  return <small className="seller-action-hint">{text}</small>;
+}
+
+function BlockerNotice({ text }: { text: string }) {
+  return (
+    <div className="seller-blocker-notice">
+      <AlertTriangle size={15} />
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function DetailGrid({ children }: { children: ReactNode }) {
+  return <div className="seller-detail-grid">{children}</div>;
+}
+
+function DetailTile({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="seller-detail-tile">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function AuditRow({ event }: { event: AdminAuditEvent }) {
+  return (
+    <article className="seller-audit-row">
+      <div>
+        <strong>{labelize(event.action)}</strong>
+        <span>
+          {event.actor_name} | {labelize(event.target_type)} {event.target_id}
+        </span>
+      </div>
+      <StatusPill value={event.decision} />
+      <p>{event.notes || "No note recorded."}</p>
+      <small>{formatDate(event.created_at)}</small>
+    </article>
+  );
+}
+
+function StatusPill({ value }: { value: string }) {
+  return <span className={`review-status-pill ${statusTone(value)}`}>{labelize(value)}</span>;
+}
+
+function RiskPill({
+  level,
+  score
+}: {
+  level: AdminPrescreenSuggestion["risk_level"];
+  score: number;
+}) {
+  return <span className={`review-risk-pill ${level}`}>{level} risk | {score}</span>;
+}
+
+function SlaPill({ value, ageHours }: { value: string; ageHours: number }) {
+  return (
+    <span className={`review-sla-pill ${value}`}>
+      {labelize(value)} | {Math.round(ageHours)}h
+    </span>
+  );
+}
+
+function ProviderPill({ provider }: { provider: AdminPrescreenSuggestion["agent_provider"] }) {
+  const label = provider === "gemini" ? "Gemini checks" : provider === "fallback_after_llm_error" ? "Rules fallback" : "Rule checks";
+  return <span className={`review-provider-pill ${provider === "gemini" ? "gemini" : ""}`}>{label}</span>;
+}
+
+function adminTabIcon(tab: AdminTab) {
+  if (tab === "reports") return <ShieldCheck size={14} />;
+  if (tab === "uploads") return <FileCheck2 size={14} />;
+  if (tab === "drafts") return <Store size={14} />;
+  return <ClipboardCheck size={14} />;
+}
+
+function ItemTypeIcon({ itemType }: { itemType: AdminPrescreenSuggestion["item_type"] }) {
+  const icons: Record<AdminPrescreenSuggestion["item_type"], ReactNode> = {
+    seller_application: <ShieldCheck size={15} />,
+    verification_document: <FileCheck2 size={15} />,
+    listing_draft: <Store size={15} />,
+    proof_asset: <ImageIcon size={15} />
+  };
+  return <span className={`seller-item-type ${itemType}`}>{icons[itemType]}</span>;
+}
+
+function EmptyPanel({ message, compact = false }: { message: string; compact?: boolean }) {
+  return <div className={`seller-empty-panel ${compact ? "compact" : ""}`}>{message}</div>;
+}
+
+function draftReviewSignal(draft: ListingDraftReview, checkLabel: string) {
+  const failed = draft.prescreen.checks.filter((check) => check.status === "fail").length;
+  const warnings = draft.prescreen.checks.filter((check) => check.status === "warn").length;
+  if (draft.status === "needs_revision") {
+    return failed
+      ? `Revision requested: ${failed} failed check${failed === 1 ? "" : "s"}`
+      : "Waiting for seller revision";
+  }
+  if (draft.status === "draft") return "Seller has not submitted this draft";
+  if (draft.status !== "submitted") return `Current state: ${labelize(draft.status)}`;
+  if (draft.verification_status !== "verified") return "Seller verification blocks publish";
+  if (failed) return `${failed} failed validation check${failed === 1 ? "" : "s"}`;
+  if (warnings) return `${warnings} warning${warnings === 1 ? "" : "s"} before publish`;
+  return checkLabel;
+}
+
+function adminTabFromPath(pathname: string): AdminTab {
+  if (pathname.startsWith("/admin/uploads")) return "uploads";
+  if (pathname.startsWith("/admin/drafts")) return "drafts";
+  if (pathname.startsWith("/admin/audit")) return "audit";
+  return "reports";
+}
+
+function adminModeFromPath(pathname: string): AdminMode {
+  if (pathname.startsWith("/admin/agent")) return "agent";
+  if (pathname.startsWith("/admin/policy")) return "policy";
+  if (pathname.startsWith("/admin/impact")) return "impact";
+  return "command";
+}
+
+function adminPathForTab(tab: AdminTab) {
+  if (tab === "uploads") return "/admin/uploads";
+  if (tab === "drafts") return "/admin/drafts";
+  if (tab === "audit") return "/admin/audit";
+  return "/admin";
+}
+
+function buildSellerLanes(queue: AdminReviewQueue): SellerLane[] {
+  const lanes: Array<{ id: SellerLaneId; label: string }> = [
+    { id: "needs_decision", label: "Review now" },
+    { id: "docs_blocked", label: "Docs blocker" },
+    { id: "products", label: "Products" },
+    { id: "proofs", label: "Proofs" }
+  ];
+  return lanes.map((lane) => ({
+    ...lane,
+    count: queue.seller_dossiers.filter((seller) => sellerMatchesLane(queue, seller, lane.id)).length
+  }));
+}
+
+function sellerMatchesLane(queue: AdminReviewQueue, seller: AdminSellerDossier, lane: SellerLaneId) {
+  const hasReadyDocuments = queue.documents.some(
+    (document) => document.seller_id === seller.seller_id && ["submitted", "under_review"].includes(document.status)
+  );
+  const hasSubmittedDrafts = queue.listing_drafts.some(
+    (draft) => draft.seller_id === seller.seller_id && draft.status === "submitted"
+  );
+  const hasSubmittedProofs = queue.proof_assets.some(
+    (proof) => proof.seller_id === seller.seller_id && proof.status === "submitted"
+  );
+  if (lane === "needs_decision") return seller.open_review_items > 0 || seller.pending_documents.length > 0;
+  if (lane === "docs_blocked") return seller.pending_documents.length > 0 || hasReadyDocuments;
+  if (lane === "products") return seller.submitted_draft_count > 0 || hasSubmittedDrafts;
+  if (lane === "proofs") return seller.submitted_proof_count > 0 || seller.buyer_requests_waiting > 0 || hasSubmittedProofs;
+  return seller.open_review_items === 0 && seller.pending_documents.length === 0;
+}
+
+function sellerLaneLabel(queue: AdminReviewQueue, seller: AdminSellerDossier) {
+  if (sellerMatchesLane(queue, seller, "docs_blocked")) return "Docs blocker";
+  if (sellerMatchesLane(queue, seller, "products")) return "Products";
+  if (sellerMatchesLane(queue, seller, "proofs")) return "Proofs";
+  if (sellerMatchesLane(queue, seller, "needs_decision")) return "Review now";
+  return "Done";
+}
+
+function buildSellerPacketItems(report: SellerReport): SellerPacketItem[] {
+  const applications: SellerPacketItem[] = report.applications.map((application) => ({
+    id: `application-${application.application_id}`,
+    kind: "application",
+    title: application.business_name,
+    subtitle: `${application.gst_number} | ${application.support_contact}`,
+    status: application.status,
+    group: "Seller identity",
+    readyForReview: application.status === "pending_review" && report.seller.pending_documents.length === 0,
+    prescreen: application.prescreen,
+    item: application
+  }));
+
+  const documents: SellerPacketItem[] = report.documents.map((document) => ({
+    id: `document-${document.document_id}`,
+    kind: "document",
+    title: labelize(document.document_type),
+    subtitle: `${document.reference} | ${document.file_name}`,
+    status: document.status,
+    group: "Documents",
+    readyForReview: document.status === "submitted" || document.status === "under_review",
+    prescreen: document.prescreen,
+    item: document
+  }));
+
+  const drafts: SellerPacketItem[] = report.drafts.map((draft) => ({
+    id: `draft-${draft.draft_id}`,
+    kind: "draft",
+    title: draft.title,
+    subtitle: `${labelize(draft.category)} | ${formatPrice(draft.base_price)}`,
+    status: draft.status,
+    group: "Product drafts",
+    readyForReview: draft.status === "submitted",
+    prescreen: draft.prescreen,
+    item: draft
+  }));
+
+  const proofs: SellerPacketItem[] = report.proofs.map((proof) => ({
+    id: `proof-${proof.proof_id}`,
+    kind: "proof",
+    title: proof.title,
+    subtitle: `${proof.product_title} | ${labelize(proof.attribute)}`,
+    status: proof.status,
+    group: "Proof uploads",
+    readyForReview: proof.status === "submitted",
+    prescreen: proof.prescreen,
+    item: proof
+  }));
+
+  return sortByReviewState([...applications, ...documents, ...drafts, ...proofs]);
+}
+
+function buildPacketGroups(items: SellerPacketItem[]) {
+  return ["Seller identity", "Documents", "Product drafts", "Proof uploads"]
+    .map((group) => ({ group, items: items.filter((item) => item.group === group) }))
+    .filter((group) => group.items.length > 0);
+}
+
+function packetKindToItemType(kind: PacketItemKind): AdminPrescreenSuggestion["item_type"] {
+  if (kind === "application") return "seller_application";
+  if (kind === "document") return "verification_document";
+  if (kind === "draft") return "listing_draft";
+  return "proof_asset";
+}
+
+function buildUploadRows(queue: AdminReviewQueue): UploadQueueRow[] {
+  const documentRows: UploadQueueRow[] = queue.documents.map((document) => ({
+    id: `document-${document.document_id}`,
+    kind: "document",
+    title: labelize(document.document_type),
+    subtitle: `${document.reference} | ${document.file_name}`,
+    sellerName: document.seller_name,
+    status: document.status,
+    submittedAt: document.submitted_at,
+    readyForReview: document.status === "submitted" || document.status === "under_review",
+    prescreen: document.prescreen,
+    searchText: [
+      document.seller_name,
+      document.seller_id,
+      document.document_type,
+      document.reference,
+      document.file_name,
+      document.status,
+      document.prescreen.reason
+    ].join(" ").toLowerCase(),
+    item: document
+  }));
+
+  const proofRows: UploadQueueRow[] = queue.proof_assets.map((proof) => ({
+    id: `proof-${proof.proof_id}`,
+    kind: "proof",
+    title: proof.title,
+    subtitle: `${proof.product_title} | ${labelize(proof.attribute)} ${labelize(proof.proof_type)}`,
+    sellerName: proof.seller_name,
+    status: proof.status,
+    submittedAt: proof.submitted_at ?? proof.created_at,
+    readyForReview: proof.status === "submitted",
+    prescreen: proof.prescreen,
+    searchText: [
+      proof.seller_name,
+      proof.seller_id,
+      proof.product_title,
+      proof.product_id,
+      proof.attribute,
+      proof.proof_type,
+      proof.title,
+      proof.description,
+      proof.status,
+      proof.prescreen.reason
+    ].join(" ").toLowerCase(),
+    item: proof
+  }));
+
+  return sortByReviewState([...documentRows, ...proofRows]);
+}
+
+function uploadCheckSummary(prescreen: AdminPrescreenSuggestion) {
+  const failed = prescreen.checks.filter((check) => check.status === "fail").length;
+  if (failed) return { tone: "bad", label: `${failed} failed` };
+  const warnings = prescreen.checks.filter((check) => check.status === "warn").length;
+  if (warnings) return { tone: "warn", label: `${warnings} warning${warnings === 1 ? "" : "s"}` };
+  return { tone: "good", label: "Checks passed" };
+}
+
+function collectPrescreens(queue: AdminReviewQueue) {
+  return [
+    ...queue.seller_applications.map((item) => item.prescreen),
+    ...queue.documents.map((item) => item.prescreen),
+    ...queue.listing_drafts.map((item) => item.prescreen),
+    ...queue.proof_assets.map((item) => item.prescreen)
+  ];
+}
+
+function countPrescreenChecks(prescreens: AdminPrescreenSuggestion[]) {
+  return prescreens.reduce(
+    (counts, prescreen) => {
+      prescreen.checks.forEach((check) => {
+        counts[check.status] += 1;
+      });
+      return counts;
+    },
+    { pass: 0, warn: 0, fail: 0 }
+  );
+}
+
+function buildSellerReport(queue: AdminReviewQueue, seller: AdminSellerDossier) {
+  return {
+    seller,
+    applications: sortByReviewState(queue.seller_applications.filter((item) => item.seller_id === seller.seller_id)),
+    documents: sortByReviewState(queue.documents.filter((item) => item.seller_id === seller.seller_id)),
+    drafts: sortByReviewState(queue.listing_drafts.filter((item) => item.seller_id === seller.seller_id)),
+    proofs: sortByReviewState(queue.proof_assets.filter((item) => item.seller_id === seller.seller_id))
+  };
+}
+
+function sortByReviewState<T extends { status: string; submitted_at?: string | null; submittedAt?: string | null; created_at?: string; updated_at?: string }>(items: T[]) {
+  return [...items].sort((a, b) => {
+    const stateDelta = reviewStatePriority(a.status) - reviewStatePriority(b.status);
+    if (stateDelta !== 0) return stateDelta;
+    return dateValue(b.submitted_at ?? b.submittedAt ?? b.updated_at ?? b.created_at) - dateValue(a.submitted_at ?? a.submittedAt ?? a.updated_at ?? a.created_at);
+  });
+}
+
+function reviewStatePriority(status: string) {
+  if (status === "submitted" || status === "under_review" || status === "pending_review") return 0;
+  if (status === "needs_revision" || status === "rejected" || status === "restricted") return 1;
+  if (status === "draft") return 2;
+  return 3;
+}
+
+function suggestedAuditNote(prescreen: AdminPrescreenSuggestion, fallback: string) {
+  const action = prescreen.act?.trim();
+  const reason = prescreen.reason?.trim();
+  if (action && reason) return `${action} ${reason}`;
+  return action || reason || fallback;
+}
+
+function riskLevelFromScore(score: number): AdminPrescreenSuggestion["risk_level"] {
+  if (score >= 70) return "high";
+  if (score >= 40) return "medium";
+  return "low";
+}
+
+function statusTone(value: string) {
+  if (["approved", "verified", "resolved", "published"].includes(value)) return "good";
+  if (["rejected", "restricted", "needs_revision", "fail", "breached"].includes(value)) return "bad";
+  if (["submitted", "pending_review", "under_review", "pending", "due_today"].includes(value)) return "attention";
+  return "neutral";
+}
+
+function labelize(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function formatBytes(value: number) {
+  if (!value) return "0 B";
+  if (value < 1024) return `${value} B`;
+  return `${Math.round(value / 1024)} KB`;
+}
+
+function formatPrice(value: number) {
+  return `Rs ${Math.round(value)}`;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function dateValue(value?: string | null) {
+  if (!value) return 0;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function isRenderableImage(value?: string | null) {
+  if (!value) return false;
+  return value.startsWith("data:image/") || /^https?:\/\/.+\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(value) || value.includes("images.unsplash.com");
 }
