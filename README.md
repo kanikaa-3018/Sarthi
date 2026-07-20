@@ -7,7 +7,7 @@
   </p>
 
   <p>
-    <a href="https://sarthi-kd3t1m4gr-kanikas-projects-ebdc9299.vercel.app/"><strong>Live Demo</strong></a>
+    <a href="https://sarthi-three-ebon.vercel.app/"><strong>Live Demo</strong></a>
     |
     <a href="./docs/DEMO_SCRIPT.md">Demo Script</a>
     |
@@ -43,7 +43,7 @@ When evidence is strong, Sarthi helps the buyer move forward. When evidence is w
 
 | Artifact | Link |
 | --- | --- |
-| Deployed prototype | [Open Sarthi](https://sarthi-kd3t1m4gr-kanikas-projects-ebdc9299.vercel.app/) |
+| Deployed prototype | [Open Sarthi](https://sarthi-three-ebon.vercel.app/) |
 | Demo script | [docs/DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md) |
 | Judge review guide | [docs/JUDGE_REVIEW_GUIDE.md](./docs/JUDGE_REVIEW_GUIDE.md) |
 | Architecture notes | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) |
