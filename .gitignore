@@ -18,6 +18,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+output/
 .worktrees/
 .playwright-cli/
 .runtime/
@@ -27,11 +28,14 @@ test-results/
 buyer-*.png
 payment-*.png
 proof-login-smoke.png
+safety_check_loader.png
+safety_session_loader.png
 .DS_Store
 *.log
 
 # Internal planning notes kept locally, not in the public submission repo.
 docs/PHASE_*.md
+docs/sarthi-ui-dna.md
 docs/LOOPHOLE_CLOSURE_REVIEW.md
 docs/PRODUCT_DECISION.md
 docs/REFERENCE_NOTES.md
