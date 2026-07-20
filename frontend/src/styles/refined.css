@@ -1,4 +1,4 @@
-/* Final Sarthi UI polish: compact, high-contrast, image-first commerce surfaces.
+﻿/* Final Sarthi UI polish: compact, high-contrast, image-first commerce surfaces.
    This layer uses the palette tokens from base.css. */
 
 html {
@@ -90,9 +90,10 @@ input:focus {
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   max-width: 100%;
-  overflow-x: auto;
+  overflow: visible;
   padding: 4px;
 }
 
@@ -825,7 +826,7 @@ input:focus {
   .marketplace-category-row {
     margin-inline: -2px;
     max-width: 100%;
-    overflow-x: auto;
+    overflow: visible;
     padding-bottom: 4px;
   }
 
@@ -970,7 +971,7 @@ input:focus {
   }
 
   .seller-table-wrap {
-    overflow-x: auto;
+    overflow-x: clip;
   }
 
   .trust-summary-grid,
@@ -1075,7 +1076,7 @@ button,
 
 .commerce-header-container {
   margin-inline: auto;
-  max-width: min(var(--app-shell-max), calc(100vw - (var(--app-page-gutter) * 2)));
+  max-width: min(var(--app-shell-max), calc(100% - (var(--app-page-gutter) * 2)));
   width: 100%;
 }
 
@@ -1267,7 +1268,7 @@ button,
   border: 2px solid var(--bg-surface);
   border-radius: 999px;
   bottom: -5px;
-  color: #fff;
+  color: var(--text-on-accent);
   height: 20px;
   padding: 3px;
   position: absolute;
@@ -3090,7 +3091,7 @@ button,
 .nav-proof-badge {
   align-items: center;
   border-radius: 999px;
-  color: #fff;
+  color: var(--text-on-accent);
   display: inline-flex;
   font-size: 10px;
   font-style: normal;
@@ -3917,10 +3918,11 @@ button,
   border: 1px solid var(--border-subtle) !important;
   border-radius: 12px !important;
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 3px !important;
   justify-self: center;
   max-width: 100%;
-  overflow-x: auto;
+  overflow: visible;
   padding: 4px !important;
 }
 
@@ -7245,7 +7247,7 @@ button,
   }
 
   .admin-app-route .commerce-nav {
-    overflow-x: auto !important;
+    overflow: visible !important;
   }
 
   .admin-app-route .commerce-nav button.admin-nav-item {
@@ -10262,8 +10264,9 @@ button,
 .buyer-filter-bar {
   align-items: center !important;
   display: flex !important;
+  flex-wrap: wrap !important;
   gap: 6px !important;
-  overflow-x: auto !important;
+  overflow: visible !important;
   padding-bottom: 2px !important;
   scrollbar-width: none !important;
 }
@@ -11034,7 +11037,7 @@ button,
 @media (max-width: 760px) {
   .buyer-app-route,
   .buyer-app-route .web-content-container {
-    max-width: 100vw !important;
+    max-width: 100% !important;
     min-width: 0 !important;
     overflow-x: clip !important;
   }
@@ -11081,6 +11084,14 @@ button,
     padding-inline: 3px !important;
   }
 
+  .buyer-app-route.checkout-app-route .commerce-nav {
+    display: none !important;
+  }
+
+  .buyer-app-route.checkout-app-route .web-content-container {
+    padding-bottom: 28px !important;
+  }
+
   .marketplace-top-row {
     grid-template-columns: minmax(0, 1fr) 42px !important;
   }
@@ -11098,7 +11109,7 @@ button,
   }
 
   .marketplace-category-row {
-    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%) !important;
+    mask-image: linear-gradient(to right, var(--text-primary) 0, var(--text-primary) calc(100% - 28px), transparent 100%) !important;
     padding-right: 28px !important;
   }
 
@@ -11169,7 +11180,7 @@ button,
   .bottom-sheet-content.compare-sheet-content,
   .bottom-sheet-content.audit-sheet-content {
     left: 9px !important;
-    max-width: calc(100vw - 18px) !important;
+    max-width: calc(100% - 18px) !important;
     right: 9px !important;
     width: auto !important;
   }
@@ -11281,12 +11292,13 @@ button,
   .orders-learning-strip {
     align-items: center !important;
     flex-direction: row !important;
+    flex-wrap: wrap !important;
     gap: 12px !important;
-    overflow-x: auto !important;
+    overflow: visible !important;
   }
 
   .orders-learning-strip span {
-    flex: 0 0 auto !important;
+    flex: 1 1 130px !important;
   }
 
   .proof-ledger-shell .buyer-workspace-header h2 {

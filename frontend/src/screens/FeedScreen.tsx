@@ -81,6 +81,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
   const [wishlistedProduct, setWishlistedProduct] = useState<Product | null>(null);
+  const [savedProductIds, setSavedProductIds] = useState<Set<string>>(() => new Set());
   const [activeFitProfile, setActiveFitProfile] = useState<FitProfile | null>(null);
   const [wishlistRadar, setWishlistRadar] = useState<WishlistRadarEvent | null>(null);
   const [radarLoading, setRadarLoading] = useState(false);
@@ -150,6 +151,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setAuditTraceId(null);
     setAutoScan({ status: "idle" });
     setWishlistedProduct(null);
+    setSavedProductIds(new Set());
     setActiveFitProfile(null);
     setWishlistRadar(null);
     setRadarLoading(false);
@@ -168,8 +170,8 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setError(null);
     setStep(shopRouteMode(window.location.pathname));
     
-    Promise.allSettled([getFeed(buyerId), getFitProfiles(buyerId)])
-      .then(([feedOutcome, profileOutcome]) => {
+    Promise.allSettled([getFeed(buyerId), getFitProfiles(buyerId), getBuyerWishlist(buyerId)])
+      .then(([feedOutcome, profileOutcome, wishlistOutcome]) => {
         if (feedOutcome.status === "fulfilled") {
           setProducts(feedOutcome.value.products);
         } else {
@@ -177,6 +179,9 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         }
         if (profileOutcome.status === "fulfilled") {
           setActiveFitProfile(profileOutcome.value.active_profile);
+        }
+        if (wishlistOutcome.status === "fulfilled") {
+          setSavedProductIds(new Set(wishlistOutcome.value.items.map((item) => item.intent.product_id)));
         }
       })
       .catch((err: Error) => setError(err.message));
@@ -245,10 +250,20 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     navigate(`/shop/product/${encodeURIComponent(prodId)}${varId ? `?variant=${encodeURIComponent(varId)}` : ""}`);
   }
 
+  function markProductSaved(productId: string) {
+    setSavedProductIds((current) => {
+      if (current.has(productId)) return current;
+      const next = new Set(current);
+      next.add(productId);
+      return next;
+    });
+  }
+
   async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean; openCompare?: boolean } = {}) {
     if (options.syncRoute === true) {
       navigate(`/shop/saved/${encodeURIComponent(product.product_id)}`);
     }
+    markProductSaved(product.product_id);
     setWishlistedProduct(product);
     setSelectedClusterId(product.cluster_id);
     setKnowledgeGraph(null);
@@ -365,9 +380,23 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
   }
 
-  async function handleSaveToWishlist(product: Product) {
-    await handleWishlistProduct(product);
-    navigate("/shop/wishlist");
+  function handleSaveToWishlist(product: Product) {
+    if (savedProductIds.has(product.product_id)) return;
+    setError(null);
+    markProductSaved(product.product_id);
+    createWishlistIntent({
+      buyer_id: buyerId,
+      product_id: product.product_id,
+      profile_id: activeFitProfile?.profile_id,
+      create_seller_signal: false
+    }).catch((err: Error) => {
+      setSavedProductIds((current) => {
+        const next = new Set(current);
+        next.delete(product.product_id);
+        return next;
+      });
+      setError(err.message || "Could not save this item.");
+    });
   }
 
   async function handleOpenProofForProduct(product: Product) {
@@ -478,6 +507,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         <MarketplaceHome
           products={visibleProducts}
           allProducts={products}
+          savedProductIds={savedProductIds}
           categories={categories}
           selectedCategory={selectedCategory}
           onCategoryChange={setSelectedCategory}
@@ -2187,6 +2217,7 @@ function orderStatusTone(order: BuyerOrderItem) {
 function MarketplaceHome({
   products,
   allProducts,
+  savedProductIds,
   categories,
   selectedCategory,
   onCategoryChange,
@@ -2203,6 +2234,7 @@ function MarketplaceHome({
 }: {
   products: Product[];
   allProducts: Product[];
+  savedProductIds: Set<string>;
   categories: string[];
   selectedCategory: string;
   onCategoryChange: (category: string) => void;
@@ -2339,7 +2371,7 @@ function MarketplaceHome({
       {products.length > 0 && (
         <div className="web-product-grid">
           {pagedProducts.map((p) => {
-            const isSaved = wishlistedProduct?.product_id === p.product_id;
+            const isSaved = savedProductIds.has(p.product_id) || wishlistedProduct?.product_id === p.product_id;
             const trustBadge = productTrustBadge(p, isSaved, allProducts, language);
             return (
               <article

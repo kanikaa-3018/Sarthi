@@ -1,3 +1,4 @@
+import type { SyntheticEvent } from "react";
 import { SarthiMark } from "../components/SarthiMark";
 
 type Props = {
@@ -13,6 +14,19 @@ const catalogImages = {
   cottonTop: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=84",
   saree: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=900&q=84"
 };
+
+const catalogFallbacks = {
+  blueKurti: "/product-blue.svg",
+  pinkKurti: "/product-pink.svg",
+  maroonSet: "/product-maroon.svg",
+  cottonTop: "/product-blue.svg",
+  saree: "/product-maroon.svg"
+};
+
+function useFallbackImage(event: SyntheticEvent<HTMLImageElement>, fallback: string) {
+  if (event.currentTarget.src.endsWith(fallback)) return;
+  event.currentTarget.src = fallback;
+}
 
 export function LandingPage({ theme, onStartDemo, onToggleTheme }: Props) {
   return (
@@ -62,7 +76,7 @@ export function LandingPage({ theme, onStartDemo, onToggleTheme }: Props) {
 
           <div className="landing-hero-product" aria-label="A Sarthi product decision preview">
             <div className="landing-hero-photo-wrap">
-              <img src={catalogImages.blueKurti} alt="Blue floral cotton kurti from the Sarthi catalog" />
+              <img src={catalogImages.blueKurti} alt="Blue floral cotton kurti from the Sarthi catalog" onError={(event) => useFallbackImage(event, catalogFallbacks.blueKurti)} />
               <span className="landing-photo-label">Catalog choice</span>
             </div>
             <div className="landing-product-summary">
@@ -93,16 +107,16 @@ export function LandingPage({ theme, onStartDemo, onToggleTheme }: Props) {
 
           <div className="landing-catalog-strip">
             <article className="landing-catalog-card">
-              <img src={catalogImages.pinkKurti} alt="Pink printed straight kurti" />
+              <img src={catalogImages.pinkKurti} alt="Pink printed straight kurti" onError={(event) => useFallbackImage(event, catalogFallbacks.pinkKurti)} />
               <div><span>₹379</span><strong>Lowest price</strong><small>Proof still needs checking</small></div>
             </article>
             <article className="landing-catalog-card featured">
               <span className="landing-choice-badge">Best-supported choice</span>
-              <img src={catalogImages.maroonSet} alt="Maroon festive kurta set" />
+              <img src={catalogImages.maroonSet} alt="Maroon festive kurta set" onError={(event) => useFallbackImage(event, catalogFallbacks.maroonSet)} />
               <div><span>₹699</span><strong>More useful evidence</strong><small>Fit, seller, and proof in one view</small></div>
             </article>
             <article className="landing-catalog-card">
-              <img src={catalogImages.cottonTop} alt="Solid cotton daily top" />
+              <img src={catalogImages.cottonTop} alt="Solid cotton daily top" onError={(event) => useFallbackImage(event, catalogFallbacks.cottonTop)} />
               <div><span>₹329</span><strong>Fast delivery</strong><small>Check whether the variant fits</small></div>
             </article>
           </div>
@@ -194,7 +208,7 @@ export function LandingPage({ theme, onStartDemo, onToggleTheme }: Props) {
 
         <section className="landing-seller-bridge" id="for-sellers">
           <div className="landing-seller-image">
-            <img src={catalogImages.saree} alt="Printed summer saree from a seller catalog" />
+            <img src={catalogImages.saree} alt="Printed summer saree from a seller catalog" onError={(event) => useFallbackImage(event, catalogFallbacks.saree)} />
           </div>
           <div>
             <p className="landing-kicker">For responsible sellers</p>
