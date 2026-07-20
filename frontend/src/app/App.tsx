@@ -33,7 +33,7 @@ const SELLER_NAV_COPY: Record<LanguageCode, { console: string; proofs: string; c
   english: {
     console: "Seller console",
     proofs: "Proof center",
-    coach: "Trust coach"
+    coach: "Market compare"
   },
   hindi: {
     console: "सेलर कंसोल",
@@ -43,7 +43,7 @@ const SELLER_NAV_COPY: Record<LanguageCode, { console: string; proofs: string; c
   hinglish: {
     console: "Seller ka console",
     proofs: "Proof center",
-    coach: "Trust coach"
+    coach: "Market compare"
   }
 };
 
@@ -325,6 +325,7 @@ export function App() {
                     <button
                       type="button"
                       className={
+                        sellerNavActive("/seller/market") ||
                         sellerNavActive("/seller/trust-coach") ||
                         sellerNavActive("/seller/copilot") ||
                         sellerNavActive("/seller/autopilot") ||
@@ -333,7 +334,7 @@ export function App() {
                           ? "active"
                           : ""
                       }
-                      onClick={() => navigate("/seller/trust-coach")}
+                      onClick={() => navigate("/seller/market")}
                     >
                       <span>{sellerNavCopy.coach}</span>
                     </button>

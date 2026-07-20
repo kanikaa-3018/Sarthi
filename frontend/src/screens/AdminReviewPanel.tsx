@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import {
-  Bot,
   AlertTriangle,
+  Bot,
   ChevronDown,
   CheckCircle2,
   Cpu,
@@ -11,15 +11,12 @@ import {
   ClipboardCheck,
   Image as ImageIcon,
   FileText,
-  Play,
   Search,
   RefreshCcw,
-  Sliders,
   Send,
   ShieldCheck,
   Sparkles,
   Store,
-  Terminal,
   XCircle
 } from "lucide-react";
 import {
@@ -44,7 +41,7 @@ import type {
   AdminSellerDossier
 } from "../types/api";
 type AdminTab = "reports" | "uploads" | "drafts" | "audit";
-type AdminMode = "command" | "agent" | "policy" | "impact" | "swarm-sandbox" | "policy-compiler";
+type AdminMode = "command" | "agent" | "policy" | "impact";
 
 type SellerApplicationReview = AdminReviewQueue["seller_applications"][number];
 type VerificationDocumentReview = AdminReviewQueue["documents"][number];
@@ -161,7 +158,7 @@ const ADMIN_MODE_META: Record<Exclude<AdminMode, "command">, { kicker: string; t
   agent: {
     kicker: "AI triage",
     title: "AI Triage",
-    description: "Gemini ranks the work, explains why, and keeps final decisions with the reviewer."
+    description: "Prescreens rank the work, explain why, and keep final decisions with the reviewer."
   },
   policy: {
     kicker: "Risk and policy",
@@ -173,16 +170,6 @@ const ADMIN_MODE_META: Record<Exclude<AdminMode, "command">, { kicker: string; t
     title: "Work Saved",
     description: "See how much reading is reduced by prescreens, grouping, and suggested notes."
   },
-  "swarm-sandbox": {
-    kicker: "Compliance Swarm",
-    title: "Automated Audits",
-    description: "Live background crawlers running real-time compliance audits."
-  },
-  "policy-compiler": {
-    kicker: "Rules Compiler",
-    title: "Compliance Policies",
-    description: "Configure automated checks and rules applied dynamically to queues."
-  }
 };
 type NotesById = Record<string, string>;
 
@@ -429,8 +416,6 @@ export function AdminReviewPanel() {
           )}
           {activeMode === "policy" && <PolicyBrainView queue={queue} />}
           {activeMode === "impact" && <ImpactView queue={queue} />}
-          {activeMode === "swarm-sandbox" && <SwarmSandboxView />}
-          {activeMode === "policy-compiler" && <PolicyCompilerView />}
         </>
       ) : (
         <EmptyPanel message="Loading seller reports..." />
@@ -2683,10 +2668,8 @@ function adminTabFromPath(pathname: string): AdminTab {
 
 function adminModeFromPath(pathname: string): AdminMode {
   if (pathname.startsWith("/admin/agent")) return "agent";
-  if (pathname.startsWith("/admin/policy-compiler")) return "policy-compiler";
   if (pathname.startsWith("/admin/policy")) return "policy";
   if (pathname.startsWith("/admin/impact")) return "impact";
-  if (pathname.startsWith("/admin/swarm-sandbox")) return "swarm-sandbox";
   return "command";
 }
 
@@ -2960,216 +2943,4 @@ function dateValue(value?: string | null) {
 function isRenderableImage(value?: string | null) {
   if (!value) return false;
   return value.startsWith("data:image/") || /^https?:\/\/.+\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(value) || value.includes("images.unsplash.com");
-}
-
-function SwarmSandboxView() {
-  const [logs, setLogs] = useState<any[]>([
-    { id: "TX-401", seller: "Rahul Silks", type: "GSTIN Check", status: "passed", risk: "0.01", time: "17:46:01" },
-    { id: "TX-402", seller: "Rahul Silks", type: "Bank Holder Match", status: "passed", risk: "0.02", time: "17:46:02" },
-    { id: "TX-403", seller: "RangSetu Styles", type: "Fabric Vision Scan", status: "passed", risk: "0.06", time: "17:46:03" },
-    { id: "TX-404", seller: "Gopal Tex", type: "Courier Route Verification", status: "passed", risk: "0.04", time: "17:46:04" }
-  ]);
-  const [isRunning, setIsRunning] = useState(false);
-
-  useEffect(() => {
-    const templates = [
-      () => ({ id: "TX-" + Math.floor(Math.random() * 900 + 100), seller: "Rahul Silks", type: "GSTIN Check", status: "passed", risk: "0.01", time: new Date().toLocaleTimeString() }),
-      () => ({ id: "TX-" + Math.floor(Math.random() * 900 + 100), seller: "RangSetu Styles", type: "Fabric Vision Scan", status: "passed", risk: "0.05", time: new Date().toLocaleTimeString() }),
-      () => ({ id: "TX-" + Math.floor(Math.random() * 900 + 100), seller: "Vyas Kurtis", type: "Pincode Logistics", status: "passed", risk: "0.03", time: new Date().toLocaleTimeString() }),
-      () => ({ id: "TX-" + Math.floor(Math.random() * 900 + 100), seller: "Karan Weaves", type: "Duplicate Image Check", status: "passed", risk: "0.02", time: new Date().toLocaleTimeString() })
-    ];
-
-    const interval = setInterval(() => {
-      const newItem = templates[Math.floor(Math.random() * templates.length)]();
-      setLogs((prev) => [...prev.slice(-9), newItem]);
-    }, 4200);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleSimulateCheck = () => {
-    setIsRunning(true);
-    setTimeout(() => {
-      setLogs((prev) => [
-        ...prev,
-        { id: "TX-" + Math.floor(Math.random() * 900 + 100), seller: "System Audit", type: "Batch Queue Scan", status: "passed", risk: "0.00", time: new Date().toLocaleTimeString() }
-      ]);
-      setIsRunning(false);
-    }, 1500);
-  };
-
-  return (
-    <div className="swarm-sandbox-container">
-      <div className="sandbox-panel-row">
-        <div className="sandbox-card swarm-nodes-deck">
-          <h4>
-            <Cpu size={16} />
-            Background Crawler Nodes
-          </h4>
-          <p className="description">Active compliance monitoring nodes verifying seller evidence streams.</p>
-          <div className="node-status-list">
-            <div className="node-status-row">
-              <span className="node-name">Registry Verifier Node</span>
-              <span className="node-state active-node">Operational</span>
-            </div>
-            <div className="node-status-row">
-              <span className="node-name">Vision OCR Classifier</span>
-              <span className="node-state active-node">Operational</span>
-            </div>
-            <div className="node-status-row">
-              <span className="node-name">Logistics Router</span>
-              <span className="node-state idle-node">Standby</span>
-            </div>
-            <div className="node-status-row">
-              <span className="node-name">Duplicity Scanner</span>
-              <span className="node-state active-node">Operational</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="sandbox-simulate-btn"
-            onClick={handleSimulateCheck}
-            disabled={isRunning}
-          >
-            {isRunning ? <RefreshCcw size={13} className="spin-icon" /> : <Play size={13} />}
-            Run Live System Audit
-          </button>
-        </div>
-
-        <div className="sandbox-card swarm-terminal-card">
-          <h4>
-            <Terminal size={16} />
-            Live Automation Decision Ledger
-          </h4>
-          <p className="description">Audit trail of autonomous verifications executed by Sarthi background agents.</p>
-          <div className="seller-table-wrap">
-            <table className="seller-health-table compact" style={{ minWidth: "100%" }}>
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>ID</th>
-                  <th>Seller</th>
-                  <th>Check Type</th>
-                  <th>Risk Score</th>
-                  <th>Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log, index) => (
-                  <tr key={index}>
-                    <td className="monospace">{log.time}</td>
-                    <td className="monospace">{log.id}</td>
-                    <td>{log.seller}</td>
-                    <td>{log.type}</td>
-                    <td className="monospace">{log.risk}</td>
-                    <td>
-                      <StatusPill value={log.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PolicyCompilerView() {
-  const [policies, setPolicies] = useState([
-    { id: "pol_1", name: "GSTIN Registry Match", desc: "Verifies matches between registered GST name and seller bank account details.", status: true },
-    { id: "pol_2", name: "Delivery Pin Validation", desc: "Checks pickup pincode logistics bounds against active delivery lanes.", status: true },
-    { id: "pol_3", name: "Vision Fabric Texture Check", desc: "Compares product draft description with seller daylight photos using vision scan.", status: true },
-    { id: "pol_4", name: "Return Threshold Auto-Routing", desc: "Escalates reviews when variant return rate is 15% higher than cohort median.", status: false }
-  ]);
-  const [compiling, setCompiling] = useState(false);
-  const [compileStatus, setCompileStatus] = useState<string | null>(null);
-
-  const handleToggle = (id: string) => {
-    setPolicies(policies.map(p => p.id === id ? { ...p, status: !p.status } : p));
-  };
-
-  const handleCompile = () => {
-    setCompiling(true);
-    setCompileStatus(null);
-    setTimeout(() => {
-      setCompiling(false);
-      setCompileStatus("Compliance policies compiled successfully. All background crawler agents updated.");
-    }, 1200);
-  };
-
-  return (
-    <div className="policy-compiler-container">
-      <div className="sandbox-card">
-        <h4>
-          <Sliders size={16} />
-          Compliance Rules Manager
-        </h4>
-        <p className="description">
-          Configure active automated rules and triggers. Toggled checks execute autonomously in the background.
-        </p>
-        <div className="compiler-split">
-          <div className="policies-active-list">
-            {policies.map(pol => (
-              <div key={pol.id} className="node-status-row" style={{ padding: "12px 0", alignItems: "flex-start" }}>
-                <div style={{ flex: 1, paddingRight: "16px" }}>
-                  <strong className="node-name" style={{ fontSize: "14px" }}>{pol.name}</strong>
-                  <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
-                    {pol.desc}
-                  </p>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span className={`node-state ${pol.status ? "active-node" : "idle-node"}`}>
-                    {pol.status ? "Enabled" : "Disabled"}
-                  </span>
-                  <button
-                    type="button"
-                    className="admin-refresh-button"
-                    style={{ padding: "4px 8px", fontSize: "11px", margin: 0 }}
-                    onClick={() => handleToggle(pol.id)}
-                  >
-                    Toggle
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="compiler-insights">
-            <h5>Compliance Profile</h5>
-            <div className="bahi-khata-table">
-              <div className="bahi-row">
-                <span className="label">Verification Engine</span>
-                <span className="value monospace">Sarthi-Verify v3.1</span>
-              </div>
-              <div className="bahi-row">
-                <span className="label">Rules Defined</span>
-                <span className="value monospace">{policies.length} directives</span>
-              </div>
-              <div className="bahi-row">
-                <span className="label">Triage Priority</span>
-                <span className="value monospace">High SLA First</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="sandbox-simulate-btn compile-btn"
-              onClick={handleCompile}
-              disabled={compiling}
-            >
-              {compiling ? <RefreshCcw size={13} className="spin-icon" /> : <ShieldCheck size={13} />}
-              Save & Apply Compliance Policies
-            </button>
-            {compileStatus && (
-              <div className="compiler-success-alert">
-                <CheckCircle2 size={15} />
-                <span>{compileStatus}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
