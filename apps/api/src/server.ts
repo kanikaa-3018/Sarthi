@@ -10,9 +10,19 @@ if (env.seedOnStart && !isProduction()) {
 
 const app = await buildApp(db);
 
-process.on("SIGINT", async () => {
-  await closeMongo();
-  process.exit(0);
-});
+async function shutdown(signal: NodeJS.Signals) {
+  app.log.info({ signal }, "Shutting down Sarthi API");
+  try {
+    await app.close();
+    await closeMongo();
+    process.exit(0);
+  } catch (error) {
+    app.log.error({ error }, "Sarthi API shutdown failed");
+    process.exit(1);
+  }
+}
+
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 await app.listen({ port: env.port, host: "0.0.0.0" });
