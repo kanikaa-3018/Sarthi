@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogOut, Sun, Moon, RefreshCcw, User, Globe } from "lucide-react";
+import { LogOut, Sun, Moon, RefreshCcw, User, Globe, ShoppingCart, Heart, PackageCheck, ClipboardCheck, Store, Cpu, Sparkles, ShieldCheck } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { clearStoredSession, getBuyerProofs, getMe, getStoredSession, logout, storeSession, resetSeed } from "../api/client";
 import { AuthScreen } from "../screens/AuthScreen";
@@ -238,6 +238,11 @@ export function App() {
     const p = location.pathname;
     return p === "/admin" || p.startsWith("/admin/uploads") || p.startsWith("/admin/drafts") || p.startsWith("/admin/audit");
   };
+  const buyerShopActive = location.pathname === "/shop" ||
+    location.pathname.startsWith("/shop/product") ||
+    location.pathname.startsWith("/shop/checkout");
+  const buyerSavedActive = location.pathname.startsWith("/shop/wishlist") ||
+    location.pathname.startsWith("/shop/saved");
 
   return (
     <div className={`web-app-container${role === "buyer" ? " buyer-app-route" : ""}${isCheckoutRoute ? " checkout-app-route" : ""}${isAdminRoute ? " admin-app-route" : ""}${isSellerRoute ? " seller-app-route" : ""}${isAuthRoute ? " auth-app-route" : ""}`}>
@@ -513,6 +518,136 @@ export function App() {
           <Route path="*" element={<RoleRedirect session={session} />} />
         </Routes>
       </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      {session && (
+        <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+          {role === "buyer" && (
+            <>
+              <button
+                type="button"
+                className={buyerShopActive ? "active" : ""}
+                onClick={() => navigate("/shop")}
+              >
+                <ShoppingCart size={18} />
+                <span>{t(language, "shop")}</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/trust") ? "active" : ""}
+                onClick={() => navigate("/trust")}
+              >
+                <ShieldCheck size={18} />
+                <span>{t(language, "trust")}</span>
+              </button>
+              <button
+                type="button"
+                className={buyerSavedActive ? "active" : ""}
+                onClick={() => navigate("/shop/wishlist")}
+              >
+                <Heart size={18} />
+                <span>{t(language, "saved")}</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/shop/orders") ? "active" : ""}
+                onClick={() => navigate("/shop/orders")}
+              >
+                <PackageCheck size={18} />
+                <span>{t(language, "orders")}</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-proof-nav-item ${location.pathname.startsWith("/shop/proofs") ? "active" : ""}`}
+                onClick={() => navigate("/shop/proofs")}
+              >
+                <div className="mobile-proof-icon-wrapper">
+                  <ClipboardCheck size={18} />
+                  {buyerProofNav?.badgeLabel && (
+                    <span className={`mobile-nav-proof-badge ${buyerProofNav.needsAttention ? "attention" : "ready"}`}>
+                      {buyerProofNav.badgeLabel}
+                    </span>
+                  )}
+                </div>
+                <span>{t(language, "proof")}</span>
+              </button>
+            </>
+          )}
+          {role === "seller" && (
+            <>
+              <button
+                type="button"
+                className={sellerNavActive("/seller") && !sellerNavActive("/seller/proofs") && !sellerNavActive("/seller/market") ? "active" : ""}
+                onClick={() => navigate("/seller")}
+              >
+                <Store size={18} />
+                <span>{sellerNavCopy.console}</span>
+              </button>
+              <button
+                type="button"
+                className={sellerNavActive("/seller/proofs") ? "active" : ""}
+                onClick={() => navigate("/seller/proofs")}
+              >
+                <ClipboardCheck size={18} />
+                <span>{sellerNavCopy.proofs}</span>
+              </button>
+              <button
+                type="button"
+                className={
+                  sellerNavActive("/seller/market") ||
+                  sellerNavActive("/seller/trust-coach") ||
+                  sellerNavActive("/seller/copilot") ||
+                  sellerNavActive("/seller/autopilot") ||
+                  sellerNavActive("/seller/listing-lab") ||
+                  sellerNavActive("/seller/rating-forecast")
+                    ? "active"
+                    : ""
+                }
+                onClick={() => navigate("/seller/market")}
+              >
+                <Globe size={18} />
+                <span>{sellerNavCopy.coach}</span>
+              </button>
+            </>
+          )}
+          {role === "admin" && (
+            <>
+              <button
+                type="button"
+                className={isReviewDeskActive() ? "active" : ""}
+                onClick={() => navigate("/admin")}
+              >
+                <ClipboardCheck size={18} />
+                <span>Review</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/admin/agent") ? "active" : ""}
+                onClick={() => navigate("/admin/agent")}
+              >
+                <Cpu size={18} />
+                <span>Triage</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/admin/policy") ? "active" : ""}
+                onClick={() => navigate("/admin/policy")}
+              >
+                <ShieldCheck size={18} />
+                <span>Policy</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/admin/impact") ? "active" : ""}
+                onClick={() => navigate("/admin/impact")}
+              >
+                <Sparkles size={18} />
+                <span>Impact</span>
+              </button>
+            </>
+          )}
+        </nav>
+      )}
     </div>
   );
 }

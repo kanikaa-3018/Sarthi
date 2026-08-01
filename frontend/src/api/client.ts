@@ -40,6 +40,7 @@ import type {
   SourceHealth,
   SkuTruthPassport,
   SystemReadiness,
+  TrustRunResponse,
   WishlistIntentResponse,
   WishlistRadarResponse
 } from "../types/api";
@@ -183,7 +184,7 @@ export function getFeed(buyerId: string, options?: {
   q?: string;
 }) {
   const params = new URLSearchParams({ buyer_id: buyerId });
-  params.set("limit", String(options?.limit ?? 48));
+  params.set("limit", String(options?.limit ?? 96));
   params.set("offset", String(options?.offset ?? 0));
   if (options?.category) params.set("category", options.category);
   if (options?.q) params.set("q", options.q);
@@ -370,9 +371,11 @@ export function submitListingDraft(draftId: string) {
   });
 }
 
-export function getProductDetail(buyerId: string, productId: string) {
+export function getProductDetail(buyerId: string, productId: string, variantId?: string | null) {
+  const params = new URLSearchParams({ buyer_id: buyerId });
+  if (variantId) params.set("variant_id", variantId);
   return request<ProductDetailResponse>(
-    `/products/${encodeURIComponent(productId)}?buyer_id=${encodeURIComponent(buyerId)}`
+    `/products/${encodeURIComponent(productId)}?${params.toString()}`
   );
 }
 
@@ -471,6 +474,28 @@ export function runRegretFirewall(payload: {
     body: JSON.stringify({
       preferred_fit: "comfort",
       create_missing_proof_request: true,
+      ...payload
+    })
+  });
+}
+
+export function runTrustRun(payload: {
+  buyer_id: string;
+  product_id?: string;
+  cluster_id?: string;
+  selected_variant_id?: string;
+  profile_id?: string;
+  query?: string;
+  preferred_fit?: "comfort" | "regular";
+  create_wishlist_intent?: boolean;
+  create_seller_signal?: boolean;
+}) {
+  return request<TrustRunResponse>("/trust-runs", {
+    method: "POST",
+    body: JSON.stringify({
+      preferred_fit: "comfort",
+      create_wishlist_intent: true,
+      create_seller_signal: true,
       ...payload
     })
   });

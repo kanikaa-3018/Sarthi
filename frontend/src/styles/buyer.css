@@ -1271,6 +1271,17 @@
   margin-top: 2px;
 }
 
+.seller-row-main small {
+  color: var(--accent-primary-hover);
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .seller-row-score {
   align-items: flex-end;
   display: flex;
@@ -2891,6 +2902,46 @@
 }
 
 .outcome-loop-list p {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 5px 0 0;
+}
+
+.outcome-impact-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+}
+
+.outcome-impact-card div {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 9px;
+}
+
+.outcome-impact-card span {
+  color: var(--text-muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.outcome-impact-card strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 13px;
+  line-height: 1.3;
+  margin-top: 3px;
+}
+
+.outcome-impact-card p {
   color: var(--text-secondary);
   font-size: 11.5px;
   line-height: 1.45;

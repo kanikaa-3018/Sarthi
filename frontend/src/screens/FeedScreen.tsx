@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { 
   Search, 
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import {
   askKnowledgeGraph,
+  compareCluster,
   createWishlistIntent,
   getBuyerOrders,
   getBuyerProofs,
@@ -77,6 +78,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const routeVariantId = routeSearch.get("variant");
   const routeProofOpen = routeMode === "saved" && routeSearch.get("proof") === "1";
   const hydratedSavedRouteRef = useRef<string | null>(null);
+  const hydratedGraphProductRef = useRef<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [autoScan, setAutoScan] = useState<AutoScanState>({ status: "idle" });
@@ -162,6 +164,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setGraphAnswer(null);
     setGraphQuery("");
     setGraphError(null);
+    hydratedGraphProductRef.current = null;
     setRegretDecision(null);
     setDecisionQuestion("");
     setDecisionLoading(false);
@@ -203,6 +206,23 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
   const activeClusterId = selectedClusterId || wishlistedProduct?.cluster_id || "";
 
+  const loadKnowledgeGraphForProduct = useCallback(async (product: Product) => {
+    setKnowledgeGraph(null);
+    setGraphAnswer(null);
+    setGraphQuery("");
+    setGraphError(null);
+    setGraphLoading(true);
+    try {
+      const graph = await getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id);
+      setKnowledgeGraph(graph);
+      setGraphQuery(graph.chat_suggestions[0] ?? "");
+    } catch (err) {
+      setGraphError(err instanceof Error ? err.message : "Unable to build evidence map");
+    } finally {
+      setGraphLoading(false);
+    }
+  }, [buyerId]);
+
   useEffect(() => {
     if (!ready) return;
     const routeProductId = params.productId;
@@ -229,9 +249,14 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
     setSelectedClusterId(routeProduct.cluster_id);
     if (routeMode === "detail") {
+      setWishlistedProduct(routeProduct);
       setSelectedProductId(routeProduct.product_id);
       setSelectedVariantId(routeVariantId);
       setStep("detail");
+      if (hydratedGraphProductRef.current !== routeProduct.product_id) {
+        hydratedGraphProductRef.current = routeProduct.product_id;
+        void loadKnowledgeGraphForProduct(routeProduct);
+      }
       return;
     }
 
@@ -240,9 +265,16 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     if (hydratedSavedRouteRef.current === routeProduct.product_id) return;
     hydratedSavedRouteRef.current = routeProduct.product_id;
     void handleWishlistProduct(routeProduct, { syncRoute: false });
-  }, [navigate, params.productId, products, ready, routeMode, routeVariantId, wishlistedProduct?.product_id]);
+  }, [loadKnowledgeGraphForProduct, navigate, params.productId, products, ready, routeMode, routeVariantId, wishlistedProduct?.product_id]);
 
   function handleViewProductDetail(prodId: string, varId?: string | null) {
+    const product = products.find((item) => item.product_id === prodId);
+    if (product) {
+      setWishlistedProduct(product);
+      setSelectedClusterId(product.cluster_id);
+      hydratedGraphProductRef.current = product.product_id;
+      void loadKnowledgeGraphForProduct(product);
+    }
     setSelectedProductId(prodId);
     setSelectedVariantId(varId ?? null);
     setStep("detail");
@@ -258,6 +290,32 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       return next;
     });
   }
+
+  const loadSellerComparison = useCallback((product: Product) => (
+    compareCluster(buyerId, product.cluster_id, product.product_id)
+  ), [buyerId]);
+
+  const openSellerComparison = useCallback(async (product: Product) => {
+    setError(null);
+    setWishlistedProduct(product);
+    setSelectedClusterId(product.cluster_id);
+    hydratedGraphProductRef.current = product.product_id;
+    void loadKnowledgeGraphForProduct(product);
+    try {
+      const result = await compareCluster(buyerId, product.cluster_id, product.product_id);
+      setComparison(result);
+      setAutoScan({
+        status: "ready",
+        clusterId: product.cluster_id,
+        title: product.title.split("-")[0].trim(),
+        listingCount: clusterListingCount(products, product.cluster_id),
+        result
+      });
+      setCompareSheetOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to compare sellers for this product");
+    }
+  }, [buyerId, loadKnowledgeGraphForProduct, products]);
 
   async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean; openCompare?: boolean } = {}) {
     if (options.syncRoute === true) {
@@ -591,15 +649,27 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             productId={selectedProductId}
             initialVariantId={selectedVariantId}
             clusterId={activeClusterId}
+            productCatalog={products}
             onBack={() => navigate("/shop")}
             onOpenAudit={(traceId) => {
               setAuditTraceId(traceId);
               setAuditDrawerOpen(true);
             }}
+            onLoadSellerComparison={loadSellerComparison}
+            onOpenSellerComparison={openSellerComparison}
             onOpenCheckout={handleOpenCheckout}
             language={language}
             experienceMode={experienceMode}
             comparisonTraceId={comparison?.trace_id}
+            knowledgeGraph={knowledgeGraph}
+            graphLoading={graphLoading}
+            graphError={graphError}
+            graphAnswer={graphAnswer}
+            graphQuery={graphQuery}
+            graphAsking={graphAsking}
+            onQueryChange={setGraphQuery}
+            onAskGraph={handleAskKnowledgeGraph}
+            onRetryGraph={handleRetryKnowledgeGraph}
           />
         )
       )}
@@ -653,6 +723,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
                 setCompareSheetOpen(false);
                 setAuditDrawerOpen(true);
               }}
+              onSelectProduct={(productId, variantId) => {
+                setCompareSheetOpen(false);
+                handleViewProductDetail(productId, variantId ?? null);
+              }}
               onContinue={() => handleViewProductDetail(comparison.selected_product_id, comparison.ranking.winner)}
             />
           </div>
@@ -661,7 +735,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
       {/* Diagnostic Audit Drawer */}
       {auditDrawerOpen && (
-        <div className="bottom-sheet-overlay" onClick={() => setAuditDrawerOpen(false)}>
+        <div className="bottom-sheet-overlay audit-sheet-overlay" onClick={() => setAuditDrawerOpen(false)}>
           <div
             ref={overlayDialogRef}
             className="bottom-sheet-content audit-sheet-content"

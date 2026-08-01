@@ -322,6 +322,9 @@ function LensSellerOptionList({
               <div className="seller-row-main">
                 <strong>{product.seller_name}</strong>
                 <span>{topCandidateFactor(candidate, language)} | {returnRate === null ? t(language, "returnsChecked") : `${returnRate}% ${t(language, "returnsChecked").toLowerCase()}`}</span>
+                {candidate.fair_start_policy?.limited_evidence && (
+                  <small>{candidate.fair_start_policy.buyer_label} | cap {Math.round(candidate.fair_start_policy.score_cap * 100)}/100</small>
+                )}
               </div>
               <div className="seller-row-score">
                 <strong>{score}</strong>

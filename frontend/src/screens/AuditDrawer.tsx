@@ -363,7 +363,7 @@ function ProofMap({ trace, insight, copy }: { trace: AuditTrace; insight: ProofI
           <div>
             <span>Start</span>
             <strong>{copy.questionNode}</strong>
-            <p>{trace.intent.join(", ") || "Purchase confidence"}</p>
+            <p>{formatIntent(trace.intent) || "Purchase confidence"}</p>
           </div>
         </article>
         <div className="proof-graph-evidence-column">
@@ -459,4 +459,17 @@ function labelize(value: string) {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatIntent(intent: string[]) {
+  const mappings: Record<string, string> = {
+    regret_firewall: "Return risk guard",
+    similar_listing_resolution: "Similar seller deals",
+    sku_passport: "Sku trust check",
+    checkout_confidence: "Checkout payment safety",
+    keep_confidence: "Fit & quality confidence"
+  };
+  return intent
+    .map((t) => mappings[t] || labelize(t))
+    .join(", ");
 }

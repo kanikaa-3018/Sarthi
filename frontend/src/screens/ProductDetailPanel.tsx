@@ -4,10 +4,13 @@ import {
   ArrowLeft,
   BadgeCheck,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   CircleAlert,
   HelpCircle,
   Info,
+  Layers,
+  MessageCircle,
   RefreshCcw,
   Ruler,
   Send,
@@ -28,12 +31,16 @@ import { simpleTrustMeaning, t, type LanguageCode } from "../i18n";
 import type {
   AgentResponse,
   CartConfidenceResponse,
+  CompareResponse,
   ExpectationContract,
+  FitConfidenceLayer,
   KeepConfidenceResponse,
   Product,
   ProductDetailResponse,
+  SkuTruthCard,
   Variant
 } from "../types/api";
+import { KnowledgeGraphExplorer } from "./KnowledgeGraphExplorer";
 
 // Screen 3: Responsive Split 2-Column Product Detail Panel
 export function ProductDetailPanel({
@@ -41,29 +48,54 @@ export function ProductDetailPanel({
   productId,
   initialVariantId,
   clusterId,
+  productCatalog,
   onBack,
   onOpenAudit,
+  onLoadSellerComparison,
+  onOpenSellerComparison,
   onOpenCheckout,
   language,
   experienceMode,
-  comparisonTraceId
+  comparisonTraceId,
+  knowledgeGraph,
+  graphLoading,
+  graphError,
+  graphAnswer,
+  graphQuery,
+  graphAsking,
+  onQueryChange,
+  onAskGraph,
+  onRetryGraph
 }: {
   buyerId: string;
   productId: string;
   initialVariantId: string | null;
   clusterId: string;
+  productCatalog: Product[];
   onBack: () => void;
   onOpenAudit: (traceId: string) => void;
+  onLoadSellerComparison: (product: Product) => Promise<CompareResponse>;
+  onOpenSellerComparison: (product: Product) => Promise<void> | void;
   onOpenCheckout: (variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant }) => void;
   language: LanguageCode;
   experienceMode: "simple" | "standard";
   comparisonTraceId?: string;
+  knowledgeGraph: any;
+  graphLoading: boolean;
+  graphError: string | null;
+  graphAnswer: any;
+  graphQuery: string;
+  graphAsking: boolean;
+  onQueryChange: (value: string) => void;
+  onAskGraph: (query: string) => void;
+  onRetryGraph: () => void;
 }) {
   const [detail, setDetail] = useState<ProductDetailResponse | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState(initialVariantId ?? "");
   const [query, setQuery] = useState("Mera usual size L hai, chest tight toh nahi hoga?");
   const [answer, setAnswer] = useState<AgentResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [graphDrawerOpen, setGraphDrawerOpen] = useState(false);
   const [questionError, setQuestionError] = useState<string | null>(null);
   const [contractLocking, setContractLocking] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
@@ -76,6 +108,9 @@ export function ProductDetailPanel({
   const [cartConfidence, setCartConfidence] = useState<CartConfidenceResponse | null>(null);
   const [cartConfidenceLoading, setCartConfidenceLoading] = useState(false);
   const [cartConfidenceError, setCartConfidenceError] = useState<string | null>(null);
+  const [sellerComparison, setSellerComparison] = useState<CompareResponse | null>(null);
+  const [sellerComparisonLoading, setSellerComparisonLoading] = useState(false);
+  const [sellerComparisonError, setSellerComparisonError] = useState<string | null>(null);
   const [scoreRefreshState, setScoreRefreshState] = useState<"idle" | "refreshing" | "updated">("idle");
   const [scoreRefreshReason, setScoreRefreshReason] = useState<"question" | "proof" | null>(null);
   const [receiptViewCount, setReceiptViewCount] = useState(1);
@@ -91,14 +126,15 @@ export function ProductDetailPanel({
     setContractError(null);
     setKeepConfidence(null);
     setCartConfidence(null);
-    getProductDetail(buyerId, productId)
+    getProductDetail(buyerId, productId, initialVariantId)
       .then((payload) => {
         setDetail(payload);
-        setKeepConfidence(payload.keep_confidence);
         const initialVariant = initialVariantId
           ? payload.variants.find((variant) => variant.variant_id === initialVariantId)
           : null;
-        setSelectedVariantId(initialVariant?.variant_id ?? payload.selected_variant.variant_id);
+        const nextVariantId = initialVariant?.variant_id ?? payload.selected_variant.variant_id;
+        setSelectedVariantId(nextVariantId);
+        setKeepConfidence(payload.keep_confidence.variant_id === nextVariantId ? payload.keep_confidence : null);
       });
   }, [buyerId, productId, initialVariantId]);
 
@@ -146,6 +182,27 @@ export function ProductDetailPanel({
       cancelled = true;
     };
   }, [buyerId, detail, selectedVariantId]);
+
+  useEffect(() => {
+    if (!detail) return;
+    let cancelled = false;
+    setSellerComparison(null);
+    setSellerComparisonLoading(true);
+    setSellerComparisonError(null);
+    onLoadSellerComparison(detail.product)
+      .then((payload) => {
+        if (!cancelled) setSellerComparison(payload);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setSellerComparisonError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setSellerComparisonLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.product.product_id, onLoadSellerComparison]);
 
   useEffect(() => {
     const storageKey = `sarthi.trust-receipt.${buyerId}.${productId}`;
@@ -287,8 +344,14 @@ export function ProductDetailPanel({
   }
 
   const selectedVariant = detail.variants.find((v) => v.variant_id === selectedVariantId) || detail.selected_variant;
+  const selectedKeepConfidence = keepConfidence?.variant_id === selectedVariant.variant_id ? keepConfidence : null;
+  const selectedCartConfidence = cartConfidence?.line_items.some((line) => line.variant.variant_id === selectedVariant.variant_id)
+    ? cartConfidence
+    : null;
+  const selectedRecommendedSize = selectedKeepConfidence?.recommended_size ?? detail.fit.recommended_size;
   const proofTraceId = comparisonTraceId ?? keepConfidence?.trace_id ?? detail.keep_confidence.trace_id;
-  const displayTitle = detail.product.title.split("-")[0].trim();
+  const titleParts = splitProductTitle(detail.product);
+  const displayTitle = titleParts.title;
   const strikePrice = Math.round(selectedVariant.current_price * 1.35);
   const sizeAccuracy = Math.round(detail.evidence.fit_as_expected_rate * 100);
   const colorMatch = detail.evidence.delivered_orders_90d
@@ -300,6 +363,17 @@ export function ProductDetailPanel({
   const proofActionLabel = proofRequestActionLabel(language, proofRequested, proofRequesting);
   const shouldOfferProofRequest = detail.trust_state.missing_data.length > 0 || !detail.trust_state.can_recommend;
 
+  function handleSelectVariant(nextVariantId: string) {
+    if (nextVariantId === selectedVariantId) return;
+    setSelectedVariantId(nextVariantId);
+    if (keepConfidence?.variant_id !== nextVariantId) {
+      setKeepConfidence(null);
+    }
+    if (!cartConfidence?.line_items.some((line) => line.variant.variant_id === nextVariantId)) {
+      setCartConfidence(null);
+    }
+  }
+
   function focusProofPanel(source: "agent" | "manual") {
     setActiveSupportPanel("proof");
     setProofSpotlightSource(source);
@@ -309,6 +383,18 @@ export function ProductDetailPanel({
     window.setTimeout(() => {
       proofPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
+  }
+
+  function openProofFromGraph(traceId: string) {
+    setGraphDrawerOpen(false);
+    window.setTimeout(() => onOpenAudit(traceId), 0);
+  }
+
+  function requestProofFromGraph() {
+    setGraphDrawerOpen(false);
+    window.setTimeout(() => {
+      void handleAskSellerProof();
+    }, 0);
   }
 
   async function refreshTrustScore(reason: "question" | "proof", variantIdOverride?: string) {
@@ -333,7 +419,7 @@ export function ProductDetailPanel({
     const action = answer?.answer.primary_action;
     const targetVariantId = action?.variant_id ?? selectedVariantId;
     if (action?.variant_id && action.variant_id !== selectedVariantId) {
-      setSelectedVariantId(action.variant_id);
+      handleSelectVariant(action.variant_id);
     }
     setActiveSupportPanel("proof");
     setProofSpotlightSource("agent");
@@ -398,24 +484,49 @@ export function ProductDetailPanel({
       <div className="web-detail-layout">
         <div className="detail-gallery-container">
           <section className="detail-product-card">
-            <div className="detail-image-frame">
-              <img
-                src={detail.product.image_url || fallbackProductImage(detail.product.color_family)}
-                alt={detail.product.title}
-                onError={(event) => { event.currentTarget.src = fallbackProductImage(detail.product.color_family); }}
-              />
-              <span>{detail.product.fabric}</span>
-            </div>
             <div className="detail-product-summary">
               <span>{t(language, "soldBy")} {detail.product.seller_name}</span>
               <h1>{displayTitle}</h1>
+              {titleParts.context && <small className="detail-title-context">{titleParts.context}</small>}
               <div className="detail-price-row">
                 <strong>Rs {selectedVariant.current_price}</strong>
                 <span>Rs {strikePrice}</span>
                 <small>{selectedVariant.stock} {t(language, "inStock")}</small>
               </div>
+              <div className="detail-title-facts" aria-label="Product facts">
+                <span>{detail.product.fabric}</span>
+                <span>{detail.product.delivery_text}</span>
+                <span>{detail.product.commerce_badge}</span>
+              </div>
+              <div className="detail-product-actions" aria-label="Product help actions">
+                <button
+                  type="button"
+                  onClick={() => void onOpenSellerComparison(detail.product)}
+                >
+                  <Layers size={15} />
+                  Compare options
+                </button>
+                <button
+                  type="button"
+                  onClick={() => document.getElementById("verified-facts")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                >
+                  <ShieldCheck size={15} />
+                  {t(language, "askFromVerifiedFacts")}
+                </button>
+              </div>
             </div>
+            <ProductMediaGallery product={detail.product} />
           </section>
+
+          <SellerCompareLauncher
+            comparison={sellerComparison}
+            productCatalog={productCatalog}
+            currentProduct={detail.product}
+            loading={sellerComparisonLoading}
+            error={sellerComparisonError}
+            onOpenCompare={() => void onOpenSellerComparison(detail.product)}
+            onOpenProofMap={() => setGraphDrawerOpen(true)}
+          />
 
           <section className="sku-evidence-card">
             <span className="eyebrow">{t(language, "quickChecks")}</span>
@@ -441,11 +552,11 @@ export function ProductDetailPanel({
 
         <aside className="detail-decision-container" aria-label="Listing decision">
           <KeepConfidenceCard
-            confidence={keepConfidence}
+            confidence={selectedKeepConfidence}
             loading={keepConfidenceLoading}
             error={keepConfidenceError}
             refreshState={scoreRefreshState}
-            onApplySize={(variantId) => setSelectedVariantId(variantId)}
+            onApplySize={handleSelectVariant}
             onOpenAudit={onOpenAudit}
             language={language}
           />
@@ -463,7 +574,7 @@ export function ProductDetailPanel({
                 <button
                   key={v.variant_id}
                   type="button"
-                  onClick={() => setSelectedVariantId(v.variant_id)}
+                  onClick={() => handleSelectVariant(v.variant_id)}
                   className={v.variant_id === selectedVariantId ? "active" : ""}
                 >
                   {v.size}
@@ -471,7 +582,7 @@ export function ProductDetailPanel({
               ))}
             </div>
             <p>
-              {t(language, "recommendedSizeIs")} <strong>{detail.fit.recommended_size}</strong> {t(language, "recommendedSizeSuffix")}
+              {sizeSelectionHint(selectedVariant.size, selectedRecommendedSize, language)}
             </p>
           </section>
 
@@ -564,7 +675,7 @@ export function ProductDetailPanel({
           {contractError && <div className="notice error">{contractError}</div>}
 
           <CartConfidenceCard
-            confidence={cartConfidence}
+            confidence={selectedCartConfidence}
             loading={cartConfidenceLoading}
             error={cartConfidenceError}
             onOpenAudit={onOpenAudit}
@@ -599,15 +710,6 @@ export function ProductDetailPanel({
           <strong>{t(language, "askProofOrChangeSize")}</strong>
         </div>
         <div className="detail-help-actions">
-          <button
-            type="button"
-            className="active"
-            aria-expanded="true"
-            onClick={() => document.getElementById("verified-facts")?.scrollIntoView({ behavior: "smooth", block: "center" })}
-          >
-            <ShieldCheck size={15} />
-            {t(language, "askFromVerifiedFacts")}
-          </button>
           {shouldOfferProofRequest && (
             <button
               type="button"
@@ -653,7 +755,7 @@ export function ProductDetailPanel({
           {showDetailedTrustReceipt ? (
             <TrustReceipt
               detail={detail}
-              confidence={keepConfidence}
+              confidence={selectedKeepConfidence}
               language={language}
               experienceMode={experienceMode}
               comparisonTraceId={proofTraceId}
@@ -665,7 +767,7 @@ export function ProductDetailPanel({
           ) : (
             <SimpleProofSummary
               detail={detail}
-              confidence={keepConfidence}
+              confidence={selectedKeepConfidence}
               comparisonTraceId={proofTraceId}
               language={language}
               onOpenAudit={onOpenAudit}
@@ -704,7 +806,7 @@ export function ProductDetailPanel({
               answer={answer}
               detail={detail}
               selectedVariant={selectedVariant}
-              confidence={keepConfidence}
+              confidence={selectedKeepConfidence}
               source={proofSpotlightSource}
               onRefresh={() => void refreshTrustScore("proof")}
               onOpenAudit={onOpenAudit}
@@ -713,7 +815,232 @@ export function ProductDetailPanel({
         </div>
       )}
 
+      {graphDrawerOpen && (
+        <div className="bottom-sheet-overlay evidence-graph-drawer-overlay" onClick={() => setGraphDrawerOpen(false)}>
+          <section
+            className="bottom-sheet-content evidence-graph-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="evidence-graph-drawer-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bottom-sheet-header">
+              <div>
+                <span className="eyebrow">Evidence map</span>
+                <h3 className="sheet-title" id="evidence-graph-drawer-title">Proof links</h3>
+              </div>
+              <button className="bottom-sheet-close" type="button" onClick={() => setGraphDrawerOpen(false)} aria-label="Close evidence graph">
+                <X size={16} />
+              </button>
+            </div>
+            <KnowledgeGraphExplorer
+              graph={knowledgeGraph}
+              answer={graphAnswer}
+              query={graphQuery}
+              loading={graphLoading}
+              asking={graphAsking}
+              error={graphError}
+              onQueryChange={onQueryChange}
+              onAsk={onAskGraph}
+              onOpenProof={openProofFromGraph}
+              onRequestProof={requestProofFromGraph}
+              proofRequestState={proofRequested ? "sent" : proofRequesting ? "loading" : "idle"}
+              onRetry={onRetryGraph}
+            />
+          </section>
+        </div>
+      )}
+
     </div>
+  );
+}
+
+function ProductMediaGallery({ product }: { product: Product }) {
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const images = productImageSources(product);
+  const safeIndex = Math.min(activeImageIndex, Math.max(0, images.length - 1));
+  const activeImage = images[safeIndex] ?? fallbackProductImage(product.color_family);
+  const media = product.media_evidence;
+  const rawLabels = media?.angle_labels?.length
+    ? media.angle_labels
+    : ["Main", "Alternate", "Fabric close-up", "Lifestyle"];
+  const labels = images.map((image, index) => buyerMediaLabel(rawLabels[index], index, image));
+  const activeLabel = labels[safeIndex] ?? `View ${safeIndex + 1}`;
+  const qualityScore = media?.quality_score ?? media?.clarity_score ?? null;
+  const missingAngle = media?.missing_angles?.[0] ?? media?.warnings?.[0] ?? null;
+  const importantAssets = (media?.required_assets ?? [])
+    .filter((asset) => asset.required)
+    .slice(0, 3);
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [product.product_id]);
+
+  function shiftImage(delta: number) {
+    setActiveImageIndex((current) => {
+      if (images.length <= 1) return 0;
+      return (current + delta + images.length) % images.length;
+    });
+  }
+
+  return (
+    <div className="detail-product-gallery" aria-label={`Product photos for ${product.title}`}>
+      <div className="detail-gallery-thumbs" aria-label="Photo thumbnails">
+        {images.map((image, index) => (
+          <button
+            key={`${image}-${index}`}
+            type="button"
+            className={index === safeIndex ? "active" : ""}
+            aria-label={`Show ${labels[index] ?? `photo ${index + 1}`}`}
+            aria-pressed={index === safeIndex}
+            onClick={() => setActiveImageIndex(index)}
+          >
+            <img
+              src={image}
+              alt=""
+              onError={(event) => { event.currentTarget.src = fallbackProductImage(product.color_family); }}
+            />
+          </button>
+        ))}
+      </div>
+
+      <figure className="detail-image-frame">
+        <img
+          src={activeImage}
+          alt={`${product.title} ${activeLabel}`}
+          onError={(event) => { event.currentTarget.src = fallbackProductImage(product.color_family); }}
+        />
+        <figcaption className="detail-media-badge">{activeLabel}</figcaption>
+        {images.length > 1 && (
+          <div className="detail-gallery-controls" aria-label="Change product photo">
+            <button type="button" onClick={() => shiftImage(-1)} aria-label="Previous product photo">
+              <ChevronLeft size={16} />
+            </button>
+            <span>{safeIndex + 1}/{images.length}</span>
+            <button type="button" onClick={() => shiftImage(1)} aria-label="Next product photo">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+      </figure>
+
+      <div className="detail-media-proof-row" aria-label="Media quality checks">
+        <span>
+          <BadgeCheck size={14} />
+          {images.length} views checked
+        </span>
+        <span>
+          <ShieldCheck size={14} />
+          {qualityScore === null ? "Media checked" : `${qualityScore}/100 media`}
+        </span>
+        <span className={missingAngle ? "watch" : "safe"}>
+          {missingAngle ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+          {missingAngle ? `${missingAngle}` : "Key angles covered"}
+        </span>
+      </div>
+
+      {importantAssets.length > 0 && (
+        <div className="detail-media-asset-strip" aria-label="Required product media">
+          {importantAssets.map((asset) => (
+            <span key={asset.key} className={mediaAssetReady(asset.status) ? "ready" : "missing"}>
+              {mediaAssetReady(asset.status) ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+              {asset.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {media?.buyer_copy && <p className="detail-media-note">{media.buyer_copy}</p>}
+    </div>
+  );
+}
+
+function SellerCompareLauncher({
+  comparison,
+  productCatalog,
+  currentProduct,
+  loading,
+  error,
+  onOpenCompare,
+  onOpenProofMap
+}: {
+  comparison: CompareResponse | null;
+  productCatalog: Product[];
+  currentProduct: Product;
+  loading: boolean;
+  error: string | null;
+  onOpenCompare: () => void;
+  onOpenProofMap: () => void;
+}) {
+  const rankedRows = comparison
+    ? comparison.ranking.candidates.map((candidate) => ({
+        key: candidate.variant_id,
+        product: productForCandidate(candidate, productCatalog, currentProduct),
+        score: trustScorePercent(candidate),
+        winner: candidate.variant_id === comparison.ranking.winner
+      }))
+    : [];
+  const fallbackRows = productCatalog
+    .filter((product) => product.cluster_id === currentProduct.cluster_id)
+    .map((product) => ({
+      key: product.product_id,
+      product,
+      score: product.buyer_trust?.confidence ?? null,
+      winner: false
+    }));
+  const candidates = uniqueSellerRows([...rankedRows, ...fallbackRows]).slice(0, 3);
+  const sellerCount = comparison?.similarity?.distinct_seller_count
+    ?? uniqueSellerRows(fallbackRows).length
+    ?? Math.max(1, candidates.length);
+  const best = candidates.find((candidate) => candidate.winner)
+    ?? candidates.filter((candidate) => typeof candidate.score === "number").sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
+    ?? candidates[0]
+    ?? null;
+  const topScore = best?.score ?? null;
+
+  return (
+    <section className="detail-compare-launcher" aria-label="Seller comparison launcher">
+      <span className="compare-launch-icon" aria-hidden="true">
+        <Layers size={18} />
+      </span>
+
+      <div className="compare-launch-copy">
+        <span className="eyebrow">Same item, safer choice</span>
+        <h2>Compare options</h2>
+        <p>
+          Sarthi ranks this item across mapped listings using returns, proof, reviews, fit and delivery.
+        </p>
+      </div>
+
+      <div className="compare-launch-meter" aria-label="Comparison readiness">
+        <div>
+          <strong>{loading ? "--" : sellerCount}</strong>
+          <span>options</span>
+        </div>
+        <div>
+          <strong>{loading ? "--" : topScore ?? "--"}</strong>
+          <span>top trust</span>
+        </div>
+      </div>
+
+      {error && (
+        <div className="compare-launch-note">
+          <AlertTriangle size={14} />
+          <span>Comparison is slow. Proof map is still available.</span>
+        </div>
+      )}
+
+      <div className="compare-launch-actions">
+        <button type="button" className="primary" onClick={onOpenCompare}>
+          <Layers size={15} />
+          Compare
+        </button>
+        <button type="button" onClick={onOpenProofMap}>
+          <MessageCircle size={15} />
+          Ask proof
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -857,20 +1184,24 @@ function SimpleProofSummary({
   const score = confidence ? Math.floor(confidence.score * 100) : null;
   const firstGap = detail.trust_state.missing_data[0] ?? null;
   const keptPercent = Math.round(detail.evidence.fit_as_expected_rate * 100);
-  const proofLine = firstGap
-    ? `${t(language, "missingProof")}: ${labelize(firstGap)}`
-    : `${detail.evidence.delivered_orders_90d} ${t(language, "recentOrders")} checked`;
+  const proofTone = firstGap || (score !== null && score < 70) ? "watch" : "safe";
+  const proofTitle = firstGap ? "Proof still missing" : t(language, "checkSellerProof");
+  const proofBody = score === null
+    ? t(language, "checkingProof")
+    : firstGap
+      ? `${score}/100 because ${labelize(firstGap).toLowerCase()} is not verified yet.`
+      : `${score}/100. Seller proof and recent outcomes are connected.`;
 
   return (
-    <section className="simple-proof-summary" aria-label="Simple proof summary">
-      <div>
-        <span className="eyebrow">{t(language, "beforeYouScrollFurther")}</span>
-        <h3>{t(language, "checkSellerProof")}</h3>
-        <p>
-          {score === null
-            ? t(language, "checkingProof")
-            : `${score}/100. ${proofLine}.`}
-        </p>
+    <section className={`simple-proof-summary ${proofTone}`} aria-label="Simple proof summary">
+      <div className="simple-proof-copy">
+        <span className="eyebrow">Proof checkpoint</span>
+        <h3>{proofTitle}</h3>
+        <p>{proofBody}</p>
+      </div>
+      <div className="simple-proof-score" aria-label={score === null ? "Proof score loading" : `Proof score ${score} out of 100`}>
+        <strong>{score ?? "--"}</strong>
+        <span>/100</span>
       </div>
       <div className="simple-proof-facts">
         <span>
@@ -890,10 +1221,10 @@ function SimpleProofSummary({
       </div>
       <div className="simple-proof-actions">
         <button type="button" onClick={onRefreshProof}>
-          {t(language, "seeScoreReasons")}
+          Score reasons
         </button>
         <button type="button" onClick={() => onOpenAudit(comparisonTraceId)}>
-          {t(language, "seeProof")}
+          Proof trail
         </button>
       </div>
     </section>
@@ -1023,6 +1354,26 @@ function checkoutActionCopy(language: LanguageCode, proofLimited: boolean) {
         cta: "Open checkout",
         helper: "Proof checked. Final payment guidance appears in checkout."
       };
+}
+
+function sizeSelectionHint(selectedSize: string, recommendedSize: string | null | undefined, language: LanguageCode) {
+  const selected = selectedSize || "--";
+  const recommended = recommendedSize || "--";
+  if (!recommendedSize || selected === "ONE_SIZE") {
+    if (language === "hindi") return "Is item me size selection ki zarurat nahi hai.";
+    if (language === "hinglish") return "Is item me size selection needed nahi hai.";
+    return "This item does not need a size choice.";
+  }
+  if (selected === recommended) {
+    if (language === "hindi" || language === "hinglish") {
+      return <>Selected size <strong>{selected}</strong> recommended size se match karta hai.</>;
+    }
+    return <>Selected size <strong>{selected}</strong> matches the recommended size.</>;
+  }
+  if (language === "hindi" || language === "hinglish") {
+    return <>Selected size <strong>{selected}</strong> hai. Safer size <strong>{recommended}</strong> dikh raha hai.</>;
+  }
+  return <>Selected size <strong>{selected}</strong> differs. Safer size looks like <strong>{recommended}</strong>.</>;
 }
 
 function proofRequestActionLabel(language: LanguageCode, requested: boolean, requesting: boolean) {
@@ -1449,8 +1800,146 @@ function AgentCheckTimeline({ detail, language }: { detail: ProductDetailRespons
   );
 }
 
+function splitProductTitle(productOrTitle: Product | string) {
+  const product = typeof productOrTitle === "string" ? null : productOrTitle;
+  const rawTitle = typeof productOrTitle === "string" ? productOrTitle : productOrTitle.title;
+  const cleaned = normalizeMarketplaceTitle(product, rawTitle.split("-")[0].trim());
+  const contexts = ["Everyday Wear", "Office Ready", "Festival Edit", "Comfort Fit"];
+  const context = contexts.find((suffix) => cleaned.toLowerCase().endsWith(suffix.toLowerCase())) ?? null;
+  if (!context) return { title: cleaned, context: null };
+  return {
+    title: cleaned.slice(0, -context.length).trim(),
+    context
+  };
+}
+
+function normalizeMarketplaceTitle(product: Product | null, title: string) {
+  if (!product) return title;
+  if (product.category === "women_kurtis" && /\bdress\b/i.test(title)) {
+    return title.replace(/\bdress\b/gi, "Kurti");
+  }
+  if (product.garment_type && !new RegExp(`\\b${escapeRegExp(product.garment_type)}\\b`, "i").test(title)) {
+    return title;
+  }
+  return title;
+}
+
+function buyerMediaLabel(label: string | undefined, index: number, imageUrl?: string) {
+  const normalized = (label ?? "").toLowerCase();
+  if (imageUrl && /blue-floral-product-\d\.jpg$/i.test(imageUrl)) {
+    if (imageUrl.includes("product-1.")) return "Model view";
+    if (imageUrl.includes("product-2.")) return "Back fit";
+    if (imageUrl.includes("product-3.")) return "Fabric detail";
+    if (imageUrl.includes("product-4.")) return "Measurement proof";
+  }
+  if (imageUrl && /maroon-set-product-\d\.jpg$/i.test(imageUrl)) {
+    if (imageUrl.includes("product-1.")) return "Model view";
+    if (imageUrl.includes("product-2.")) return "Back fit";
+    if (imageUrl.includes("product-3.")) return "Fabric detail";
+    if (imageUrl.includes("product-4.")) return "Measurement proof";
+  }
+  if (imageUrl && /-1(-\d)?\.(jpg|png)$/i.test(imageUrl)) {
+    if (index === 0) return "Model view";
+    if (imageUrl.includes("-1-2.")) return "Fit angle";
+    if (imageUrl.includes("-1-3.")) return "Fabric detail";
+    if (imageUrl.includes("-1-4.")) return "Close-up";
+  }
+  if (index === 0 || normalized.includes("main") || normalized.includes("model")) return "Model view";
+  if (normalized.includes("fabric")) return "Fabric detail";
+  if (normalized.includes("measurement")) return "Size chart";
+  if (normalized.includes("reviewer") || normalized.includes("customer")) return "Buyer photo";
+  if (normalized.includes("lifestyle")) return "Full look";
+  if (normalized.includes("alternate") || normalized.includes("side")) return "Side view";
+  return `View ${index + 1}`;
+}
+
+function productForCandidate(
+  candidate: CompareResponse["ranking"]["candidates"][number],
+  catalog: Product[],
+  currentProduct: Product
+) {
+  const productIdFromVariant = candidate.variant_id.replace(/_[^_]+$/, "");
+  return catalog.find((product) => product.product_id === candidate.product_id)
+    ?? catalog.find((product) => product.product_id === productIdFromVariant)
+    ?? catalog.find((product) => product.cluster_id === currentProduct.cluster_id && product.seller_id === candidate.seller_id)
+    ?? currentProduct;
+}
+
+function uniqueSellerRows<T extends { product: Product }>(rows: T[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const sellerKey = row.product.seller_id || row.product.seller_name;
+    if (seen.has(sellerKey)) return false;
+    seen.add(sellerKey);
+    return true;
+  });
+}
+
+function trustScorePercent(candidate: CompareResponse["ranking"]["candidates"][number]) {
+  if (typeof candidate.score_percent === "number") {
+    return Math.round(candidate.score_percent);
+  }
+  return Math.round(candidate.score * 100);
+}
+
 function labelize(value: string) {
   return value.replace(/_/g, " ");
+}
+
+function productImageSources(product: Pick<Product, "image_url" | "image_urls" | "color_family">) {
+  const rawCandidates = [...(product.image_urls ?? []), product.image_url]
+    .filter((value): value is string => Boolean(value?.trim()));
+  const curatedCatalogImages = curatedCatalogImageFamily(rawCandidates);
+  if (curatedCatalogImages.length) return curatedCatalogImages;
+  const expandedCatalogImages = rawCandidates.flatMap((image) => catalogFamilyImages(image));
+  const cleanRawCandidates = rawCandidates.filter((image) => !isJpgProofCrop(image));
+  const candidates = [product.image_url, ...expandedCatalogImages, ...cleanRawCandidates]
+    .filter((value): value is string => Boolean(value?.trim()));
+  const unique = Array.from(new Set(candidates));
+  return unique.length ? unique : [fallbackProductImage(product.color_family)];
+}
+
+function curatedCatalogImageFamily(imageUrls: string[]) {
+  if (imageUrls.some((image) => /\/catalog\/blue-floral(?:-|-product-)/i.test(image))) {
+    return [
+      "/catalog/blue-floral-product-1.jpg",
+      "/catalog/blue-floral-product-2.jpg",
+      "/catalog/blue-floral-product-3.jpg",
+      "/catalog/blue-floral-product-4.jpg"
+    ];
+  }
+  if (imageUrls.some((image) => /\/catalog\/maroon-set(?:-|-product-)/i.test(image))) {
+    return [
+      "/catalog/maroon-set-product-1.jpg",
+      "/catalog/maroon-set-product-2.jpg",
+      "/catalog/maroon-set-product-3.jpg",
+      "/catalog/maroon-set-product-4.jpg"
+    ];
+  }
+  return [];
+}
+
+function catalogFamilyImages(imageUrl: string) {
+  const match = imageUrl.match(/^(\/catalog\/.+?)-\d(?:-\d)?\.(jpg|png)$/i);
+  if (!match) return [];
+  const [, prefix, ext] = match;
+  const lowerExt = ext.toLowerCase();
+  const primaryAngles = lowerExt === "jpg"
+    ? [1, 2, 3, 4].map((index) => `${prefix}-${index}.${ext}`)
+    : [`${prefix}-1.${ext}`, `${prefix}-1-2.${ext}`, `${prefix}-1-3.${ext}`, `${prefix}-1-4.${ext}`];
+  return primaryAngles;
+}
+
+function isJpgProofCrop(imageUrl: string) {
+  return /-\d-\d\.jpe?g$/i.test(imageUrl);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function mediaAssetReady(status: string) {
+  return ["present", "linked", "not_required"].includes(status);
 }
 
 function fallbackProductImage(color: string) {

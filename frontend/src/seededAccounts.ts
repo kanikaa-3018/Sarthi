@@ -1,16 +1,16 @@
 export type AuthPortal = "buyer" | "seller" | "reviewer";
-export type DemoRole = "buyer" | "seller" | "admin";
+export type SeededRole = "buyer" | "seller" | "admin";
 
-type DemoAccount = {
+type SeededAccount = {
   username: string;
   password: string;
   label: string;
-  role: DemoRole;
+  role: SeededRole;
   displayName: string;
   defaultPath: "/shop" | "/seller" | "/admin";
 };
 
-export const DEMO_ACCOUNTS = {
+export const SEEDED_ACCOUNTS = {
   buyer: {
     username: "asha.buyer",
     password: "buyer-asha-pass",
@@ -35,9 +35,9 @@ export const DEMO_ACCOUNTS = {
     displayName: "Reviewer Admin",
     defaultPath: "/admin"
   }
-} as const satisfies Record<AuthPortal, DemoAccount>;
+} as const satisfies Record<AuthPortal, SeededAccount>;
 
-export function getDemoAccountForRole(role: DemoRole) {
+export function getSeededAccountForRole(role: SeededRole) {
   const portal: AuthPortal = role === "admin" ? "reviewer" : role;
-  return DEMO_ACCOUNTS[portal];
+  return SEEDED_ACCOUNTS[portal];
 }

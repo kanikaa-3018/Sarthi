@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, Eye, EyeOff, ShoppingBag, Store, ShieldCheck } from "lucide-react";
 import { login, signupBuyer, signupSeller } from "../api/client";
-import { SarthiMark } from "../components/SarthiMark";
-import { DEMO_ACCOUNTS, type AuthPortal } from "../demoAccounts";
-import { LANGUAGE_OPTIONS, type LanguageCode } from "../i18n";
+import { frontendEnv } from "../env";
+import { LANGUAGE_OPTIONS, t, type LanguageCode } from "../i18n";
+import { SEEDED_ACCOUNTS, type AuthPortal } from "../seededAccounts";
 import type { AuthAccount, AuthSession } from "../types/api";
 
 type Props = {
@@ -66,7 +66,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
   const [success, setSuccess] = useState<string | null>(null);
 
   const activeCopy = PORTAL_COPY[portal];
-  const demo = DEMO_ACCOUNTS[portal];
+  const seededAccount = SEEDED_ACCOUNTS[portal];
   const expectedRole = portalToRole(portal);
   const isSignupAvailable = portal !== "reviewer";
 
@@ -97,8 +97,8 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
   }
 
   function useDemoCredentials() {
-    setUsername(demo.username);
-    setPassword(demo.password);
+    setUsername(seededAccount.username);
+    setPassword(seededAccount.password);
     setError(null);
     setSuccess(null);
   }
@@ -254,14 +254,14 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
           </div>
 
           <form onSubmit={flow === "signin" ? handleSignin : handleSignup} className="auth-form-step">
-            {flow === "signin" && (
+            {flow === "signin" && frontendEnv.evaluatorLoginEnabled && (
               <div className="demo-credential-box">
                 <div>
-                  <strong>{demo.label}</strong>
-                  <span>{demo.username}</span>
+                  <strong>{seededAccount.label}</strong>
+                  <span>{seededAccount.username}</span>
                 </div>
                 <button type="button" onClick={useDemoCredentials}>
-                  Use demo
+                  {t(language, "useDemo")}
                 </button>
               </div>
             )}
@@ -271,7 +271,7 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
               <input
                 id="auth-username"
                 type="text"
-                placeholder={flow === "signin" ? demo.username : "Create a unique username"}
+                placeholder={flow === "signin" && frontendEnv.evaluatorLoginEnabled ? seededAccount.username : "Create a unique username"}
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"

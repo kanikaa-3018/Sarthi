@@ -8,11 +8,11 @@ type Props = {
 };
 
 const catalogImages = {
-  blueKurti: "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=1000&q=86",
-  pinkKurti: "https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=84",
-  maroonSet: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=900&q=84",
-  cottonTop: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=84",
-  saree: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=900&q=84"
+  blueKurti: "/catalog/blue-floral-4.jpg",
+  pinkKurti: "/catalog/pink-print-1.jpg",
+  maroonSet: "/catalog/summer-saree-1.jpg",
+  cottonTop: "/catalog/cotton-top-1.jpg",
+  saree: "/catalog/summer-saree-1.jpg"
 };
 
 const catalogFallbacks = {
@@ -80,7 +80,7 @@ export function LandingPage({ theme, onStartDemo, onToggleTheme }: Props) {
               <span className="landing-photo-label">Catalog choice</span>
             </div>
             <div className="landing-product-summary">
-              <p className="landing-overline">Blue Floral Cotton Kurti</p>
+              <p className="landing-overline">Blue Floral Cotton Dress</p>
               <div className="landing-price-line">
                 <strong>₹429</strong>
                 <span>Seller and variant checked together</span>
@@ -228,7 +228,7 @@ export function LandingPage({ theme, onStartDemo, onToggleTheme }: Props) {
       <footer className="landing-footer">
         <a className="landing-brand" href="#top"><span className="landing-brand-mark" aria-hidden="true"><SarthiMark /></span><span>Sarthi</span></a>
         <p>Buy the product you will actually keep.</p>
-        <span>RuntimeTerrors · Meesho ScriptedByHer 2.0</span>
+        <span>Evidence-led commerce trust layer</span>
       </footer>
     </div>
   );

@@ -3,10 +3,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   HelpCircle,
   Info,
   Layers,
-  ListChecks,
   Palette,
   RotateCcw,
   Ruler,
@@ -16,15 +16,18 @@ import {
   Truck
 } from "lucide-react";
 import { t, type LanguageCode } from "../i18n";
-import type { CompareResponse, Product } from "../types/api";
+import type { CompareResponse, Product, RegretDecisionResponse, TrustRunResponse } from "../types/api";
 
 type Props = {
   comparison: CompareResponse;
   productCatalog: Product[];
   language: LanguageCode;
   experienceMode: "simple" | "standard";
+  decision?: RegretDecisionResponse | null;
+  trustRun?: TrustRunResponse | null;
   onContinue: () => void;
   onOpenAudit: () => void;
+  onSelectProduct?: (productId: string, variantId?: string | null) => void;
 };
 
 type CandidateScore = CompareResponse["ranking"]["candidates"][number];
@@ -34,8 +37,11 @@ export function CompareSheet({
   productCatalog,
   language,
   experienceMode,
+  decision,
+  trustRun,
   onContinue,
-  onOpenAudit
+  onOpenAudit,
+  onSelectProduct
 }: Props) {
   const [alternativeOpen, setAlternativeOpen] = useState(false);
   const ranking = comparison.ranking;
@@ -56,7 +62,8 @@ export function CompareSheet({
     isWinner: candidate.variant_id === ranking.winner,
     isAlternative: candidate.variant_id === ranking.alternative
   }));
-  const agentReason = winnerCandidate ? compareAgentReason(winnerCandidate, ranking.candidates, language) : null;
+  const sellerOptionRows = uniqueSellerCandidateRows(candidateRows);
+  const sellerListingRows = sellerListingOptions(comparison, productCatalog, candidateRows, fit.recommended_size);
 
   return (
     <div className="compare-sheet">
@@ -109,36 +116,43 @@ export function CompareSheet({
           </div>
         )}
 
-        {agentReason && (
-          <div className="compare-agent-reason">
-            <ListChecks size={15} />
-            <div>
-              <span>{t(language, "agentChecks")}</span>
-              <strong>{agentReason.title}</strong>
-              <small>{agentReason.summary}</small>
-            </div>
-          </div>
-        )}
+        <TrustRunSummary
+          comparison={comparison}
+          decision={decision}
+          trustRun={trustRun}
+          winner={winnerCandidate}
+          language={language}
+        />
 
         <div className="compare-similar-strip">
-          <span className="compare-section-label">{t(language, "similarSellers")}</span>
+          <span className="compare-section-label">Same item options</span>
           <div className="compare-similar-list">
-            {candidateRows.slice(0, isSimple ? 3 : 4).map(({ candidate, details, isWinner }) => (
-              <div
-                key={candidate.variant_id}
-                className={`compare-similar-card ${isWinner ? "winner" : ""}`}
+            {sellerListingRows.slice(0, isSimple ? 3 : 4).map((option) => (
+              <button
+                key={`${option.product.product_id}-${option.variantId}`}
+                type="button"
+                className={`compare-similar-card ${option.isRecommended ? "winner" : ""} ${option.isCurrent ? "current" : ""}`}
+                data-product-id={option.product.product_id}
+                data-variant-id={option.variantId}
+                onClick={() => {
+                  if (onSelectProduct) {
+                    onSelectProduct(option.product.product_id, option.variantId);
+                  }
+                }}
               >
                 <img
-                  src={details.imageUrl}
-                  alt={details.title}
+                  src={option.imageUrl}
+                  alt={option.title}
                   onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
                 />
                 <div>
-                  <strong>{details.sellerName}</strong>
-                  <span>Rs {details.price}</span>
+                  <strong>{option.product.seller_name}</strong>
+                  <span>{option.title} · Rs {option.price}</span>
                 </div>
-                <small>{trustScorePercent(candidate)}/100</small>
-              </div>
+                <small>{option.score === null ? "--" : option.score}/100</small>
+                <em>{option.isCurrent ? "Current" : option.isRecommended ? "Best score" : "Open"}</em>
+                <ChevronRight size={14} aria-hidden="true" />
+              </button>
             ))}
           </div>
         </div>
@@ -200,10 +214,10 @@ export function CompareSheet({
         <div className="compare-engine-card">
           <div className="compare-engine-header">
             <div>
-              <span className="eyebrow">{t(language, "trustRanking")}</span>
+            <span className="eyebrow">{t(language, "trustRanking")}</span>
               <h4>{t(language, "sellerOptionsChecked")}</h4>
             </div>
-            <span className="ui-badge neutral">{candidateRows.length} {t(language, "checked")}</span>
+            <span className="ui-badge neutral">{sellerOptionRows.length} {t(language, "checked")}</span>
           </div>
           <p>{t(language, "rankingExplainer")}</p>
           {ranking.weighting && (
@@ -213,10 +227,23 @@ export function CompareSheet({
             </div>
           )}
           <div className="compare-candidate-list">
-            {candidateRows.map(({ candidate, details, index, isWinner, isAlternative }) => (
+            {sellerOptionRows.map(({ candidate, details, isWinner, isAlternative }, index) => (
               <div
                 key={candidate.variant_id}
                 className={`compare-candidate-row ${isWinner ? "winner" : ""} ${isAlternative ? "alternative" : ""}`}
+                role={onSelectProduct && details.product ? "button" : undefined}
+                tabIndex={onSelectProduct && details.product ? 0 : undefined}
+                onClick={() => {
+                  if (onSelectProduct && details.product) {
+                    onSelectProduct(details.product.product_id, candidate.variant_id);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && onSelectProduct && details.product) {
+                    e.preventDefault();
+                    onSelectProduct(details.product.product_id, candidate.variant_id);
+                  }
+                }}
               >
                 <div className="compare-rank-pill">
                   {isWinner ? <CheckCircle2 size={13} /> : <span>{index + 1}</span>}
@@ -273,6 +300,153 @@ function FactorIcon({ factor }: { factor: string }) {
   return <ShieldCheck size={16} />;
 }
 
+function TrustRunSummary({
+  comparison,
+  decision,
+  trustRun,
+  winner,
+  language
+}: {
+  comparison: CompareResponse;
+  decision?: RegretDecisionResponse | null;
+  trustRun?: TrustRunResponse | null;
+  winner: CandidateScore | null;
+  language: LanguageCode;
+}) {
+  const factCount = trustRun?.summary.fact_count ?? new Set([
+    ...(decision?.fact_ids ?? []),
+    ...(comparison.graph_path.fact_ids ?? []),
+    ...(winner?.fact_ids ?? [])
+  ]).size;
+  const sellerCount = trustRun?.summary.seller_count ?? comparison.similarity?.distinct_seller_count ?? comparison.ranking.candidates.length;
+  const proofItems = decision ? Object.values(decision.sku_truth_passport.proof_coverage) : [];
+  const sufficientProofCount = proofItems.filter((item) => item.sufficient).length;
+  const reviewSummary = decision?.sku_truth_passport.review_evidence.credibility_summary;
+  const scoreItems = winner?.score_breakdown?.items ?? [];
+  const policyVersion = winner?.weight_version ?? comparison.ranking.weighting?.version ?? "trust-policy-v1";
+  const agentMode = trustRun ? formatAgentMode(trustRun.agent.mode) : trustRunAgentMode(comparison, decision);
+  const missingProof = decision?.missing_proof;
+
+  const fallbackSteps = [
+    {
+      label: "Similar listings",
+      value: `${sellerCount} sellers`,
+      detail: comparison.similarity?.summary ?? "Mapped by product cluster, catalog facts, and seller context.",
+      status: sellerCount > 1 ? "done" : "watch"
+    },
+    {
+      label: "Seller gate",
+      value: scoreValue(winner, "seller_trust"),
+      detail: "Verification, dispatch, and seller reliability are checked before recommendation.",
+      status: scoreStatus(winner, "seller_trust", 0.62)
+    },
+    {
+      label: "SKU outcomes",
+      value: scoreValue(winner, "outcome_quality"),
+      detail: decision
+        ? `${decision.sku_truth_passport.outcome_evidence.delivered_orders_90d} recent deliveries and return rate were used.`
+        : "Delivered orders and return outcomes were used.",
+      status: scoreStatus(winner, "outcome_quality", 0.62)
+    },
+    {
+      label: "Review credibility",
+      value: reviewSummary
+        ? `${reviewSummary.credible_review_count}/${reviewSummary.review_count}`
+        : scoreValue(winner, "review_signal"),
+      detail: reviewSummary
+        ? `${reviewSummary.reliability} reliability. Low-weight reviews do not dominate the score.`
+        : "Review score is weighted instead of trusting every rating equally.",
+      status: reviewSummary && reviewSummary.reliability !== "weak" ? "done" : scoreStatus(winner, "review_signal", 0.58)
+    },
+    {
+      label: "Proof and offer",
+      value: `${sufficientProofCount}/${Math.max(proofItems.length, 1)} proofs`,
+      detail: missingProof
+        ? `${missingProof.title}. The seller can be asked for this proof.`
+        : "No major proof gap blocked this choice.",
+      status: missingProof ? "watch" : "done"
+    }
+  ] as const;
+  const steps = trustRun?.steps.length
+    ? trustRun.steps.map((step) => ({
+      label: step.label,
+      value: step.value,
+      detail: step.summary,
+      status: normalizeTrustRunStatus(step.status)
+    }))
+    : fallbackSteps;
+  const displayScore = trustRun?.summary.score_percent ?? (winner ? trustScorePercent(winner) : null);
+  const headline = trustRun?.summary.headline ?? "Sarthi checked this like a kept-order decision.";
+  const summary = trustRun?.summary.body;
+  const checkCount = trustRun?.agent.tools_used.length ?? (scoreItems.length || 6);
+
+  return (
+    <section className="trust-run-card" aria-label="Sarthi trust run">
+      <div className="trust-run-card-header">
+        <div>
+          <span className="eyebrow">Trust run</span>
+          <h4>{headline}</h4>
+          {summary && <p>{summary}</p>}
+        </div>
+        <span className={`trust-run-score ${displayScore !== null && displayScore >= 72 ? "strong" : "watch"}`}>
+          {displayScore ?? "--"}/100
+        </span>
+      </div>
+
+      <div className="trust-run-meta" aria-label="Trust run source details">
+        <span>{agentMode}</span>
+        <span>{formatPolicyLabel(policyVersion)}</span>
+        <span>{factCount || comparison.ranking.fact_ids.length} facts</span>
+        <span>{checkCount} checks</span>
+        {scoreItems.length > 0 && <span>{scoreItems.length} weighted signals</span>}
+      </div>
+
+      <ol className="trust-run-timeline">
+        {steps.map((step, index) => (
+          <li key={step.label} className={`trust-run-step ${step.status}`}>
+            <span className="trust-run-step-mark">{index + 1}</span>
+            <div>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </div>
+            <b>{step.value}</b>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function normalizeTrustRunStatus(status: string) {
+  if (status === "done" || status === "blocked") return status;
+  return "watch";
+}
+
+function formatAgentMode(mode: string) {
+  if (mode.includes("cached")) return "Cached AI visual match plus scoring";
+  if (mode.includes("ai_visual_match")) return "AI visual match plus deterministic scoring";
+  return "Deterministic evidence run";
+}
+
+function trustRunAgentMode(comparison: CompareResponse, decision?: RegretDecisionResponse | null) {
+  const agent = decision?.context.similarity?.agent ?? comparison.similarity?.agent;
+  if (!agent) return "Deterministic evidence run";
+  if (agent.status === "cache_hit") return "AI visual match reused from cache";
+  if (agent.used) return "AI visual match plus deterministic scoring";
+  if (agent.status === "not_enough_candidates") return "Deterministic run with limited seller options";
+  return "Deterministic evidence run";
+}
+
+function scoreValue(candidate: CandidateScore | null, factor: CandidateFactor) {
+  if (!candidate) return "--";
+  return `${Math.round((candidate.factors[factor] ?? 0) * 100)}%`;
+}
+
+function scoreStatus(candidate: CandidateScore | null, factor: CandidateFactor, threshold: number) {
+  if (!candidate) return "watch";
+  return (candidate.factors[factor] ?? 0) >= threshold ? "done" : "watch";
+}
+
 function humanFactorLabel(factor: string, language: LanguageCode) {
   const normalized = factor.toLowerCase();
   if (normalized.includes("outcome") || normalized.includes("return")) return t(language, "keptOrderSignal");
@@ -296,12 +470,88 @@ function getProductDetailsForVariant(variantId: string, productCatalog: Product[
     .find((item) => variantId === item.product_id || variantId.startsWith(`${item.product_id}_`));
 
   return {
-    title: product?.title.split("-")[0].trim() ?? "Selected product",
+    title: product ? marketplaceProductTitle(product) : "Selected product",
     sellerName: product?.seller_name ?? "Mapped seller",
     price: product?.base_price ?? 0,
     imageUrl: product?.image_url || fallbackProductImage(product?.color_family),
     product
   };
+}
+
+function sellerListingOptions(
+  comparison: CompareResponse,
+  productCatalog: Product[],
+  candidateRows: Array<{
+    candidate: CandidateScore;
+    details: ReturnType<typeof getProductDetailsForVariant>;
+    isWinner: boolean;
+  }>,
+  recommendedSize: string
+) {
+  const selectedProduct = productCatalog.find((product) => product.product_id === comparison.selected_product_id)
+    ?? candidateRows.find((row) => row.isWinner)?.details.product
+    ?? null;
+  const clusterId = selectedProduct?.cluster_id;
+  const products = clusterId
+    ? productCatalog.filter((product) => product.cluster_id === clusterId)
+    : productCatalog.filter((product) => product.product_id === comparison.selected_product_id);
+  const candidateByProduct = new Map(
+    candidateRows
+      .filter((row) => row.details.product)
+      .map((row) => [row.details.product!.product_id, row])
+  );
+
+  return products
+    .map((product) => {
+      const candidateRow = candidateByProduct.get(product.product_id) ?? null;
+      const variantId = candidateRow?.candidate.variant_id ?? fallbackVariantId(product.product_id, recommendedSize);
+      const score = candidateRow
+        ? trustScorePercent(candidateRow.candidate)
+        : typeof product.buyer_trust?.confidence === "number"
+          ? Math.round(product.buyer_trust.confidence)
+          : null;
+      return {
+        product,
+        variantId,
+        score,
+        title: marketplaceProductTitle(product),
+        price: product.base_price,
+        imageUrl: product.image_url || product.image_urls?.[0] || fallbackProductImage(product.color_family),
+        isCurrent: product.product_id === selectedProduct?.product_id,
+        isRecommended: variantId === comparison.ranking.winner
+      };
+    })
+    .sort((a, b) => {
+      if (a.isRecommended !== b.isRecommended) return a.isRecommended ? -1 : 1;
+      if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+      return (b.score ?? -1) - (a.score ?? -1);
+    });
+}
+
+function marketplaceProductTitle(product: Product) {
+  const title = product.title.split("-")[0].trim();
+  const contexts = ["Everyday Wear", "Office Ready", "Festival Edit", "Comfort Fit"];
+  const context = contexts.find((suffix) => title.toLowerCase().endsWith(suffix.toLowerCase())) ?? "";
+  const base = context ? title.slice(0, -context.length).trim() : title;
+  if (product.category === "women_kurtis" && /\bdress\b/i.test(base)) {
+    return base.replace(/\bdress\b/gi, "Kurti");
+  }
+  return base;
+}
+
+function fallbackVariantId(productId: string, recommendedSize: string) {
+  const normalized = recommendedSize.trim().toLowerCase().replace(/\s+/g, "_");
+  return `${productId}_${normalized || "xl"}`;
+}
+
+function uniqueSellerCandidateRows<T extends { details: { product?: Product | null; sellerName: string } }>(rows: T[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = row.details.product?.seller_id ?? row.details.sellerName;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function fallbackProductImage(color?: string) {
@@ -343,16 +593,4 @@ function formatPolicyLabel(version: string) {
 function matchReasons(candidates: NonNullable<CompareResponse["similarity"]>["candidates"] = [], language: LanguageCode) {
   const reasons = new Set(candidates.flatMap((candidate) => candidate.reasons));
   return [...reasons].slice(0, 3).join(" + ") || t(language, "matchedByProductFacts");
-}
-
-function compareAgentReason(winner: CandidateScore, candidates: CandidateScore[], language: LanguageCode) {
-  const factors = factorRowsForCandidate(winner, language);
-  const strongFactors = factors.filter((factor) => factor.value >= 70).slice(0, 3);
-  const compared = Math.max(1, candidates.length);
-  return {
-    title: `${compared} sellers checked. ${strongFactors.length || 1} strong signal(s) found.`,
-    summary: strongFactors.length
-      ? `Wins on ${strongFactors.map((factor) => factor.label.toLowerCase()).join(", ")}.`
-      : t(language, "checkOnce")
-  };
 }

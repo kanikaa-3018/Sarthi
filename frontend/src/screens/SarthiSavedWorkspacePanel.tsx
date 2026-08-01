@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileSearch, MessageCircle, ShieldCheck, Store, TrendingDown } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileSearch, MessageCircle, ShieldCheck, Store, TrendingDown, X } from "lucide-react";
 import type {
   ClusterKnowledgeGraph,
   CompareResponse,
@@ -78,6 +78,7 @@ export function SarthiSavedWorkspacePanel({
   onRetryGraph: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [graphDrawerOpen, setGraphDrawerOpen] = useState(false);
   useEffect(() => {
     if (openProofDetails) setDetailsOpen(true);
   }, [openProofDetails, savedProduct.product_id]);
@@ -109,6 +110,11 @@ export function SarthiSavedWorkspacePanel({
     : null;
   const returnSignal = graphContext
     ? returnSignalLabel(graphContext.evidence.delivered_orders_90d, graphContext.evidence.return_rate)
+    : regretDecision
+      ? returnSignalLabel(
+          regretDecision.sku_truth_passport.outcome_evidence.delivered_orders_90d,
+          regretDecision.sku_truth_passport.outcome_evidence.return_rate
+        )
     : null;
   const sourceCount = knowledgeGraph?.summary.fact_count ?? result?.ranking.fact_ids.length ?? 0;
   const entryCopy = savedEntryCopy(language);
@@ -165,6 +171,11 @@ export function SarthiSavedWorkspacePanel({
       detail: sourceCount > 0 ? `${sourceCount} ${t(language, "facts")} ${t(language, "checked")}` : t(language, "checkingProof")
     }
   ];
+
+  function openProofFromGraph(traceId: string) {
+    setGraphDrawerOpen(false);
+    window.setTimeout(() => onOpenProof(traceId), 0);
+  }
 
   return (
     <div className="sarthi-saved-workspace buyer-shop-shell buyer-simple-entry">
@@ -249,6 +260,10 @@ export function SarthiSavedWorkspacePanel({
             <button type="button" onClick={() => result && onOpenResult(result)} disabled={!result}>
               {result ? entryCopy.compareSellers : t(language, "checkingEllipsis")}
             </button>
+            <button type="button" onClick={() => setGraphDrawerOpen(true)} disabled={!knowledgeGraph && graphLoading}>
+              <FileSearch size={15} aria-hidden="true" />
+              {!knowledgeGraph && graphLoading ? "Graph loading" : "Graph chat"}
+            </button>
             <button type="button" onClick={() => setDetailsOpen((open) => !open)}>
               {detailsOpen ? entryCopy.hideDetails : entryCopy.showDetails}
               <ChevronDown size={15} aria-hidden="true" />
@@ -321,39 +336,57 @@ export function SarthiSavedWorkspacePanel({
                 {t(language, "seeProof")}
               </button>
             </section>
-            <details className="buyer-graph-details">
-              <summary>
-                <span className="buyer-graph-summary-icon">
-                  <FileSearch size={16} />
-                </span>
-                <span>
-                  <strong>{entryCopy.evidenceGraph}</strong>
-                  <small>{entryCopy.graphSubtitle}</small>
-                </span>
-                <em>
-                  {knowledgeGraph
-                    ? `${knowledgeGraph.summary.fact_count} ${t(language, "facts")}`
-                    : graphLoading
-                      ? t(language, "checkingProof")
-                      : entryCopy.graphUnavailable}
-                </em>
-              </summary>
-              <KnowledgeGraphExplorer
-                graph={knowledgeGraph}
-                answer={graphAnswer}
-                query={graphQuery}
-                loading={graphLoading}
-                asking={graphAsking}
-                error={graphError}
-                onQueryChange={onQueryChange}
-                onAsk={onAskGraph}
-                onOpenProof={onOpenProof}
-                onRetry={onRetryGraph}
-              />
-            </details>
+            <EvidencePathCard
+              graph={knowledgeGraph}
+              savedProduct={savedProduct}
+              recommendedProduct={recommendedProduct}
+              sellerCount={similarSellerCount}
+              returnSignal={returnSignal}
+              sourceCount={sourceCount}
+              loading={graphLoading}
+              error={graphError}
+              language={language}
+              copy={entryCopy}
+              onOpenGraph={() => setGraphDrawerOpen(true)}
+              onRetry={onRetryGraph}
+            />
           </section>
         )}
       </main>
+
+      {graphDrawerOpen && (
+        <div className="bottom-sheet-overlay evidence-graph-drawer-overlay" onClick={() => setGraphDrawerOpen(false)}>
+          <section
+            className="bottom-sheet-content evidence-graph-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="evidence-graph-drawer-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bottom-sheet-header">
+              <div>
+                <span className="eyebrow">{entryCopy.evidenceGraph}</span>
+                <h3 className="sheet-title" id="evidence-graph-drawer-title">Proof links</h3>
+              </div>
+              <button className="bottom-sheet-close" type="button" onClick={() => setGraphDrawerOpen(false)} aria-label="Close evidence graph">
+                <X size={16} />
+              </button>
+            </div>
+            <KnowledgeGraphExplorer
+              graph={knowledgeGraph}
+              answer={graphAnswer}
+              query={graphQuery}
+              loading={graphLoading}
+              asking={graphAsking}
+              error={graphError}
+              onQueryChange={onQueryChange}
+              onAsk={onAskGraph}
+              onOpenProof={openProofFromGraph}
+              onRetry={onRetryGraph}
+            />
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -466,6 +499,105 @@ function DecisionAnswerPanel({
         <button type="button" onClick={() => onOpenProof(decision.trace_id)}>
           {t(language, "seeProof")}
         </button>
+      </div>
+    </section>
+  );
+}
+
+function EvidencePathCard({
+  graph,
+  savedProduct,
+  recommendedProduct,
+  sellerCount,
+  returnSignal,
+  sourceCount,
+  loading,
+  error,
+  language,
+  copy,
+  onOpenGraph,
+  onRetry
+}: {
+  graph: ClusterKnowledgeGraph | null;
+  savedProduct: Product;
+  recommendedProduct: Product;
+  sellerCount: number;
+  returnSignal: string | null;
+  sourceCount: number;
+  loading: boolean;
+  error: string | null;
+  language: LanguageCode;
+  copy: Record<SavedEntryCopyKey, string>;
+  onOpenGraph: () => void;
+  onRetry: () => void;
+}) {
+  const graphEngine = graph?.summary.graph_engine === "neo4j_projection"
+    ? "Neo4j projection"
+    : graph?.summary.graph_engine === "mongodb_projection"
+      ? "MongoDB graph projection"
+      : sourceCount > 0
+        ? "Evidence path ready"
+        : "Graph building";
+  const pathSteps = [
+    {
+      label: "Saved item",
+      detail: savedProduct.title.split("-")[0].trim(),
+      value: savedProduct.seller_name,
+      tone: "safe"
+    },
+    {
+      label: "Same-product sellers",
+      detail: "Sarthi maps catalog, seller, SKU, and similar-listing signals before ranking.",
+      value: `${sellerCount} sellers`,
+      tone: sellerCount > 1 ? "safe" : "watch"
+    },
+    {
+      label: "Recommended path",
+      detail: `${recommendedProduct.seller_name} is compared against the saved seller, not shown randomly.`,
+      value: `Rs ${recommendedProduct.base_price}`,
+      tone: "safe"
+    },
+    {
+      label: "Proof and outcomes",
+      detail: returnSignal ? `${returnSignal} return signal with proof, review, price, and fit facts.` : "Waiting for outcome evidence to finish loading.",
+      value: `${sourceCount} facts`,
+      tone: sourceCount > 0 ? "safe" : "watch"
+    }
+  ] as const;
+
+  return (
+    <section className={`evidence-path-card ${error ? "error" : loading ? "loading" : ""}`} aria-label="Evidence path">
+      <div className="evidence-path-head">
+        <div>
+          <span className="eyebrow">{copy.evidenceGraph}</span>
+          <h3>Simple evidence path</h3>
+          <p>{error ? error : "Sarthi connected seller, returns, size fit, and proof records to verify the best path."}</p>
+        </div>
+      </div>
+
+      <ol className="evidence-path-steps">
+        {pathSteps.map((step, index) => (
+          <li key={step.label} className={step.tone}>
+            <span>{index + 1}</span>
+            <div>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </div>
+            <b>{step.value}</b>
+          </li>
+        ))}
+      </ol>
+
+      <div className="evidence-path-actions">
+        <button type="button" onClick={onOpenGraph} disabled={loading && !graph}>
+          <FileSearch size={14} />
+          {loading && !graph ? "Graph loading" : "Open graph chat"}
+        </button>
+        {error && (
+          <button type="button" onClick={onRetry}>
+            Retry graph
+          </button>
+        )}
       </div>
     </section>
   );
