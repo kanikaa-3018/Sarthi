@@ -74,6 +74,7 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
     const returnsNode = `returns:${variant.variant_id}`;
     const reviewsNode = `reviews:${product.product_id}`;
     const offerNode = `offer:${variant.variant_id}`;
+    const priceNode = `price:${variant.variant_id}`;
     const proofNode = `proof:${product.product_id}`;
     const scoreNode = `score:${variant.variant_id}`;
     const buyerFitNode = `buyer:${buyerId}`;
@@ -144,6 +145,24 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
       }
     });
     nodes.push({
+      id: priceNode,
+      type: "price",
+      label: offer.price_evidence?.latest_price ? `Rs ${offer.price_evidence.latest_price}` : "Price history",
+      subtitle: offer.campaign_evidence?.timer_reset_count
+        ? `${offer.campaign_evidence.timer_reset_count} campaign timer reset(s) checked`
+        : "Price history and campaign evidence",
+      status: offer.truth_basis,
+      score: candidate?.factors.price_value ?? null,
+      fact_ids: offer.fact_ids,
+      data: {
+        latest_price: offer.price_evidence?.latest_price ?? null,
+        reference_price: offer.price_evidence?.reference_price ?? null,
+        price_event_count: offer.price_evidence?.price_event_count ?? 0,
+        campaign_reset_count: offer.campaign_evidence?.timer_reset_count ?? 0,
+        buyer_guidance: offer.buyer_guidance
+      }
+    });
+    nodes.push({
       id: proofNode,
       type: "proof",
       label: missingProofCount ? `${missingProofCount} proof gaps` : "Proof covered",
@@ -180,6 +199,8 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
       edge(skuNode, returnsNode, "has outcomes", evidence.fact_ids, 0.9),
       edge(productNode, reviewsNode, "has reviews", reviewFactIds, 0.72),
       edge(skuNode, offerNode, "has offer check", offer.fact_ids, 0.64),
+      edge(offerNode, priceNode, "checks price history", offer.fact_ids, 0.74),
+      edge(priceNode, scoreNode, "price history guides buyer", offer.fact_ids, factorWeight(candidate, "price_value")),
       edge(productNode, proofNode, "has seller proof", proofFactIds, missingProofCount ? 0.45 : 0.78),
       edge(buyerFitNode, skuNode, "private fit check", fit.fact_ids ?? [], 0.68),
       edge(skuNode, scoreNode, "SKU scored", evidence.fact_ids, 0.9),
@@ -225,6 +246,7 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
         returns: returnsNode,
         reviews: reviewsNode,
         offer: offerNode,
+        price: priceNode,
         proof: proofNode,
         score: scoreNode,
         buyer_fit: buyerFitNode
@@ -232,7 +254,7 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
     });
   }
 
-  const graph = {
+  const graph: any = {
     buyer_id: buyerId,
     cluster: {
       cluster_id: clusterId,
@@ -261,8 +283,10 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
     edges,
     seller_context,
     fact_ids: [...factIds],
-    chat_suggestions: ["Which seller is safest?", "Why are these similar?", "Do returns affect reviews?"]
+    evidence_paths: [],
+    chat_suggestions: ["Which seller is safest?", "Why are these similar?", "Do returns affect reviews?", "Is this offer real?"]
   };
+  graph.evidence_paths = buildEvidencePaths(graph);
   const neo4j = await projectGraphToNeo4j(graph);
   return {
     ...graph,
@@ -278,6 +302,126 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
       neo4j_projection: neo4j
     }
   };
+}
+
+export function matchedEvidencePaths(graph: any, query: string, matchedNodeIds: string[] = [], highlightedEdgeIds: string[] = []) {
+  const paths = graph?.evidence_paths ?? [];
+  if (!paths.length) return [];
+  const normalized = String(query ?? "").toLowerCase();
+  const preferred = new Set<string>();
+  if (/\b(size|fit|xl|large|small|tight|loose|chest|measurement)\b/.test(normalized)) preferred.add("buyer_fit_path");
+  if (/\b(offer|price|discount|timer|rush|campaign|deal|cheap)\b/.test(normalized)) preferred.add("offer_timer_path");
+  if (/\b(seller|trust|score|return|review|proof|rating|safe|risk|fabric|color|genuine)\b/.test(normalized)) preferred.add("product_score_path");
+  const nodeSet = new Set(matchedNodeIds);
+  const edgeSet = new Set(highlightedEdgeIds);
+  const matched = paths.filter((path: any) =>
+    preferred.has(path.path_id) ||
+    path.node_ids?.some((nodeId: string) => nodeSet.has(nodeId)) ||
+    path.edge_ids?.some((edgeId: string) => edgeSet.has(edgeId))
+  );
+  return (matched.length ? matched : paths.slice(0, 1)).slice(0, 3);
+}
+
+function buildEvidencePaths(graph: any) {
+  const context = graph.seller_context?.find((item: any) => item.product?.product_id === graph.selected_product_id) ??
+    graph.seller_context?.[0] ??
+    null;
+  if (!context) return [];
+  const ids = context.node_ids ?? {};
+  const productPath = pathFromNodes(graph, {
+    path_id: "product_score_path",
+    title: "Product trust path",
+    audience: "buyer",
+    summary: "Product, seller, SKU outcomes, reviews, proof, and score are checked together.",
+    node_ids: [ids.product, ids.seller, ids.sku, ids.returns, ids.reviews, ids.proof, ids.score],
+    steps: [
+      pathStep("Product", ids.product, context.product?.title),
+      pathStep("Seller", ids.seller, context.seller?.verification?.verification_status),
+      pathStep("SKU", ids.sku, `${context.evidence?.delivered_orders_90d ?? 0} delivered outcomes`),
+      pathStep("Returns", ids.returns, `${Math.round(Number(context.evidence?.return_rate ?? 0) * 100)}% return rate`),
+      pathStep("Reviews", ids.reviews, "Weighted by reviewer credibility"),
+      pathStep("Proof", ids.proof, proofGapSummary(context.proof_coverage)),
+      pathStep("Score", ids.score, `${Math.round(Number(context.candidate?.score ?? 0) * 100)} / 100`)
+    ],
+    status: context.candidate?.score >= 0.72 ? "ready" : context.candidate?.score >= 0.58 ? "check_once" : "caution"
+  });
+  const fitPath = pathFromNodes(graph, {
+    path_id: "buyer_fit_path",
+    title: "Fit recommendation path",
+    audience: "buyer",
+    summary: `Private fit memory is matched with SKU outcomes before recommending ${context.fit?.recommended_size ?? context.variant?.size ?? "a size"}.`,
+    node_ids: [ids.buyer_fit, ids.sku, ids.returns, ids.score],
+    steps: [
+      pathStep("Buyer fit", ids.buyer_fit, "Private to buyer"),
+      pathStep("SKU outcomes", ids.sku, `${context.evidence?.delivered_orders_90d ?? 0} outcomes checked`),
+      pathStep("Return reasons", ids.returns, context.top_return_reason ? labelize(context.top_return_reason.return_reason) : "No dominant issue"),
+      pathStep("Recommended size", ids.score, context.fit?.recommended_size ?? context.variant?.size ?? "Check size")
+    ],
+    status: context.fit?.confidence ?? "medium"
+  });
+  const offer = context.price_context?.offer ?? {};
+  const offerPath = pathFromNodes(graph, {
+    path_id: "offer_timer_path",
+    title: "Offer and timer path",
+    audience: "buyer",
+    summary: offer.buyer_guidance ?? "Offer pressure is checked against price history and campaign resets.",
+    node_ids: [ids.offer, ids.price, ids.score],
+    steps: [
+      pathStep("Offer timer", ids.offer, labelize(offer.status ?? "offer check")),
+      pathStep("Price history", ids.price, offer.price_evidence?.reference_price ? `Reference Rs ${offer.price_evidence.reference_price}` : "Not enough prior price"),
+      pathStep("Campaign reset", ids.price, `${offer.campaign_evidence?.timer_reset_count ?? 0} reset(s)`),
+      pathStep("Buyer guidance", ids.score, offer.buyer_guidance ?? "Decide using product proof")
+    ],
+    status: offer.status ?? "not_enough_history"
+  });
+  return [productPath, fitPath, offerPath];
+}
+
+function pathFromNodes(graph: any, input: any) {
+  const nodeIds = input.node_ids.filter(Boolean);
+  const edgeIds = edgesForPath(graph, nodeIds);
+  const factIds = new Set<string>();
+  const nodesById = new Map(graph.nodes.map((node: any) => [node.id, node]));
+  const edgesById = new Map(graph.edges.map((edge: any) => [edge.id, edge]));
+  for (const nodeId of nodeIds) {
+    const node: any = nodesById.get(nodeId);
+    (node?.fact_ids ?? []).forEach((factId: string) => factIds.add(factId));
+  }
+  for (const edgeId of edgeIds) {
+    const edge: any = edgesById.get(edgeId);
+    (edge?.fact_ids ?? []).forEach((factId: string) => factIds.add(factId));
+  }
+  return {
+    ...input,
+    node_ids: nodeIds,
+    edge_ids: edgeIds,
+    fact_ids: [...factIds],
+    steps: input.steps.filter((step: any) => step.node_id)
+  };
+}
+
+function edgesForPath(graph: any, nodeIds: string[]) {
+  const pairKeys = new Set<string>();
+  for (let index = 0; index < nodeIds.length - 1; index += 1) {
+    pairKeys.add(`${nodeIds[index]}->${nodeIds[index + 1]}`);
+    pairKeys.add(`${nodeIds[index + 1]}->${nodeIds[index]}`);
+  }
+  return graph.edges
+    .filter((edge: any) => pairKeys.has(`${edge.source}->${edge.target}`))
+    .map((edge: any) => edge.id);
+}
+
+function pathStep(labelText: string, nodeId: string | undefined, detail: string | number | null | undefined) {
+  return {
+    label: labelText,
+    node_id: nodeId ?? "",
+    detail: String(detail ?? "Evidence unavailable")
+  };
+}
+
+function proofGapSummary(coverage: Record<string, any> | undefined) {
+  const gaps = Object.values(coverage ?? {}).filter((item: any) => item && item.sufficient === false);
+  return gaps.length ? `${gaps.length} proof gap${gaps.length === 1 ? "" : "s"}` : "Proof covered";
 }
 
 function edge(source: string, target: string, labelText: string, fact_ids: string[], weight: number) {
@@ -300,4 +444,8 @@ function uniqueBy(rows: any[], key: string) {
   const map = new Map();
   for (const row of rows) map.set(row[key], row);
   return [...map.values()];
+}
+
+function labelize(value: unknown) {
+  return String(value ?? "unknown").replace(/_/g, " ");
 }

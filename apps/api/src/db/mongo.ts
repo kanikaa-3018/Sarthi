@@ -26,6 +26,7 @@ export type Collections = {
   facts: Collection;
   proofRequests: Collection;
   sellerEvidenceAssets: Collection;
+  sellerRootCauseTasks: Collection;
   sellerApplications: Collection;
   sellerVerificationDocuments: Collection;
   listingDrafts: Collection;
@@ -80,6 +81,7 @@ export function collections(db = getDb()): Collections {
     facts: db.collection("fact_records"),
     proofRequests: db.collection("proof_requests"),
     sellerEvidenceAssets: db.collection("seller_evidence_assets"),
+    sellerRootCauseTasks: db.collection("seller_root_cause_tasks"),
     sellerApplications: db.collection("seller_applications"),
     sellerVerificationDocuments: db.collection("seller_verification_documents"),
     listingDrafts: db.collection("listing_drafts"),
@@ -115,6 +117,7 @@ async function ensureIndexes(db: Db) {
     c.sessions.createIndex({ token_hash: 1 }, { unique: true }),
     c.sessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
     c.products.createIndex({ product_id: 1 }, { unique: true }),
+    c.products.createIndex({ feed_rank: 1, product_id: 1 }),
     c.products.createIndex({ cluster_id: 1 }),
     c.products.createIndex({ seller_id: 1, cluster_id: 1 }),
     c.products.createIndex({ is_sarthi_eligible: 1, category: 1, garment_type: 1, color_family: 1 }),
@@ -133,6 +136,8 @@ async function ensureIndexes(db: Db) {
     c.proofRequests.createIndex({ buyer_id: 1, product_id: 1, status: 1 }),
     c.proofRequests.createIndex({ seller_id: 1, product_id: 1, attribute: 1, status: 1 }),
     c.sellerEvidenceAssets.createIndex({ product_id: 1, attribute: 1 }),
+    c.sellerRootCauseTasks.createIndex({ seller_id: 1, status: 1, updated_at: -1 }),
+    c.sellerRootCauseTasks.createIndex({ seller_id: 1, product_id: 1, variant_id: 1, dimension: 1, status: 1 }),
     c.sellerApplications.createIndex({ seller_id: 1, created_at: -1 }),
     c.sellerApplications.createIndex({ status: 1, created_at: -1 }),
     c.sellerVerificationDocuments.createIndex({ seller_id: 1, submitted_at: -1 }),
@@ -154,6 +159,6 @@ async function ensureIndexes(db: Db) {
     c.trustRadarEvents.createIndex({ intent_id: 1, created_at: -1 }),
     c.cartConfidenceSnapshots.createIndex({ snapshot_id: 1 }, { unique: true }),
     c.cartConfidenceSnapshots.createIndex({ buyer_id: 1, created_at: -1 }),
-    ensureVectorSearchIndexes(db)
+    env.vectorSearchEnabled ? ensureVectorSearchIndexes(db) : Promise.resolve()
   ]);
 }

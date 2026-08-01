@@ -71,7 +71,7 @@ export const env = {
   mongoDbName: process.env.MONGODB_DB ?? "sarthi",
   authSecret: process.env.AUTH_SECRET ?? "dev-only-change-me",
   seedOnStart: process.env.SEED_ON_START === "true",
-  demoControlsEnabled: process.env.DEMO_CONTROLS_ENABLED !== "false",
+  demoControlsEnabled: process.env.DEMO_CONTROLS_ENABLED === "true",
   externalServiceTimeoutMs: Number(process.env.EXTERNAL_SERVICE_TIMEOUT_MS ?? 8000),
   ...aiConfig,
   llmProvider: process.env.LLM_PROVIDER ?? (process.env.GEMINI_API_KEY ? "gemini" : "disabled"),

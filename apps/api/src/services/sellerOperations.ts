@@ -167,17 +167,22 @@ export async function sellerEvidenceCoach(db: Db, sellerId: string) {
       trust_lift_points: proofLiftPoints(asset.status, asset.attribute, quality.score),
       submitted_at: asset.submitted_at ?? asset.created_at,
       reviewed_at: asset.reviewed_at ?? null,
-      review_notes: asset.review_notes ?? null
+      review_notes: asset.review_notes ?? null,
+      proof_loop: sellerAssetProofLoop(asset, quality.score)
     };
   });
   const approved = proofStatusItems.filter((item) => item.status === "verified");
   const inReview = proofStatusItems.filter((item) => item.status === "submitted");
   const rejected = proofStatusItems.filter((item) => item.status === "rejected");
   const trustLift = proofStatusItems.reduce((sum, item) => sum + item.trust_lift_points, 0);
+  const proofAgent = await generateSellerProofAgent(tasks, proofStatusItems, {
+    resolvedRequestCount: await c.proofRequests.countDocuments({ seller_id: sellerId, status: "resolved" }),
+    visibleTrustLift: trustLift
+  });
   return {
     seller_id: sellerId,
     open_task_count: tasks.length,
-    resolved_request_count: await c.proofRequests.countDocuments({ seller_id: sellerId, status: "resolved" }),
+    resolved_request_count: proofAgent.metrics.resolved_requests,
     proof_nav: {
       approved_count: approved.length,
       in_review_count: inReview.length,
@@ -192,6 +197,7 @@ export async function sellerEvidenceCoach(db: Db, sellerId: string) {
             ? "Submit the open proof tasks to unlock visible trust lift."
             : "Keep proof fresh so trust does not fall when buyer doubts appear."
     },
+    proof_agent: proofAgent,
     proof_assets: proofStatusItems,
     tasks,
     privacy_guard: {
@@ -203,27 +209,396 @@ export async function sellerEvidenceCoach(db: Db, sellerId: string) {
 
 async function sellerEvidenceTasks(db: Db, sellerId: string) {
   const c = collections(db);
-  const requests = await c.proofRequests.find({ seller_id: sellerId, status: "open" }).toArray();
-  return Promise.all(requests.map(async (request: any) => {
+  const [requests, rootCauses] = await Promise.all([
+    c.proofRequests.find({ seller_id: sellerId, status: "open" }).toArray(),
+    c.sellerRootCauseTasks.find({ seller_id: sellerId, status: "open" }).sort({ updated_at: -1 }).toArray()
+  ]);
+  const proofTasks = await Promise.all(requests.map(async (request: any) => {
     const product = await c.products.findOne({ product_id: request.product_id });
     const rejected = Boolean(request.rejected_proof_id || request.rejection_notes);
+    const requestCount = Number(request.request_count ?? 0);
+    const age_hours = hoursSince(request.updated_at ?? request.created_at);
+    const response_sla_hours = proofRequestSlaHours(requestCount, rejected);
     return {
       type: "missing_buyer_proof",
-      priority: rejected || request.request_count >= 3 ? "high" : "medium",
+      priority: rejected || requestCount >= 3 ? "high" : "medium",
       product_id: request.product_id,
       product_title: product?.title ?? request.product_id,
       attribute: request.attribute,
       title: rejected ? `Replace rejected ${label(request.attribute)} proof` : `${label(request.attribute)} proof requested`,
-      rationale: request.rejection_notes || `${request.request_count} buyer doubt(s) need aggregate proof before stronger trust.`,
+      rationale: request.rejection_notes || `${requestCount} buyer doubt(s) need aggregate proof before stronger trust.`,
       recommended_proof_type: recommendationForAttribute(request.attribute),
-      buyer_demand: request.request_count,
+      buyer_demand: requestCount,
       first_seen_at: request.created_at,
       last_seen_at: request.updated_at,
+      age_hours,
+      response_sla_hours,
+      sla_state: proofRequestSlaState(age_hours, response_sla_hours),
+      trust_lift_points: proofRequestTrustLift(request.attribute, requestCount, rejected),
+      buyer_impact: proofRequestBuyerImpact(request.attribute, requestCount, rejected),
+      proof_loop: sellerTaskProofLoop(request, requestCount, rejected),
       fact_ids: [request.fact_id].filter(Boolean),
       rejected_proof_id: request.rejected_proof_id ?? null,
       rejection_note: request.rejection_notes ?? null
     };
   }));
+  const rootCauseTasks = await Promise.all(rootCauses.map(async (task: any) => {
+    const product = await c.products.findOne({ product_id: task.product_id });
+    const buyerDemand = Math.max(1, Number(task.buyer_count ?? 1));
+    const age_hours = hoursSince(task.updated_at ?? task.first_seen_at);
+    const response_sla_hours = proofRequestSlaHours(buyerDemand, false);
+    return {
+      type: "broken_expectation",
+      priority: task.priority ?? (buyerDemand >= 3 ? "high" : "medium"),
+      product_id: task.product_id,
+      product_title: product?.title ?? task.product_title ?? task.product_id,
+      attribute: task.attribute ?? "fabric",
+      title: task.title ?? "Resolve buyer expectation gap",
+      rationale: task.rationale ?? `${buyerDemand} buyer outcome(s) show this promise needs seller proof.`,
+      recommended_proof_type: task.recommended_proof_type ?? recommendationForAttribute(task.attribute ?? "fabric"),
+      buyer_demand: buyerDemand,
+      first_seen_at: task.first_seen_at ?? task.created_at ?? task.updated_at,
+      last_seen_at: task.updated_at ?? task.first_seen_at,
+      age_hours,
+      response_sla_hours,
+      sla_state: proofRequestSlaState(age_hours, response_sla_hours),
+      trust_lift_points: proofRequestTrustLift(task.attribute ?? "fabric", buyerDemand, false),
+      buyer_impact: task.buyer_notification_preview ?? proofRequestBuyerImpact(task.attribute ?? "fabric", buyerDemand, false),
+      proof_loop: sellerRootCauseProofLoop(task, buyerDemand),
+      fact_ids: task.fact_ids ?? [task.last_fact_id].filter(Boolean),
+      root_cause_task_id: task.task_id
+    };
+  }));
+  return [...rootCauseTasks, ...proofTasks].sort((left: any, right: any) => priorityRank(left.priority) - priorityRank(right.priority) || Number(right.buyer_demand ?? 0) - Number(left.buyer_demand ?? 0));
+}
+
+function sellerRootCauseProofLoop(task: any, buyerDemand: number) {
+  const attribute = label(task.attribute ?? task.dimension ?? "proof").toLowerCase();
+  return {
+    title: "Expectation contract loop",
+    aggregate_demand: `${buyerDemand} buyer${buyerDemand === 1 ? "" : "s"} reported a ${attribute} promise gap`,
+    seller_action: task.seller_action ?? `Upload ${attribute} proof`,
+    admin_gate: "Reviewer verifies proof before confidence changes",
+    buyer_notification_preview: task.buyer_notification_preview ?? `After approval: proof added for ${attribute}, confidence can improve.`,
+    steps: [
+      { key: "contract_locked", label: "Promise locked", done: true },
+      { key: "buyer_outcome", label: "Buyer outcome", done: true },
+      { key: "seller_fix", label: "Seller proof", done: false },
+      { key: "admin_review", label: "Reviewer verifies", done: false },
+      { key: "score_update", label: "Score updates", done: false }
+    ]
+  };
+}
+
+export async function generateSellerProofAgent(
+  tasks: any[],
+  proofAssets: any[],
+  options: { resolvedRequestCount: number; visibleTrustLift: number },
+  generate: (input: StructuredGenerationInput) => Promise<GeneratedJson | null> = generateStructuredJson
+) {
+  const fallback = fallbackSellerProofAgent(tasks, proofAssets, options);
+  try {
+    const topTasks = tasks.slice(0, 8);
+    const generated = await generate({
+      capability: "text",
+      systemInstruction: [
+        "You are Sarthi's seller proof operations agent for a trust-commerce marketplace.",
+        "Use only the supplied JSON evidence. Do not invent buyers, scores, policies, proof states, or guarantees.",
+        "Pick the one proof task a seller should do first, explain why, and give a short operational playbook.",
+        "Keep the human reviewer gate explicit. The agent cannot approve proof, publish listings, or raise buyer score.",
+        "Return JSON only with keys: headline, summary, selected_task_key, recommended_action, reasoning, playbook."
+      ].join(" "),
+      userText: JSON.stringify({
+        task: "seller_proof_triage",
+        metrics: fallback.metrics,
+        guardrail: fallback.guardrail,
+        open_tasks: topTasks.map((task) => ({
+          task_key: proofAgentTaskKey(task),
+          product_id: task.product_id,
+          product_title: task.product_title,
+          attribute: task.attribute,
+          priority: task.priority,
+          buyer_demand: task.buyer_demand,
+          age_hours: task.age_hours,
+          response_sla_hours: task.response_sla_hours,
+          sla_state: task.sla_state,
+          trust_lift_points: task.trust_lift_points,
+          required_proof: task.recommended_proof_type,
+          buyer_impact: task.buyer_impact
+        })),
+        proof_assets: proofAssets.slice(0, 8).map((asset) => ({
+          product_id: asset.product_id,
+          attribute: asset.attribute,
+          proof_type: asset.proof_type,
+          status: asset.status,
+          quality_score: asset.quality_score,
+          trust_lift_points: asset.trust_lift_points
+        }))
+      }),
+      schemaName: "sarthi_seller_proof_agent",
+      schemaDescription: "Grounded seller proof triage with one next action and reviewer guardrails",
+      schema: {
+        type: "object",
+        properties: {
+          headline: { type: "string" },
+          summary: { type: "string" },
+          selected_task_key: { type: "string" },
+          recommended_action: { type: "string" },
+          reasoning: { type: "array", items: { type: "string" } },
+          playbook: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string" },
+                detail: { type: "string" },
+                tool: { type: "string" },
+                status: { type: "string", enum: ["done", "next", "blocked"] }
+              },
+              required: ["label", "detail", "tool", "status"]
+            }
+          }
+        },
+        required: ["headline", "summary", "selected_task_key", "recommended_action", "reasoning", "playbook"]
+      },
+      maxTokens: 700
+    });
+    const parsed = generated?.value;
+    if (!generated || !parsed) {
+      return {
+        ...fallback,
+        provider: aiConfigured("text") ? "fallback_after_llm_error" as const : "deterministic_fallback" as const
+      };
+    }
+    const selectedTaskKey = fallback.selected_task_key;
+    return {
+      ...fallback,
+      provider: generated.provider,
+      headline: fallback.headline,
+      summary: normalizeProofAgentSummary(parsed.summary, fallback.summary),
+      selected_task_key: selectedTaskKey,
+      selected_product_id: selectedTaskKey ? selectedTaskKey.split(":")[0] ?? null : null,
+      selected_attribute: selectedTaskKey ? selectedTaskKey.split(":")[1] ?? null : null,
+      recommended_action: fallback.recommended_action,
+      reasoning: normalizeProofAgentReasoning(parsed.reasoning, fallback.reasoning),
+      playbook: normalizeProofAgentPlaybook(parsed.playbook, fallback.playbook)
+    };
+  } catch {
+    return { ...fallback, provider: "fallback_after_llm_error" as const };
+  }
+}
+
+function fallbackSellerProofAgent(tasks: any[], proofAssets: any[], options: { resolvedRequestCount: number; visibleTrustLift: number }) {
+  const sortedTasks = [...tasks].sort((left, right) =>
+    proofAgentRiskRank(right) - proofAgentRiskRank(left) ||
+    Number(right.buyer_demand ?? 0) - Number(left.buyer_demand ?? 0)
+  );
+  const selected = sortedTasks[0] ?? null;
+  const selectedTaskKey = selected ? proofAgentTaskKey(selected) : null;
+  const waitingBuyers = tasks.reduce((sum, task) => sum + Math.max(0, Number(task.buyer_demand ?? 0)), 0);
+  const urgentTasks = tasks.filter((task) => task.priority === "high" || task.sla_state === "due_today" || task.sla_state === "breached").length;
+  const breachedTasks = tasks.filter((task) => task.sla_state === "breached").length;
+  const openTrustLift = tasks.reduce((sum, task) => sum + Math.max(0, Number(task.trust_lift_points ?? proofRequestTrustLift(task.attribute ?? "fabric", Number(task.buyer_demand ?? 1), Boolean(task.rejected_proof_id)))), 0);
+  const submittedCount = proofAssets.filter((asset) => asset.status === "submitted").length;
+  const approvedCount = proofAssets.filter((asset) => asset.status === "verified").length;
+  const rejectedCount = proofAssets.filter((asset) => asset.status === "rejected").length;
+  const guardrail = "Seller agent can rank proof work and prepare the evidence path. A human reviewer must approve proof before buyer confidence changes.";
+  const selectedAttribute = selected?.attribute ?? null;
+  const selectedProduct = selected?.product_title ? shortTitle(selected.product_title) : null;
+  return {
+    mode: "agentic_proof_triage_v1",
+    provider: "deterministic_fallback" as const,
+    headline: selected ? `${label(selectedAttribute)} proof should go first` : "Proof desk is clear",
+    summary: selected
+      ? `${selectedProduct} has ${selected.buyer_demand} aggregate buyer ask${Number(selected.buyer_demand) === 1 ? "" : "s"} and can unlock +${selected.trust_lift_points ?? proofRequestTrustLift(selected.attribute, selected.buyer_demand, Boolean(selected.rejected_proof_id))} trust after reviewer approval.`
+      : "No open proof work is blocking buyer trust. Keep verified proof fresh for new doubts.",
+    selected_task_key: selectedTaskKey,
+    selected_product_id: selected?.product_id ?? null,
+    selected_attribute: selectedAttribute,
+    recommended_action: selected ? `Upload ${proofTypeLabel(selected.recommended_proof_type)} for ${selectedProduct}` : "Monitor new buyer doubts",
+    reasoning: selected
+      ? [
+          `${waitingBuyers} aggregate buyer ask${waitingBuyers === 1 ? "" : "s"} are waiting across open proof tasks.`,
+          breachedTasks ? `${breachedTasks} proof task${breachedTasks === 1 ? "" : "s"} have crossed SLA.` : `${urgentTasks} proof task${urgentTasks === 1 ? "" : "s"} need priority handling.`,
+          `Open tasks can unlock +${openTrustLift} trust after reviewer approval.`,
+          "Buyer identity and private fit memory are not exposed to the seller."
+        ]
+      : [
+          `${approvedCount} buyer-visible proof asset${approvedCount === 1 ? "" : "s"} are already active.`,
+          "No aggregate buyer proof demand is currently waiting.",
+          guardrail
+        ],
+    playbook: selected ? [
+      {
+        label: "Observe demand",
+        detail: `${selected.buyer_demand} buyer ask${Number(selected.buyer_demand) === 1 ? "" : "s"} point to ${label(selected.attribute).toLowerCase()} proof.`,
+        tool: "aggregateProofDemand",
+        status: "done" as const
+      },
+      {
+        label: "Prepare exact proof",
+        detail: `${proofTypeLabel(selected.recommended_proof_type)} is required; generic catalog photos should not raise trust.`,
+        tool: "proofTypePolicy",
+        status: "next" as const
+      },
+      {
+        label: "Route to reviewer",
+        detail: "Submitted proof enters TrustOps review before buyers see it.",
+        tool: "reviewGate",
+        status: "blocked" as const
+      },
+      {
+        label: "Update buyer confidence",
+        detail: selected.buyer_impact || "Approved proof becomes visible in buyer trust checks.",
+        tool: "scoreImpactSimulator",
+        status: "blocked" as const
+      }
+    ] : [
+      {
+        label: "Monitor demand",
+        detail: "New buyer doubts will create aggregate proof tasks here.",
+        tool: "proofDemandWatcher",
+        status: "next" as const
+      }
+    ],
+    tools: [
+      {
+        key: "aggregate_demand",
+        label: "Aggregate demand",
+        status: "done" as const,
+        detail: `${waitingBuyers} buyer ask${waitingBuyers === 1 ? "" : "s"} counted without exposing identities.`
+      },
+      {
+        key: "sla_router",
+        label: "SLA router",
+        status: breachedTasks ? "blocked" as const : urgentTasks ? "next" as const : "done" as const,
+        detail: breachedTasks ? `${breachedTasks} breached proof SLA.` : urgentTasks ? `${urgentTasks} priority proof task${urgentTasks === 1 ? "" : "s"}.` : "No urgent breach."
+      },
+      {
+        key: "proof_policy",
+        label: "Proof policy",
+        status: selected ? "next" as const : "done" as const,
+        detail: selected ? `${proofTypeLabel(selected.recommended_proof_type)} required for ${label(selected.attribute).toLowerCase()}.` : "No proof upload required."
+      },
+      {
+        key: "review_gate",
+        label: "Reviewer gate",
+        status: submittedCount ? "next" as const : "blocked" as const,
+        detail: submittedCount ? `${submittedCount} proof item${submittedCount === 1 ? "" : "s"} with reviewer.` : "Proof must be submitted before review."
+      }
+    ],
+    metrics: {
+      waiting_buyers: waitingBuyers,
+      urgent_tasks: urgentTasks,
+      breached_tasks: breachedTasks,
+      open_trust_lift: openTrustLift,
+      visible_trust_lift: options.visibleTrustLift,
+      submitted_count: submittedCount,
+      approved_count: approvedCount,
+      rejected_count: rejectedCount,
+      resolved_requests: options.resolvedRequestCount
+    },
+    guardrail
+  };
+}
+
+function proofAgentRiskRank(task: any) {
+  const sla = task.sla_state === "breached" ? 40 : task.sla_state === "due_today" ? 24 : 0;
+  const priority = task.priority === "high" ? 32 : task.priority === "medium" ? 16 : 4;
+  const demand = Math.min(30, Number(task.buyer_demand ?? 0));
+  const lift = Math.min(16, Number(task.trust_lift_points ?? 0));
+  return sla + priority + demand + lift;
+}
+
+function proofAgentTaskKey(task: any) {
+  return `${task.product_id}:${task.attribute}`;
+}
+
+function normalizeProofAgentSummary(value: unknown, fallback: string) {
+  const text = cleanText(value, fallback);
+  const normalized = text.toLowerCase();
+  const generic = [
+    "seller_proof_triage",
+    "seller proof triage",
+    "proof triage",
+    "triage",
+    "summary"
+  ].includes(normalized) || normalized.startsWith("seller_proof");
+  const grounded = /(buyer|trust|proof|review|demand|ask|sla|confidence)/i.test(text);
+  return !generic && grounded && text.length >= 40 ? text : fallback;
+}
+
+function normalizeProofAgentReasoning(value: unknown, fallback: string[]) {
+  const cleaned = cleanList(value, [], 4)
+    .filter((reason) => reason.length >= 24 && /\d|buyer|proof|trust|review|identity|memory|SLA/i.test(reason));
+  return cleaned.length >= 2 ? cleaned : fallback;
+}
+
+function normalizeProofAgentPlaybook(value: unknown, fallback: Array<{ label: string; detail: string; tool: string; status: "done" | "next" | "blocked" }>) {
+  if (!Array.isArray(value)) return fallback;
+  const cleaned = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const status = ["done", "next", "blocked"].includes(String((item as any).status))
+        ? String((item as any).status) as "done" | "next" | "blocked"
+        : "next";
+      const labelText = cleanText((item as any).label, "");
+      const toolText = cleanText((item as any).tool, "proofPolicy");
+      if (labelText.includes("_") || toolText.toLowerCase().includes("sarthi_seller")) return null;
+      return {
+        label: labelText,
+        detail: cleanText((item as any).detail, ""),
+        tool: toolText,
+        status
+      };
+    })
+    .filter((item): item is { label: string; detail: string; tool: string; status: "done" | "next" | "blocked" } => Boolean(item?.label && item.detail))
+    .slice(0, 4);
+  return cleaned.length >= 3 ? cleaned : fallback;
+}
+
+function sellerTaskProofLoop(request: any, requestCount: number, rejected: boolean) {
+  const attribute = label(request.attribute).toLowerCase();
+  return {
+    title: "Buyer doubt to proof loop",
+    aggregate_demand: `${requestCount} buyer${requestCount === 1 ? "" : "s"} waiting for ${attribute} proof`,
+    seller_action: rejected ? `Replace rejected ${attribute} proof` : `Upload ${attribute} proof`,
+    admin_gate: "Reviewer must approve before buyer confidence changes",
+    buyer_notification_preview: rejected
+      ? "Buyers will be notified only after clearer proof is approved."
+      : `After approval: Proof added for ${attribute}, confidence improved.`,
+    steps: [
+      { key: "buyer_doubt", label: "Buyer doubt", done: true },
+      { key: "aggregate_demand", label: "Aggregate demand", done: true },
+      { key: "seller_upload", label: "Seller proof upload", done: false },
+      { key: "admin_review", label: "Admin verifies", done: false },
+      { key: "buyer_update", label: "Buyer notified", done: false }
+    ]
+  };
+}
+
+function sellerAssetProofLoop(asset: any, qualityScore: number) {
+  const attribute = label(asset.attribute).toLowerCase();
+  const approved = asset.status === "verified";
+  const rejected = asset.status === "rejected";
+  return {
+    title: "Buyer doubt to proof loop",
+    aggregate_demand: "Linked buyer proof demand",
+    seller_action: `${label(asset.proof_type)} submitted`,
+    admin_gate: approved ? "Reviewer approved this proof" : rejected ? "Reviewer requested better proof" : "Reviewer is checking this proof",
+    buyer_notification_preview: approved
+      ? `Proof added for ${attribute}; confidence can improve by +${proofLiftPoints(asset.status, asset.attribute, qualityScore)}.`
+      : rejected
+        ? "Buyers stay protected until replacement proof is approved."
+        : "Buyers will see the proof only after review.",
+    steps: [
+      { key: "buyer_doubt", label: "Buyer doubt", done: true },
+      { key: "aggregate_demand", label: "Aggregate demand", done: true },
+      { key: "seller_upload", label: "Seller proof upload", done: true },
+      { key: "admin_review", label: "Admin verifies", done: approved || rejected },
+      { key: "buyer_update", label: "Buyer notified", done: approved }
+    ]
+  };
 }
 
 async function sellerActionBoard(db: Db, sellerId: string, listings: any[], tasks: any[]) {
@@ -261,7 +636,7 @@ export async function generateSellerCoach(
     const generated = await generate({
       capability: "text",
       systemInstruction: [
-        "You are Sarthi seller coach for a Meesho-style marketplace.",
+        "You are Sarthi seller coach for a value-commerce marketplace.",
         "Use only the provided JSON evidence. Do not invent numbers, policies, guarantees, or offers.",
         "Write for small sellers who need direct practical steps, not analytics jargon.",
         "For each product, explain the issue in one short sentence, why buyers care, and the next proof/action.",
@@ -1036,6 +1411,50 @@ function proofLiftPoints(status: string, attribute: string, qualityScore: number
   const base = attributeBase[attribute] ?? 4;
   const multiplier = status === "verified" ? 1 : status === "submitted" ? 0.45 : 0.1;
   return Math.floor(base * multiplier * Math.max(0.4, qualityScore / 100));
+}
+
+function proofRequestTrustLift(attribute: string, buyerDemand: number, rejected: boolean) {
+  const attributeBase: Record<string, number> = {
+    size: 7,
+    fabric: 6,
+    transparency: 6,
+    color: 5,
+    packaging: 4,
+    offer: 3
+  };
+  const demandBoost = buyerDemand >= 5 ? 2 : buyerDemand >= 3 ? 1 : 0;
+  const rejectionBoost = rejected ? 1 : 0;
+  return Math.max(2, Math.min(10, (attributeBase[attribute] ?? 4) + demandBoost + rejectionBoost));
+}
+
+function proofRequestSlaHours(buyerDemand: number, rejected: boolean) {
+  if (rejected || buyerDemand >= 5) return 12;
+  if (buyerDemand >= 3) return 18;
+  return 24;
+}
+
+function proofRequestSlaState(ageHours: number, slaHours: number) {
+  if (ageHours > slaHours) return "breached";
+  if (ageHours > slaHours * 0.75) return "due_today";
+  return "ok";
+}
+
+function proofRequestBuyerImpact(attribute: string, buyerDemand: number, rejected: boolean) {
+  const attributeLabel = label(attribute).toLowerCase();
+  if (rejected) {
+    return `Rejected ${attributeLabel} proof still blocks buyer-visible confidence on this listing.`;
+  }
+  if (buyerDemand >= 3) {
+    return `${buyerDemand} buyer requests are waiting; approved ${attributeLabel} proof can reduce repeated doubts before checkout.`;
+  }
+  return `Approved ${attributeLabel} proof becomes visible in trust checks when similar doubts appear.`;
+}
+
+function hoursSince(iso: string | null | undefined) {
+  if (!iso) return 0;
+  const timestamp = Date.parse(iso);
+  if (!Number.isFinite(timestamp)) return 0;
+  return Math.max(0, Math.round((Date.now() - timestamp) / 36e5));
 }
 
 function rankClusterCards(cards: any[]) {

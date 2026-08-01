@@ -43,6 +43,8 @@ export async function generateGroundedAgentAnswer(
         "Do not invent seller data, product data, discounts, policies, or guarantees.",
         "Use simple language suitable for tier 2 and tier 3 commerce users.",
         "If evidence is missing, say what is missing and what action should happen next.",
+        "For proof questions, name the exact missing attributes from proof_coverage, such as fabric close-up, measurement chart, daylight color photo, packaging proof, or offer proof.",
+        "Do not repeat generic phrases like some proof gaps, authenticity, quality, expectations, or standards when specific proof data exists.",
         "Return JSON only with keys: title, summary, reasons, caution."
       ].join(" "),
       userText: JSON.stringify({

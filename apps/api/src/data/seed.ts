@@ -17,7 +17,15 @@ const clusters = [
   { cluster_id: "cluster_office_palazzo", label: "Office wear palazzos", category: "women_bottomwear" },
   { cluster_id: "cluster_summer_saree", label: "Summer printed sarees", category: "women_sarees" },
   { cluster_id: "cluster_work_bags", label: "Work and college handbags", category: "women_accessories" },
-  { cluster_id: "cluster_home_bedsheets", label: "Printed cotton bedsheets", category: "home_furnishing" }
+  { cluster_id: "cluster_home_bedsheets", label: "Printed cotton bedsheets", category: "home_furnishing" },
+  { cluster_id: "cluster_denim_wideleg", label: "Wide-leg denim bottoms", category: "women_bottomwear" },
+  { cluster_id: "cluster_graphic_tees", label: "Graphic daily tees", category: "women_tops" },
+  { cluster_id: "cluster_everyday_tote", label: "Everyday structured handbags", category: "women_accessories" },
+  { cluster_id: "cluster_room_comfort", label: "Bedroom comfort sets", category: "home_furnishing" },
+  { cluster_id: "cluster_ajrakh_kurti", label: "Ajrakh printed kurtis", category: "women_kurtis" },
+  { cluster_id: "cluster_relaxed_cargos", label: "Relaxed casual cargos", category: "women_bottomwear" },
+  { cluster_id: "cluster_lightweight_dupatta", label: "Lightweight festive dupattas", category: "women_sarees" },
+  { cluster_id: "cluster_everyday_coord", label: "Everyday co-ord sets", category: "women_kurta_sets" }
 ];
 
 const buyers = [
@@ -68,57 +76,238 @@ const buyerFitProfiles = [
 
 const clusterSpecs = [
   ["cluster_floral_blue", "Blue Floral Cotton Kurti", "women_kurtis", "kurti", "cotton blend", "blue", 449, true, [
-    "https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1583391733956-6c78276477e2?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80"
+    "/catalog/blue-floral-product-1.jpg",
+    "/catalog/blue-floral-product-2.jpg",
+    "/catalog/blue-floral-product-3.jpg",
+    "/catalog/blue-floral-product-4.jpg"
   ]],
   ["cluster_pink_print", "Pink Printed Straight Kurti", "women_kurtis", "kurti", "rayon blend", "pink", 399, true, [
-    "https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=900&q=80"
+    "/catalog/pink-print-1.jpg",
+    "/catalog/pink-print-2.jpg",
+    "/catalog/pink-print-3.jpg",
+    "/catalog/pink-print-4.jpg"
   ]],
   ["cluster_festive_maroon", "Maroon Festive Kurta Set", "women_kurta_sets", "kurta set", "viscose silk blend", "maroon", 699, true, [
-    "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1594633313593-bab3825d0caf?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&w=900&q=80"
+    "/catalog/maroon-set-product-1.jpg",
+    "/catalog/maroon-set-product-2.jpg",
+    "/catalog/maroon-set-product-3.jpg",
+    "/catalog/maroon-set-product-4.jpg"
   ]],
   ["cluster_cotton_tops", "Solid Cotton Daily Top", "women_tops", "top", "cotton jersey", "sage", 329, true, [
-    "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1554568218-0f1715e72254?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1562157873-818bc0726f68?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1523381294911-8d3cead13475?auto=format&fit=crop&w=900&q=80"
+    "/catalog/cotton-top-1.jpg",
+    "/catalog/cotton-top-2.jpg",
+    "/catalog/cotton-top-3.jpg",
+    "/catalog/cotton-top-4.jpg"
   ]],
   ["cluster_office_palazzo", "High Waist Office Palazzo", "women_bottomwear", "palazzo", "viscose blend", "black", 379, true, [
-    "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1506629905607-d9c297d241c5?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1485968579580-b6d095142e6e?auto=format&fit=crop&w=900&q=80"
+    "/catalog/office-palazzo-1.jpg",
+    "/catalog/office-palazzo-2.jpg",
+    "/catalog/office-palazzo-3.jpg",
+    "/catalog/office-palazzo-4.jpg"
   ]],
   ["cluster_summer_saree", "Printed Summer Saree", "women_sarees", "saree", "cotton silk", "mint", 549, false, [
-    "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1603217040830-34473db521a2?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1610189016272-57c81758a7a8?auto=format&fit=crop&w=900&q=80"
+    "/catalog/summer-saree-1.jpg",
+    "/catalog/summer-saree-2.jpg",
+    "/catalog/summer-saree-3.jpg",
+    "/catalog/summer-saree-4.jpg"
   ]],
   ["cluster_work_bags", "Zip Closure Work Handbag", "women_accessories", "handbag", "vegan leather", "tan", 499, false, [
-    "https://images.unsplash.com/photo-1594223274512-ad4803739b7c?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=80"
+    "/catalog/work-bag-1.jpg",
+    "/catalog/work-bag-2.jpg",
+    "/catalog/work-bag-3.jpg",
+    "/catalog/work-bag-4.jpg"
   ]],
   ["cluster_home_bedsheets", "Printed Cotton Bedsheet Set", "home_furnishing", "bedsheet", "cotton", "multi", 459, false, [
-    "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1567016526105-22da7c13161a?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=900&q=80"
+    "/catalog/bedsheet-1.jpg",
+    "/catalog/bedsheet-2.jpg",
+    "/catalog/bedsheet-3.jpg",
+    "/catalog/bedsheet-4.jpg"
+  ]],
+  ["cluster_denim_wideleg", "Wide Leg Denim Bottom", "women_bottomwear", "jeans", "denim blend", "blue", 529, true, [
+    "/catalog/denim-1.png",
+    "/catalog/denim-1-2.png",
+    "/catalog/denim-1-3.png",
+    "/catalog/denim-1-4.png"
+  ]],
+  ["cluster_graphic_tees", "Graphic Cotton Daily Tee", "women_tops", "t-shirt", "cotton jersey", "white", 279, true, [
+    "/catalog/graphic-tee-1.png",
+    "/catalog/graphic-tee-1-2.png",
+    "/catalog/graphic-tee-1-3.png",
+    "/catalog/graphic-tee-1-4.png"
+  ]],
+  ["cluster_everyday_tote", "Structured Everyday Handbag", "women_accessories", "handbag", "vegan leather", "brown", 599, false, [
+    "/catalog/work-bag-1.jpg",
+    "/catalog/work-bag-2.jpg",
+    "/catalog/work-bag-3.jpg",
+    "/catalog/work-bag-4.jpg"
+  ]],
+  ["cluster_room_comfort", "Soft Bedroom Comfort Set", "home_furnishing", "bedsheet", "cotton", "multi", 629, false, [
+    "/catalog/bedsheet-1.jpg",
+    "/catalog/bedsheet-2.jpg",
+    "/catalog/bedsheet-3.jpg",
+    "/catalog/bedsheet-4.jpg"
+  ]],
+  ["cluster_ajrakh_kurti", "Ajrakh Print Daily Kurti", "women_kurtis", "kurti", "cotton cambric", "blue", 469, true, [
+    "/catalog/ajrakh-1.png",
+    "/catalog/ajrakh-1-2.png",
+    "/catalog/ajrakh-1-3.png",
+    "/catalog/ajrakh-1-4.png"
+  ]],
+  ["cluster_relaxed_cargos", "Relaxed Everyday Cargo", "women_bottomwear", "cargo", "cotton twill", "olive", 489, true, [
+    "/catalog/cargo-1.png",
+    "/catalog/cargo-1-2.png",
+    "/catalog/cargo-1-3.png",
+    "/catalog/cargo-1-4.png"
+  ]],
+  ["cluster_lightweight_dupatta", "Lightweight Festive Dupatta", "women_sarees", "dupatta", "chiffon blend", "mint", 349, false, [
+    "/catalog/dupatta-1.png",
+    "/catalog/dupatta-1-2.png",
+    "/catalog/dupatta-1-3.png",
+    "/catalog/dupatta-1-4.png"
+  ]],
+  ["cluster_everyday_coord", "Everyday Printed Co-ord Set", "women_kurta_sets", "co-ord set", "rayon cotton", "maroon", 649, true, [
+    "/catalog/coord-1.png",
+    "/catalog/coord-1-2.png",
+    "/catalog/coord-1-3.png",
+    "/catalog/coord-1-4.png"
   ]]
 ] as const;
 
 const sizes = ["S", "M", "L", "XL", "XXL"];
 const productNameSuffixes = ["Everyday Wear", "Office Ready", "Festival Edit", "Comfort Fit"] as const;
+const singleSizeCategories = new Set(["women_accessories", "home_furnishing", "women_sarees"]);
+
+function productGallery(images: readonly string[], itemIndex: number) {
+  const baseImg = images[0] ?? "";
+  if (!baseImg) return [];
+  const primary = images[0];
+  const rotatedProvidedViews = rotateGalleryViews(images.slice(1), itemIndex);
+  const explicitViews = [1, 2, 3, 4].map((index) => baseImg.replace(/-1\.(jpg|png)$/i, `-${index}.$1`));
+  if (explicitViews.every((image) => images.includes(image))) {
+    const ordered = [primary, ...rotatedProvidedViews, ...images].filter(Boolean);
+    return Array.from(new Set(ordered));
+  }
+  const match = baseImg.match(/^(.*-1)\.(jpg|png)$/);
+  if (!match) {
+    const ordered = [primary, ...rotatedProvidedViews, ...images].filter(Boolean);
+    return Array.from(new Set(ordered));
+  }
+  const basePath = match[1];
+  const ext = match[2];
+  const proofAngles = [
+    `${basePath}.${ext}`,
+    `${basePath}-2.${ext}`,
+    `${basePath}-3.${ext}`,
+    `${basePath}-4.${ext}`
+  ];
+  const ordered = [primary, ...rotatedProvidedViews, ...rotateGalleryViews(proofAngles.slice(1), itemIndex), ...proofAngles].filter(Boolean);
+  return Array.from(new Set(ordered));
+}
+
+function rotateGalleryViews(images: readonly string[], itemIndex: number) {
+  if (images.length <= 1) return [...images];
+  const offset = (itemIndex - 1) % images.length;
+  return [...images.slice(offset), ...images.slice(0, offset)];
+}
+
+function mediaEvidence(imageUrls: string[], itemIndex: number, category: string) {
+  const labelSequence = [
+    "Model view",
+    "Side view",
+    "Fabric close-up",
+    "Lifestyle",
+    "Seller angle",
+    "Buyer photo",
+    "Measurement chart"
+  ];
+  const labels = imageUrls.map((_, index) => labelSequence[index] ?? `View ${index + 1}`);
+  const apparelCategories = new Set(["women_kurtis", "women_kurta_sets", "women_tops", "women_bottomwear", "women_sarees"]);
+  const apparel = apparelCategories.has(category);
+  const hasFabricCloseup = labels.some((label) => label.toLowerCase().includes("fabric"));
+  const hasHumanModel = apparel ? labels.some((label) => /model|lifestyle/i.test(label)) : true;
+  const hasMeasurementChart = apparel && itemIndex !== 2;
+  const reviewerPhotoCount = itemIndex % 2 === 0 ? 2 : 1;
+  const requiredAssets = [
+    {
+      key: "main_product",
+      label: "Main product photo",
+      status: imageUrls.length >= 1 ? "present" : "missing",
+      required: true,
+      detail: "Buyer can inspect the primary listing image."
+    },
+    {
+      key: "human_model",
+      label: "Human-model image",
+      status: apparel ? (hasHumanModel ? "present" : "missing") : "not_required",
+      required: apparel,
+      detail: apparel ? "Apparel should show fall, length, and fit on a human model." : "Not required for this category."
+    },
+    {
+      key: "fabric_closeup",
+      label: "Fabric close-up",
+      status: hasFabricCloseup ? "present" : "missing",
+      required: apparel,
+      detail: "Close-up reduces fabric and transparency doubt."
+    },
+    {
+      key: "measurement_chart",
+      label: "Measurement chart",
+      status: hasMeasurementChart ? "linked" : apparel ? "missing" : "not_required",
+      required: apparel,
+      detail: "Used by fit confidence before checkout."
+    },
+    {
+      key: "reviewer_photos",
+      label: "Reviewer/customer photos",
+      status: reviewerPhotoCount > 0 ? "present" : "missing",
+      required: true,
+      detail: `${reviewerPhotoCount} buyer photo signal${reviewerPhotoCount === 1 ? "" : "s"} attached to this catalog group.`
+    }
+  ];
+  const missingAngles = requiredAssets
+    .filter((asset) => asset.required && asset.status === "missing")
+    .map((asset) => asset.label);
+  const qualityScore = Math.max(42, Math.min(98,
+    48 +
+    imageUrls.length * 8 +
+    (hasHumanModel ? 12 : 0) +
+    (hasFabricCloseup ? 10 : 0) +
+    (hasMeasurementChart ? 8 : 0) +
+    Math.min(8, reviewerPhotoCount * 4)
+  ));
+  return {
+    image_count: imageUrls.length,
+    angle_labels: labels,
+    verification_status: imageUrls.length >= 2 ? "verified_gallery" : "limited_gallery",
+    source: "seller_catalog_media",
+    issues: [],
+    warnings: missingAngles.map((angle) => `${angle} missing important angle`),
+    quality_score: qualityScore,
+    clarity_score: Math.min(100, 68 + imageUrls.length * 6 + (hasFabricCloseup ? 8 : 0)),
+    gallery_readiness: missingAngles.length ? "needs_more_media" : "complete",
+    human_model_required: apparel,
+    required_assets: requiredAssets,
+    missing_angles: missingAngles,
+    reviewer_photo_count: reviewerPhotoCount,
+    buyer_copy: missingAngles.length
+      ? `Image check is usable, but ${missingAngles[0].toLowerCase()} should be added before high confidence.`
+      : "Image proof covers the important buying angles for this category.",
+    checked_at: iso(itemIndex % 3)
+  };
+}
+
+function productQualitySignals(category: string, eligible: boolean, itemIndex: number) {
+  const needsSizeChart = !singleSizeCategories.has(category);
+  return {
+    size_chart_available: needsSizeChart,
+    measurement_tolerance_cm: needsSizeChart ? 2 : null,
+    fabric_proof_status: eligible ? (itemIndex === 2 ? "requested" : "available") : "catalog_only",
+    color_proof_status: itemIndex % 3 === 0 ? "daylight_check_needed" : "available",
+    return_window_days: 7,
+    cod_available: itemIndex !== 4,
+    proof_priority: needsSizeChart ? ["size", "fabric", "color"] : ["media", "source"]
+  };
+}
 
 export function buildSeedDocuments() {
   const products: any[] = [];
@@ -139,6 +328,7 @@ export function buildSeedDocuments() {
     const [cluster_id, baseTitle, category, garment_type, fabric, color_family, basePrice, eligible, images] = spec;
     for (let itemIndex = 1; itemIndex <= 4; itemIndex += 1) {
       const seller = sellers[(itemIndex + clusterIndex) % sellers.length];
+      const imageUrls = productGallery(images, itemIndex);
       const product = {
         product_id: `kurti_${clusterIndex}_${itemIndex}`,
         cluster_id,
@@ -150,7 +340,9 @@ export function buildSeedDocuments() {
         fabric,
         color_family,
         base_price: basePrice + (itemIndex - 2) * 20,
-        image_url: images[itemIndex - 1],
+        image_url: imageUrls[0],
+        image_urls: imageUrls,
+        feed_rank: (itemIndex - 1) * clusterSpecs.length + clusterIndex,
         rating: Number((4.0 + ((clusterIndex + itemIndex) % 7) * 0.1).toFixed(1)),
         rating_count: 180 + clusterIndex * 57 + itemIndex * 43,
         commerce_badge: eligible && itemIndex === 1 ? "Sarthi choice" : ["Deal", "Trending", "Low return", "COD"][(clusterIndex + itemIndex) % 4],
@@ -176,14 +368,17 @@ export function buildSeedDocuments() {
         fulfillment: {
           returns_enabled: true,
           cod_available: itemIndex !== 4,
-          cod_charges: 0,
+          cod_charges: itemIndex === 2 ? 29 : 0,
+          return_conditions_visible: itemIndex !== 2,
           shipping_delay_days: itemIndex === 2 ? 1 : 0,
           reverse_carrier_weight_g: 120
-        }
+        },
+        media_evidence: mediaEvidence(imageUrls, itemIndex, category),
+        quality_signals: productQualitySignals(category, eligible, itemIndex)
       };
       products.push(product);
 
-      const productSizes = ["women_accessories", "home_furnishing", "women_sarees"].includes(category) ? ["ONE_SIZE"] : sizes;
+      const productSizes = singleSizeCategories.has(category) ? ["ONE_SIZE"] : sizes;
       productSizes.forEach((size, sizeIndex) => {
         const variant = {
           variant_id: `${product.product_id}_${size.toLowerCase()}`,
@@ -252,7 +447,7 @@ export function buildSeedDocuments() {
   const outcomeVariants = variants.filter((variant) => !variant.variant_id.startsWith("kurti_1_4_"));
   const buyerIds = ["buyer_asha", "buyer_neha", "buyer_synth_01", "buyer_synth_02", "buyer_synth_03"];
   const returnReasons = ["too_large", "color_different", "fabric_different", "damaged"];
-  for (let idx = 0; idx < 960; idx += 1) {
+  for (let idx = 0; idx < 1920; idx += 1) {
     const variant = outcomeVariants[idx % outcomeVariants.length];
     const size = String(variant.size).toUpperCase();
     const roll = (idx * 9301 + 49297) % 233280 / 233280;
@@ -340,7 +535,7 @@ export function buildSeedDocuments() {
       proof_type: "daylight_photo",
       title: "Daylight colour photo",
       description: "Seller submitted a daylight photo for colour match review.",
-      asset_url: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
+      asset_url: "/catalog/pink-print-3.jpg",
       status: "submitted",
       created_at: iso(1),
       submitted_at: iso(1),
@@ -371,7 +566,11 @@ export function buildSeedDocuments() {
 
   let priceCounter = 1;
   for (const variant of variants) {
-    for (const [daysAgo, delta, event_type] of [[29, 40, "baseline"], [12, 20, "price_change"], [5, 0, "current"]] as const) {
+    const productItemIndex = Number(String(variant.product_id).split("_").at(-1) ?? 0);
+    const priceTimeline = productItemIndex === 2
+      ? [[29, 30, "baseline"], [2, 80, "price_spike"], [0, 0, "current"]] as const
+      : [[29, 40, "baseline"], [12, 20, "price_change"], [5, 0, "current"]] as const;
+    for (const [daysAgo, delta, event_type] of priceTimeline) {
       const price_event_id = `price_${String(priceCounter).padStart(4, "0")}`;
       const fact_id = `fact_price_${String(priceCounter).padStart(4, "0")}`;
       priceEvents.push({ price_event_id, variant_id: variant.variant_id, price: variant.current_price + delta, event_type, created_at: iso(daysAgo), fact_id });
@@ -380,7 +579,8 @@ export function buildSeedDocuments() {
     }
     const campaign_id = `campaign_${variant.variant_id}`;
     const campaignFact = `fact_${campaign_id}`;
-    campaigns.push({ campaign_id, variant_id: variant.variant_id, start_at: iso(5), end_at: futureIso(24), timer_reset_count: 3, fact_id: campaignFact });
+    const timerResetCount = productItemIndex === 2 ? 3 : productItemIndex === 4 ? 1 : 0;
+    campaigns.push({ campaign_id, variant_id: variant.variant_id, start_at: iso(5), end_at: futureIso(24), timer_reset_count: timerResetCount, fact_id: campaignFact });
     addFact(campaignFact, "campaign_events", campaign_id, "campaign", `Campaign for ${variant.variant_id} has server verified dates`, 5);
     const snapshot_id = `inventory_${variant.variant_id}`;
     const invFact = `fact_${snapshot_id}`;
@@ -447,7 +647,7 @@ export function buildSeedDocuments() {
       fabric: "cotton blend",
       color_family: "green",
       base_price: 429,
-      image_url: "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80",
+      image_url: "/catalog/blue-floral-4.jpg",
       target_cluster_id: "cluster_floral_blue",
       status: "draft",
       readiness_status: "catalog_only",
@@ -463,7 +663,7 @@ export function buildSeedDocuments() {
       fabric: "rayon blend",
       color_family: "pink",
       base_price: 389,
-      image_url: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
+      image_url: "/catalog/pink-print-3.jpg",
       target_cluster_id: "cluster_pink_print",
       status: "submitted",
       readiness_status: "blocked_seller_verification",
