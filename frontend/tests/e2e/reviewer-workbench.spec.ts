@@ -12,6 +12,10 @@ test("review desk keeps the selected decision visible without duplicate briefing
 
   await expect(page.getByTestId("reviewer-workbench")).toBeVisible();
   await expect(page.getByText("Recommended", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Reviewer copilot impact" })).toBeVisible();
+  await expect(page.getByText("Buyer impact").first()).toBeVisible();
+  await expect(page.getByText("Trust lift").first()).toBeVisible();
+  await expect(page.getByText("Evidence used").first()).toBeVisible();
   await expect(page.getByText("Next reviewer step", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Approve document" })).toBeInViewport();
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
@@ -29,6 +33,8 @@ test("mobile reviewer navigation and upload actions remain complete", async ({ p
   await expect(cards).toBeVisible();
   await cards.getByRole("button", { name: "Review" }).first().click();
   await expect(page.getByText("Selected upload", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Reviewer copilot impact" })).toBeVisible();
+  await expect(page.getByText("Observed").first()).toBeVisible();
   await expect(page.getByRole("button", { name: /Approve (document|proof)/ })).toBeVisible();
   await page.getByRole("button", { name: "Back to uploads" }).click();
   await expect(cards).toBeVisible();

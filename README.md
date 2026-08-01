@@ -2,12 +2,12 @@
   <h1>Sarthi</h1>
   <p><strong>Evidence-driven commerce trust for orders buyers actually keep.</strong></p>
   <p>
-    National hackathon prototype for Meesho-style marketplace trust decisions:
-    compare similar listings, verify proof, guide checkout, learn from outcomes.
+    A marketplace trust layer that compares similar listings, verifies seller proof,
+    guides checkout confidence, and learns from kept or returned outcomes.
   </p>
 
   <p>
-    <a href="https://sarthi-three-ebon.vercel.app/"><strong>Live Demo</strong></a>
+    <a href="https://sarthi-three-ebon.vercel.app/"><strong>Live App</strong></a>
     |
     <a href="./docs/DEMO_SCRIPT.md">Demo Script</a>
     |
@@ -39,11 +39,11 @@ Sarthi is built around one rule:
 
 When evidence is strong, Sarthi helps the buyer move forward. When evidence is weak, it asks for proof, suggests a safer action, or pauses the recommendation.
 
-## Live Demo
+## Hosted App
 
 | Artifact | Link |
 | --- | --- |
-| Deployed prototype | [Open Sarthi](https://sarthi-three-ebon.vercel.app/) |
+| Hosted app | [Open Sarthi](https://sarthi-three-ebon.vercel.app/) |
 | Demo script | [docs/DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md) |
 | Judge review guide | [docs/JUDGE_REVIEW_GUIDE.md](./docs/JUDGE_REVIEW_GUIDE.md) |
 | Architecture notes | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) |
@@ -93,7 +93,7 @@ Sarthi uses agentic AI as tool orchestration, not blind automation.
 | Model assistance | Uses Bedrock Nova first for grounded language and Gemini only as a configured availability fallback. Safety stops never switch providers. |
 | Evidence graph | Connects seller, SKU, returns, reviews, offer, proof, buyer-fit context, and final trust score. |
 | Admin triage | Summarizes risk, SLA, buyer impact, source checks, and suggested reviewer route. |
-| Fallback behavior | If Bedrock, Gemini, Vector Search, or Neo4j is unavailable, deterministic services keep the prototype usable. |
+| Fallback behavior | If Bedrock, Gemini, Vector Search, or Neo4j is unavailable, deterministic services keep the product build usable. |
 
 AI cannot approve sellers, publish listings, invent product facts, bypass verification gates, or expose buyer private fit memory to sellers.
 
@@ -101,12 +101,12 @@ AI cannot approve sellers, publish listings, invent product facts, bypass verifi
 
 | Requirement | Where it is covered |
 | --- | --- |
-| Working prototype | Live demo, seeded accounts, API-backed buyer, seller, admin, checkout, review, and outcome flows. |
+| Working product build | Hosted app, seeded accounts, API-backed buyer, seller, admin, checkout, review, and outcome flows. |
 | Code quality and architecture | Split React frontend, Fastify API, service modules, tests, architecture docs, and runtime setup. |
 | Usability and UX | Role-specific workspaces with a clear demo path, not a single mocked screen. |
 | Completeness | Full loop from buyer comparison to seller proof, admin review, checkout guidance, and kept-order learning. |
 | Project core | Problem, solution, agentic AI layer, and business impact are covered in this README and [docs/PRD.md](./docs/PRD.md). |
-| Live deployment | Public demo link is at the top; judges can test workflows and model-assisted responses directly. |
+| Hosted deployment | Public app link is at the top; reviewers can test workflows and model-assisted responses directly. |
 | Code and setup | Local setup, environment, seed, run, and verification commands are listed below. |
 | Open-source attribution | Main libraries, licenses, roles, and external services are documented in [docs/ATTRIBUTION.md](./docs/ATTRIBUTION.md). |
 
@@ -134,8 +134,10 @@ PORT=8000
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DB=sarthi
 AUTH_SECRET=change-this-before-sharing
-DEMO_CONTROLS_ENABLED=true
+DEMO_CONTROLS_ENABLED=false
 ```
+
+Set `DEMO_CONTROLS_ENABLED=true` only for controlled local seed-reset or E2E runs. Normal product flows do not require it.
 
 For Bedrock-first automation in `ap-south-1`:
 
@@ -172,6 +174,8 @@ npm run setup:gemini
 ```
 
 Restart the API after configuration. `/system/readiness` reports `runtime_integrations.ai`, retains the legacy `runtime_integrations.gemini` object, and never returns credentials.
+
+For Atlas-specific setup and vector index commands, see [docs/ATLAS_SETUP.md](./docs/ATLAS_SETUP.md).
 
 The smoke command is inert unless `--live` is supplied. The live form makes one bounded text probe (which may try the secondary text model), one bounded vision probe, and one embedding probe:
 
@@ -259,7 +263,7 @@ The frontend proxies API requests to `http://127.0.0.1:8000`.
 ## Recommended Demo Path
 
 1. Sign in as `asha.buyer`.
-2. Open the Shop feed and run a Safety Check on a Sarthi-eligible product.
+2. Open the Shop feed and run a Trust Run on a Sarthi-eligible product.
 3. Open proof details and inspect the Evidence Graph.
 4. Open product detail to show SKU Trust Passport, Size Oracle, and Galti Mat Dohrao.
 5. Continue to checkout and show Offer Sach Check plus COD/prepaid guidance.
@@ -281,7 +285,7 @@ Sarthi separates the user-facing React app from the Fastify API, role validation
 | Frontend | React 19, TypeScript, Vite, React Router, Lucide icons |
 | Backend | Node.js, Fastify, TypeScript |
 | Database | MongoDB local or MongoDB Atlas |
-| AI | Optional Gemini grounded generation and embeddings |
+| AI | Bedrock-first grounded generation and embeddings with optional Gemini fallback |
 | Retrieval | Optional Atlas Vector Search or local cosine fallback |
 | Graph | Optional Neo4j projection with MongoDB-backed fallback |
 | Tests | Node test runner and Playwright E2E |
@@ -317,10 +321,10 @@ For a local MongoDB demo, these values are enough:
 PORT=8000
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DB=sarthi
-DEMO_CONTROLS_ENABLED=true
+DEMO_CONTROLS_ENABLED=false
 ```
 
-Optional Gemini:
+Optional Gemini fallback:
 
 ```env
 LLM_PROVIDER=gemini
@@ -400,9 +404,9 @@ git diff --check
 
 ## Product Readiness
 
-Sarthi is a prototype built to demonstrate a complete commerce trust loop. The current seed data is deterministic demo data, not live marketplace data.
+Sarthi is an evaluation-ready product build that demonstrates a complete commerce trust loop. The current data is deterministic seeded evaluation data, not live marketplace data.
 
-Ready for prototype evaluation:
+Ready for evaluation:
 
 - end-to-end buyer, seller, and admin journeys;
 - API-backed role separation;
@@ -426,6 +430,7 @@ Still required for production:
 | --- | --- |
 | [docs/PRD.md](./docs/PRD.md) | Product scope, users, modules, requirements, success metrics. |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Runtime architecture, routes, data model, AI boundaries. |
+| [docs/ATLAS_SETUP.md](./docs/ATLAS_SETUP.md) | MongoDB Atlas environment, seed, vector index, and readiness setup. |
 | [docs/TRUST_DATA_AND_PRIVACY.md](./docs/TRUST_DATA_AND_PRIVACY.md) | Evidence model, trust states, privacy and edge cases. |
 | [docs/JUDGE_REVIEW_GUIDE.md](./docs/JUDGE_REVIEW_GUIDE.md) | Review path, accounts, checks, and rubric mapping. |
 | [docs/DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md) | Presentation flow for a recorded demo. |
@@ -433,7 +438,7 @@ Still required for production:
 | [docs/ATTRIBUTION.md](./docs/ATTRIBUTION.md) | Main packages, versions, licenses, roles, and external services. |
 
 <details>
-  <summary><strong>Prototype disclosure</strong></summary>
+  <summary><strong>Evaluation data disclosure</strong></summary>
 
 This project uses deterministic seeded commerce data for evaluation. It is suitable for testing the product logic, role-based workflows, auditability, and UI flow. It is not connected to live marketplace orders, payments, KYC, logistics, or production document storage.
 

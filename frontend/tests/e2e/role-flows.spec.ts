@@ -101,7 +101,7 @@ test("seller proof submission reaches admin approval loop", async ({ page, reque
   expect(coach.ok()).toBeTruthy();
   const payload = await coach.json();
   expect(payload.proof_assets.some((asset: any) =>
-    asset.product_title === "Blue Floral Cotton Kurti Office Ready" &&
+    asset.product_title === "Blue Floral Cotton Dress Office Ready" &&
     asset.proof_type === "fabric_closeup" &&
     asset.attribute === "fabric" &&
     asset.status === "verified"

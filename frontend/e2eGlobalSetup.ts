@@ -38,13 +38,16 @@ async function globalSetup() {
 
     const frontend = startServer("frontend", [
       resolve(here, "node_modules/vite/bin/vite.js"),
+      "--force",
       "--host",
       "127.0.0.1",
       "--port",
       String(frontendPort)
     ], {
       SARTHI_API_TARGET: apiUrl,
-      SARTHI_FRONTEND_PORT: String(frontendPort)
+      SARTHI_FRONTEND_PORT: String(frontendPort),
+      VITE_EVALUATOR_LOGIN_ENABLED: "true",
+      VITE_EVALUATOR_CONTROLS_ENABLED: "true"
     }, here);
 
     try {

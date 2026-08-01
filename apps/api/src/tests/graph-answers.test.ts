@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { deterministicGraphChatAnswer } from "../services/graphAnswers.js";
+import { deterministicGraphChatAnswer, graphQuestionSupport, unsupportedGraphAnswer } from "../services/graphAnswers.js";
 
 const graph = {
   selected_product_id: "product_a",
@@ -88,10 +88,12 @@ describe("deterministic graph chat answers", () => {
   it("answers proof questions with the missing proof attribute", () => {
     const answer = deterministicGraphChatAnswer(graph, "Is there fabric proof?");
 
-    assert.equal(answer.title, "Proof still needed");
+    assert.equal(answer.title, "Ask for fabric proof");
     assert.match(answer.summary, /fabric/i);
-    assert.match(answer.caution ?? "", /missing proof|seller proof/i);
+    assert.match(answer.caution ?? "", /fabric proof is reviewed/i);
     assert.ok(answer.reasons.some((reason) => /fabric/i.test(reason)));
+    assert.ok(answer.reasons.some((reason) => /material claim|close-up/i.test(reason)));
+    assert.doesNotMatch(answer.summary, /some missing proof gaps/i);
   });
 
   it("answers comparison questions with similar-seller context", () => {
@@ -100,5 +102,16 @@ describe("deterministic graph chat answers", () => {
     assert.equal(answer.title, "Comparison answer");
     assert.match(answer.summary, /similar listings|compared/i);
     assert.ok(answer.reasons.some((reason) => /comparable sellers/i.test(reason)));
+  });
+
+  it("refuses unsupported graph questions instead of inventing evidence", () => {
+    const support = graphQuestionSupport("What is the seller bank account?");
+    const answer = unsupportedGraphAnswer("What is the seller bank account?", support.reason);
+
+    assert.equal(support.supported, false);
+    assert.equal(answer.title, "No evidence found for this claim");
+    assert.equal((answer.matched_node_ids ?? []).length, 0);
+    assert.equal((answer.highlighted_edge_ids ?? []).length, 0);
+    assert.match(answer.caution ?? "", /not infer/i);
   });
 });

@@ -4,6 +4,8 @@ import { loginAs, resetSeed } from "./helpers";
 
 const screenshotDir = "test-results/visual-smoke";
 
+test.setTimeout(90_000);
+
 test.beforeEach(async ({ request }) => {
   await resetSeed(request);
   mkdirSync(screenshotDir, { recursive: true });

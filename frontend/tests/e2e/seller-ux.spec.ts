@@ -1,11 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { API_BASE, loginAs, resetSeed } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await resetSeed(request);
 });
 
-test("seller demo account signs in through the visible login flow", async ({ page }) => {
+test("seller seeded account signs in through the visible login flow", async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto("/login");
   await page.getByRole("button", { name: /Seller.*Aggregate evidence only/i }).click();
@@ -18,7 +18,7 @@ test("seller demo account signs in through the visible login flow", async ({ pag
   const usernameWidth = (await page.getByLabel("Username").boundingBox())?.width ?? 0;
   const passwordWidth = (await page.getByLabel("Password", { exact: true }).boundingBox())?.width ?? 0;
   expect(Math.abs(usernameWidth - passwordWidth)).toBeLessThanOrEqual(1);
-  await page.getByRole("button", { name: "Use demo" }).click();
+  await page.getByRole("button", { name: "Fill evaluator login" }).click();
   await expect(page.getByLabel("Username")).toHaveValue("seller.a");
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Show password" }).click();
@@ -36,7 +36,7 @@ test("seller Today page leads with one next action", async ({ page, request }) =
   await expect(page.getByRole("heading", { name: "NayiDisha Fashions" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Next action" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Seller facts" })).toBeVisible();
-  await expect(page.getByText("4.4 from 6,048 buyer ratings")).toBeVisible();
+  await expect(page.getByText("4.3 from 16,048 buyer ratings")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Seller workspace" })).toBeVisible();
 });
 
@@ -52,6 +52,23 @@ test("seller routes expose focused workspaces", async ({ page, request }) => {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();
   }
+});
+
+test("proof requests explain buyer impact and review urgency", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await loginAs(page, request, "seller");
+  await page.goto("/seller/proofs");
+
+  await expect(page.getByRole("heading", { name: "Proof requests" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Proof request impact" })).toBeVisible();
+  await expect(page.getByText("Buyer asks waiting")).toBeVisible();
+  await expect(page.getByText("Trust lift open")).toBeVisible();
+  await expect(page.getByText("Marketplace loop").first()).toBeVisible();
+  await expect(page.getByText("Admin verifies").first()).toBeVisible();
+  await expect(page.getByText("Buyer notified").first()).toBeVisible();
+  await expect(page.getByText("Target").first()).toBeVisible();
+  await expect(page.getByText(/trust/i).first()).toBeVisible();
+  expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
 });
 
 test("new listing keeps seller input while moving through guided steps", async ({ page, request }) => {
@@ -139,7 +156,8 @@ test("Market Compare explains evidence and one best improvement", async ({ page,
   await expect(page.getByRole("row", { name: /Fit feedback/i })).toBeVisible();
   await expect(page.getByText("Why this position")).toBeVisible();
   await expect(page.getByText("Best next improvement")).toBeVisible();
-  await expect(page.locator(".seller-market-recommendation")).toContainText("Solid Cotton Daily Top Office Ready");
+  await expect(page.locator(".seller-market-recommendation")).toContainText(/return issue\(s\)|proof/i);
+  await expect(page.locator(".seller-market-recommendation")).toContainText("Review product");
   const recommendationBox = await page.locator(".seller-market-recommendation").boundingBox();
   expect(recommendationBox).not.toBeNull();
   expect((recommendationBox?.y ?? 0) + (recommendationBox?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
@@ -276,3 +294,7 @@ test("seller mobile routes keep their focused hierarchy without horizontal overf
     }
   }
 });
+
+async function horizontalOverflowPx(page: Page) {
+  return page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
+}

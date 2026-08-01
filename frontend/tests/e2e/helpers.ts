@@ -1,9 +1,9 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import crypto from "node:crypto";
-import { getDemoAccountForRole, type DemoRole } from "../../src/demoAccounts";
 import { resolveE2eDatabaseName } from "../../e2eRuntime";
+import { getSeededAccountForRole, type SeededRole } from "../../src/seededAccounts";
 
-export type { DemoRole };
+export type { SeededRole };
 
 export const API_BASE = `http://127.0.0.1:${process.env.E2E_API_PORT ?? "58001"}`;
 
@@ -21,7 +21,7 @@ export async function resetSeed(request: APIRequestContext) {
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
-export async function loginAs(page: Page, request: APIRequestContext, role: DemoRole) {
+export async function loginAs(page: Page, request: APIRequestContext, role: SeededRole) {
   const session = await apiLogin(request, role);
   await page.addInitScript(
     ([key, value]) => window.localStorage.setItem(key, JSON.stringify(value)),
@@ -30,8 +30,8 @@ export async function loginAs(page: Page, request: APIRequestContext, role: Demo
   return session;
 }
 
-export async function apiLogin(request: APIRequestContext, role: DemoRole) {
-  const account = getDemoAccountForRole(role);
+export async function apiLogin(request: APIRequestContext, role: SeededRole) {
+  const account = getSeededAccountForRole(role);
   const response = await request.post(`${API_BASE}/auth/login`, {
     data: {
       username: account.username,
@@ -41,7 +41,7 @@ export async function apiLogin(request: APIRequestContext, role: DemoRole) {
   expect(response.ok(), await response.text()).toBeTruthy();
   const session = await response.json();
   expect(session.account.role).toBe(role);
-  return session as { access_token: string; account: { role: DemoRole } };
+  return session as { access_token: string; account: { role: SeededRole } };
 }
 
 function sha256(value: string) {

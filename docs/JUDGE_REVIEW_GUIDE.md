@@ -1,6 +1,6 @@
 # Judge Review Guide
 
-This guide helps reviewers inspect Sarthi as a working product, not a scripted single-screen demo.
+This guide helps reviewers inspect Sarthi as a working product build, not a scripted single-screen demo.
 
 ## What To Evaluate
 
@@ -89,7 +89,7 @@ http://localhost:5173
 1. Sign in as `seller.a`.
 2. Check seller verification state and source health.
 3. Review listing quality, evidence gaps, and action items.
-4. Open proof/evidence workflow.
+4. Open proof/evidence workflow and inspect buyer ask count, SLA state, and trust lift.
 5. Submit proof assets or verification documents.
 6. Create and submit a listing draft.
 7. Confirm the seller sees aggregate evidence only, not buyer private memory.
@@ -104,7 +104,7 @@ http://localhost:5173
    - verification documents;
    - proof assets;
    - listing drafts.
-5. Inspect prescreen suggestions, risk score, SLA state, source evidence, and buyer impact.
+5. Inspect prescreen suggestions, reviewer copilot, risk score, SLA state, source evidence, buyer impact, and trust lift.
 6. Approve, reject, or request revision.
 7. Confirm audit events update after reviewer action.
 8. Confirm listing publishing remains gated by seller verification.
@@ -113,10 +113,10 @@ http://localhost:5173
 
 | Rubric area | What to inspect in Sarthi |
 | --- | --- |
-| Working Prototype | Buyer, seller, and admin routes are connected to the Fastify API and MongoDB seed data. Judges can run the app and complete the main journeys with seeded accounts. |
+| Working Product Build | Buyer, seller, and admin routes are connected to the Fastify API and MongoDB seed data. Judges can run the app and complete the main journeys with seeded accounts. |
 | Code Quality & Architecture | Frontend, API routes, services, typed contracts, tests, docs, and optional integrations are separated. The architecture doc matches the current Node/Fastify/MongoDB implementation. |
 | Usability & UX | Each role has a distinct workspace. Buyer gets simple next steps, seller gets evidence tasks, and admin gets a structured queue instead of raw text overload. |
-| Completeness | The prototype covers browse, compare, product proof, checkout confidence, outcome learning, seller evidence, admin review, audit traces, and controlled publishing. |
+| Completeness | Sarthi covers browse, compare, product proof, checkout confidence, outcome learning, seller evidence, admin review, audit traces, and controlled publishing. |
 
 ## Technical Checks
 
@@ -154,4 +154,4 @@ git diff --check
 
 ## Important Disclosure
 
-This prototype uses deterministic seeded commerce data. Optional Gemini, Atlas Vector Search, and Neo4j integrations can be configured, but Sarthi remains runnable with deterministic fallbacks. Production use requires official marketplace connectors and operational controls listed in [Product Readiness](PRODUCT_READINESS.md).
+This build uses deterministic seeded commerce data. Bedrock, Gemini, Atlas Vector Search, and Neo4j integrations can be configured, but Sarthi remains runnable with deterministic fallbacks. Production use requires official marketplace connectors and operational controls listed in [Product Readiness](PRODUCT_READINESS.md).

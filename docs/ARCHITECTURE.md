@@ -8,8 +8,8 @@ The active implementation is:
 Frontend: React + Vite + TypeScript
 Backend: Node.js + Fastify + TypeScript
 Database: MongoDB local or MongoDB Atlas
-Optional LLM: Gemini
-Optional retrieval: MongoDB Atlas Vector Search over Gemini embeddings
+Optional AI: Bedrock-first grounded generation and embeddings, Gemini fallback when configured
+Optional retrieval: MongoDB Atlas Vector Search or local cosine fallback over provider-specific embeddings
 Optional graph: Neo4j projection
 ```
 
@@ -24,7 +24,7 @@ React app
   -> auth/RBAC middleware
   -> domain services
   -> MongoDB evidence documents
-  -> optional Gemini / Vector Search / Neo4j
+  -> optional Bedrock / Gemini / Vector Search / Neo4j
   -> audit traces and fact IDs
 ```
 
@@ -48,8 +48,8 @@ React app
 | Config | `apps/api/src/config/env.ts` | Runtime environment and optional integration flags. |
 | Auth middleware | `apps/api/src/middleware/auth.ts` | Session lookup, role checks, buyer/seller ownership checks. |
 | Routes | `apps/api/src/routes/*.ts` | API contract for auth, buyer, seller, admin, decisions, and system readiness. |
-| Services | `apps/api/src/services/*.ts` | Domain decisions, seller/admin operations, confidence scoring, Gemini, vector search, graph, session, crypto, scenarios. |
-| Seed data | `apps/api/src/data/seed.ts` | Deterministic demo data for local review. |
+| Services | `apps/api/src/services/*.ts` | Domain decisions, seller/admin operations, confidence scoring, AI providers, vector search, graph, session, crypto, scenarios. |
+| Seed data | `apps/api/src/data/seed.ts` | Deterministic evaluation data for local review. |
 | Tests | `apps/api/src/tests/trust-rbac.test.ts` | Trust and role-boundary validation. |
 
 ## Route Groups
@@ -65,7 +65,7 @@ React app
 
 ## Data Model
 
-MongoDB is the prototype source of truth. Core document families include:
+MongoDB is the current source of truth. Core document families include:
 
 - accounts and sessions;
 - buyers, profiles, memory, orders, dashboards, proof ledgers;
@@ -85,7 +85,7 @@ Request
   -> load product/seller/buyer/source evidence
   -> run deterministic scoring and trust gates
   -> optionally retrieve semantic evidence
-  -> optionally ask Gemini for grounded phrasing or confidence language
+  -> optionally ask Bedrock or Gemini for grounded phrasing or confidence language
   -> validate unsupported claims
   -> create audit trace
   -> return simple UI action plus proof data
@@ -98,7 +98,7 @@ Sarthi uses agentic behavior as tool orchestration:
 - intent detection for compare, fit, fabric, seller, offer, checkout, and return questions;
 - retrieval of product evidence and source-health context;
 - deterministic scoring for trust-critical decisions;
-- optional Gemini text generation when configured;
+- optional Bedrock or Gemini text generation when configured;
 - audit trace creation for facts, tools, graph paths, and unsupported claims;
 - deterministic fallback when AI services are unavailable.
 
@@ -118,14 +118,15 @@ The final approve/reject/revision action remains human-in-loop.
 
 | Integration | Enabled by | Fallback |
 | --- | --- | --- |
-| Gemini | `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.1-flash-lite`, `GEMINI_API_KEY` | Deterministic answer and confidence copy. |
-| Gemini embeddings | `GEMINI_API_KEY`, embedding env values | Lexical retrieval or disabled retrieval. |
+| Bedrock | `BEDROCK_ENABLED=true`, `AI_PROVIDER_ORDER=bedrock,gemini`, AWS region/model env values | Gemini fallback or deterministic answer and confidence copy. |
+| Gemini | `GEMINI_API_KEY`, `LLM_MODEL=gemini-3.1-flash-lite` | Deterministic answer and confidence copy. |
+| Provider embeddings | Bedrock Titan or Gemini embedding env values | Lexical retrieval or disabled retrieval. |
 | Atlas Vector Search / local embedding fallback | `VECTOR_SEARCH_ENABLED=true`; Atlas index optional for local demos | API-side cosine similarity on local MongoDB, lexical fallback if embeddings fail. |
 | Neo4j | `NEO4J_ENABLED=true` plus URI/credentials | MongoDB-backed graph path summaries. |
 
 ## Failure Behavior
 
-- If Gemini fails, return deterministic answer and record provider fallback.
+- If Bedrock or Gemini fails, return deterministic answer and record provider fallback.
 - If Atlas Vector Search is unavailable, use local embedding similarity; if embeddings fail, use lexical evidence retrieval.
 - If Neo4j is disabled or unavailable, keep MongoDB-backed graph paths.
 - If seller verification is pending/restricted, pause strong buyer recommendations.
