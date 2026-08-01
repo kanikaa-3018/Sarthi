@@ -269,6 +269,7 @@
   align-items: start !important;
   display: grid !important;
   grid-template-columns: minmax(250px, 0.58fr) minmax(420px, 1.42fr) !important;
+  gap: 16px !important;
 }
 
 .admin-app-route .reviewer-workbench .seller-packet-selected-head {
@@ -278,16 +279,23 @@
 .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief {
   grid-column: 1 !important;
   grid-row: 2 !important;
+  margin-bottom: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .reviewer-copilot-brief {
+  grid-column: 1 !important;
+  grid-row: 3 !important;
+  margin-bottom: 0 !important;
 }
 
 .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-review-card {
   grid-column: 2 !important;
-  grid-row: 2 / span 2 !important;
+  grid-row: 2 / span 3 !important;
 }
 
 .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .reviewer-guidance {
   grid-column: 1 !important;
-  grid-row: 3 !important;
+  grid-row: 4 !important;
 }
 
 .admin-app-route .reviewer-workbench .seller-packet-layout {
@@ -905,5 +913,858 @@
   .admin-app-route .reviewer-workbench .reviewer-upload-card .seller-upload-review-button {
     min-height: 36px !important;
     width: 100% !important;
+  }
+}
+
+/* Reviewer copilot: evidence-first routing and buyer impact. */
+.admin-app-route .reviewer-workbench .admin-priority-impact {
+  border-top: 1px solid var(--border-subtle) !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px 10px !important;
+  margin-top: 8px !important;
+  padding-top: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-priority-impact span,
+.admin-app-route .reviewer-workbench .admin-priority-impact strong {
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  padding: 5px 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-priority-impact span {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+  flex: 1 1 190px !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-priority-impact strong {
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--success) 28%, var(--border-subtle)) !important;
+  color: var(--success) !important;
+  flex: 0 0 auto !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-upload-check.impact {
+  background: color-mix(in srgb, var(--success) 10%, var(--surface)) !important;
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle)) !important;
+  color: var(--success) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-decision-brief-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid div:nth-child(2),
+.admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid div:nth-child(-n + 2) {
+  border-bottom: 0 !important;
+  border-right: 1px solid var(--border-subtle) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-brief {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 9px !important;
+  display: grid !important;
+  gap: 10px !important;
+  padding: 10px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-head {
+  align-items: start !important;
+  display: grid !important;
+  gap: 10px !important;
+  grid-template-columns: 32px minmax(0, 1fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-head > svg {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  color: var(--accent-primary) !important;
+  height: 32px !important;
+  padding: 7px !important;
+  width: 32px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-head span,
+.admin-app-route .reviewer-workbench .reviewer-copilot-evidence > span,
+.admin-app-route .reviewer-workbench .reviewer-copilot-trail span,
+.admin-app-route .reviewer-workbench .reviewer-copilot-metrics span {
+  color: var(--text-muted) !important;
+  display: block !important;
+  font-size: 9.5px !important;
+  font-weight: 900 !important;
+  line-height: 1.1 !important;
+  text-transform: uppercase !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-head strong {
+  color: var(--text-primary) !important;
+  display: block !important;
+  font-size: 14.5px !important;
+  line-height: 1.2 !important;
+  margin-top: 3px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-head p,
+.admin-app-route .reviewer-workbench .reviewer-copilot-trail p,
+.admin-app-route .reviewer-workbench .reviewer-copilot-guardrail span {
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+  margin: 4px 0 0 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-head p .reviewer-copilot-inline-label {
+  color: var(--text-primary) !important;
+  display: inline !important;
+  font-size: 11.5px !important;
+  font-weight: 900 !important;
+  line-height: inherit !important;
+  margin-right: 6px !important;
+  text-transform: none !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-metrics {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  overflow: hidden !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-metrics div {
+  background: var(--bg-surface-muted) !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  min-width: 0 !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-metrics div:last-child {
+  border-right: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-metrics strong {
+  color: var(--text-primary) !important;
+  display: block !important;
+  font-size: 11.5px !important;
+  line-height: 1.25 !important;
+  margin-top: 4px !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-trail {
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-trail div,
+.admin-app-route .reviewer-workbench .reviewer-copilot-evidence {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  min-width: 0 !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-guardrail {
+  align-items: start !important;
+  border-radius: 8px !important;
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: 18px minmax(0, 1fr) !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-guardrail.safe {
+  background: color-mix(in srgb, var(--success) 7%, var(--surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--success) 24%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-guardrail.blocked {
+  background: color-mix(in srgb, var(--warning) 9%, var(--surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--warning) 26%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-guardrail.safe svg {
+  color: var(--success) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-guardrail.blocked svg {
+  color: var(--warning) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-evidence ul {
+  display: grid !important;
+  gap: 6px !important;
+  list-style: none !important;
+  margin: 8px 0 0 !important;
+  padding: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-evidence li {
+  align-items: start !important;
+  display: grid !important;
+  gap: 6px !important;
+  grid-template-columns: minmax(88px, 0.45fr) minmax(0, 1fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-evidence strong,
+.admin-app-route .reviewer-workbench .reviewer-copilot-evidence em {
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  font-style: normal !important;
+  line-height: 1.3 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .reviewer-copilot-evidence strong {
+  color: var(--text-primary) !important;
+  font-weight: 850 !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-copilot {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  display: grid !important;
+  gap: 9px !important;
+  padding: 10px !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-copilot.pass {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-copilot.warn {
+  border-color: color-mix(in srgb, var(--warning) 32%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-copilot.fail {
+  border-color: color-mix(in srgb, var(--error) 30%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-head {
+  align-items: start !important;
+  display: grid !important;
+  gap: 10px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-head span,
+.admin-app-route .reviewer-workbench .proof-quality-route span {
+  color: var(--text-muted) !important;
+  display: block !important;
+  font-size: 9.5px !important;
+  font-weight: 900 !important;
+  line-height: 1.1 !important;
+  text-transform: uppercase !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-head strong {
+  color: var(--text-primary) !important;
+  display: block !important;
+  font-size: 13.5px !important;
+  line-height: 1.25 !important;
+  margin-top: 3px !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-head p {
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  line-height: 1.4 !important;
+  margin: 4px 0 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-head b {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+  padding: 9px 10px !important;
+  white-space: nowrap !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-route {
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-route div {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  min-width: 0 !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-route strong {
+  color: var(--text-primary) !important;
+  display: block !important;
+  font-size: 11.5px !important;
+  line-height: 1.3 !important;
+  margin-top: 4px !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-checks {
+  display: grid !important;
+  gap: 6px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-check {
+  align-items: start !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  display: grid !important;
+  gap: 7px !important;
+  grid-template-columns: 16px minmax(0, 1fr) !important;
+  min-width: 0 !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-check.pass svg {
+  color: var(--success) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-check.warn svg {
+  color: var(--warning) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-check.fail svg {
+  color: var(--error) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-check strong {
+  color: var(--text-primary) !important;
+  display: block !important;
+  font-size: 11.5px !important;
+  line-height: 1.25 !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-check span {
+  color: var(--text-secondary) !important;
+  display: block !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  margin-top: 3px !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-guardrail,
+.admin-app-route .reviewer-workbench .seller-proof-doubt-list {
+  background: color-mix(in srgb, var(--accent-primary) 6%, var(--surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 22%, var(--border-subtle)) !important;
+  border-radius: 8px !important;
+  color: var(--text-secondary) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-guardrail {
+  align-items: start !important;
+  display: grid !important;
+  gap: 7px !important;
+  grid-template-columns: 16px minmax(0, 1fr) !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-guardrail svg {
+  color: var(--accent-primary) !important;
+}
+
+.admin-app-route .reviewer-workbench .proof-quality-guardrail span,
+.admin-app-route .reviewer-workbench .seller-proof-doubt-list p {
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+  margin: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-proof-doubt-list {
+  display: grid !important;
+  gap: 6px !important;
+  margin-top: 10px !important;
+  padding: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .seller-proof-doubt-list > span {
+  color: var(--text-muted) !important;
+  font-size: 9.5px !important;
+  font-weight: 900 !important;
+  line-height: 1.1 !important;
+  text-transform: uppercase !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-panel,
+.admin-app-route .reviewer-workbench .admin-case-file-panel {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  padding: 12px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-head,
+.admin-app-route .reviewer-workbench .admin-case-file-head {
+  align-items: start !important;
+  display: grid !important;
+  gap: 12px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-head span,
+.admin-app-route .reviewer-workbench .admin-case-file-head span,
+.admin-app-route .reviewer-workbench .admin-case-review-question span,
+.admin-app-route .reviewer-workbench .admin-case-impact span,
+.admin-app-route .reviewer-workbench .admin-case-task-panel > div > span,
+.admin-app-route .reviewer-workbench .admin-case-signal-column > div span {
+  color: var(--text-muted) !important;
+  display: block !important;
+  font-size: 9.5px !important;
+  font-weight: 900 !important;
+  line-height: 1.1 !important;
+  text-transform: uppercase !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-head strong,
+.admin-app-route .reviewer-workbench .admin-case-file-head strong,
+.admin-app-route .reviewer-workbench .admin-case-review-question strong,
+.admin-app-route .reviewer-workbench .admin-case-impact strong,
+.admin-app-route .reviewer-workbench .admin-case-task-panel > div > strong {
+  color: var(--text-primary) !important;
+  display: block !important;
+  font-size: 14px !important;
+  line-height: 1.22 !important;
+  margin-top: 4px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-head p,
+.admin-app-route .reviewer-workbench .admin-case-file-head p,
+.admin-app-route .reviewer-workbench .admin-case-review-question p,
+.admin-app-route .reviewer-workbench .admin-case-impact p {
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  line-height: 1.4 !important;
+  margin: 4px 0 0 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-head b {
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 28%, var(--border-subtle)) !important;
+  border-radius: 8px !important;
+  color: var(--accent-primary-hover) !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  padding: 9px 10px !important;
+  white-space: nowrap !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-lanes {
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-lanes article,
+.admin-app-route .reviewer-workbench .admin-trustops-topcases div,
+.admin-app-route .reviewer-workbench .admin-case-review-question,
+.admin-app-route .reviewer-workbench .admin-case-path-step,
+.admin-app-route .reviewer-workbench .admin-case-signal-column,
+.admin-app-route .reviewer-workbench .admin-case-impact,
+.admin-app-route .reviewer-workbench .admin-case-task-panel,
+.admin-app-route .reviewer-workbench .admin-case-technical {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  min-width: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-lanes article {
+  padding: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-lanes span,
+.admin-app-route .reviewer-workbench .admin-case-mini-row em {
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+  font-style: normal !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-lanes strong {
+  color: var(--text-primary) !important;
+  display: block !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  margin-top: 5px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-lanes p {
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  margin: 5px 0 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-guard {
+  align-items: start !important;
+  background: color-mix(in srgb, var(--success) 7%, var(--surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--success) 24%, var(--border-subtle)) !important;
+  border-radius: 8px !important;
+  color: var(--success) !important;
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: 16px minmax(0, 1fr) !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-guard span {
+  color: var(--text-secondary) !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-topcases {
+  display: grid !important;
+  gap: 7px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-topcases div {
+  display: grid !important;
+  gap: 4px !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-topcases strong,
+.admin-app-route .reviewer-workbench .admin-case-task-list strong,
+.admin-app-route .reviewer-workbench .admin-case-signal-column article strong,
+.admin-app-route .reviewer-workbench .admin-case-path-step strong,
+.admin-app-route .reviewer-workbench .admin-case-tools strong,
+.admin-app-route .reviewer-workbench .admin-case-timeline strong {
+  color: var(--text-primary) !important;
+  font-size: 11.5px !important;
+  line-height: 1.25 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-trustops-topcases span,
+.admin-app-route .reviewer-workbench .admin-trustops-topcases em,
+.admin-app-route .reviewer-workbench .admin-case-task-list p,
+.admin-app-route .reviewer-workbench .admin-case-signal-column article p,
+.admin-app-route .reviewer-workbench .admin-case-path-step span,
+.admin-app-route .reviewer-workbench .admin-case-tools span,
+.admin-app-route .reviewer-workbench .admin-case-timeline span,
+.admin-app-route .reviewer-workbench .admin-case-empty-copy {
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+  font-style: normal !important;
+  line-height: 1.35 !important;
+  margin: 0 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-mini-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  margin-top: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-mini-row em {
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 999px !important;
+  padding: 4px 7px !important;
+  text-transform: none !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-review-question {
+  align-items: start !important;
+  display: grid !important;
+  gap: 9px !important;
+  grid-template-columns: 18px minmax(0, 1fr) !important;
+  padding: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-review-question svg {
+  color: var(--accent-primary) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-path {
+  display: grid !important;
+  gap: 7px !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-path-step {
+  align-content: start !important;
+  display: grid !important;
+  gap: 7px !important;
+  padding: 8px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-path-step.pass svg,
+.admin-app-route .reviewer-workbench .admin-case-signal-column.good > div strong,
+.admin-app-route .reviewer-workbench .admin-case-score-row.good strong {
+  color: var(--success) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-path-step.warn svg,
+.admin-app-route .reviewer-workbench .admin-case-signal-column.warn > div strong {
+  color: var(--warning) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-path-step.fail svg,
+.admin-app-route .reviewer-workbench .admin-case-signal-column.bad > div strong,
+.admin-app-route .reviewer-workbench .admin-case-score-row.bad strong {
+  color: var(--error) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-path-step small {
+  color: var(--text-muted) !important;
+  display: block !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  margin-top: 4px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-signal-grid,
+.admin-app-route .reviewer-workbench .admin-case-bottom-grid {
+  display: grid !important;
+  gap: 9px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-bottom-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-signal-column,
+.admin-app-route .reviewer-workbench .admin-case-impact,
+.admin-app-route .reviewer-workbench .admin-case-task-panel {
+  display: grid !important;
+  gap: 8px !important;
+  padding: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-signal-column > div {
+  align-items: center !important;
+  display: flex !important;
+  gap: 8px !important;
+  justify-content: space-between !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-signal-column > div strong {
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-signal-column article,
+.admin-app-route .reviewer-workbench .admin-case-task-list article,
+.admin-app-route .reviewer-workbench .admin-case-tools article,
+.admin-app-route .reviewer-workbench .admin-case-timeline article {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 7px !important;
+  display: grid !important;
+  gap: 4px !important;
+  padding: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-task-list {
+  display: grid !important;
+  gap: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-task-list article > span {
+  color: var(--accent-primary-hover) !important;
+  font-size: 9.5px !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-impact-bars {
+  display: grid !important;
+  gap: 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-score-row {
+  display: grid !important;
+  gap: 5px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-score-row > div {
+  align-items: center !important;
+  display: flex !important;
+  justify-content: space-between !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-score-row span {
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+  font-weight: 850 !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-score-row em {
+  background: color-mix(in srgb, var(--accent-primary) 20%, var(--border-subtle)) !important;
+  border-radius: 999px !important;
+  display: block !important;
+  height: 6px !important;
+  min-width: 4px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-score-row.bad em {
+  background: color-mix(in srgb, var(--error) 28%, var(--border-subtle)) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-blockers {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-blockers span {
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border-subtle)) !important;
+  border-radius: 999px !important;
+  color: var(--text-secondary) !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  padding: 5px 7px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-technical {
+  overflow: hidden !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-technical summary {
+  align-items: center !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  justify-content: space-between !important;
+  list-style: none !important;
+  padding: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-technical summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-technical summary em {
+  color: var(--text-muted) !important;
+  font-size: 10.5px !important;
+  font-style: normal !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-tools,
+.admin-app-route .reviewer-workbench .admin-case-guardrails,
+.admin-app-route .reviewer-workbench .admin-case-timeline {
+  border-top: 1px solid var(--border-subtle) !important;
+  display: grid !important;
+  gap: 7px !important;
+  padding: 9px !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-tools {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-guardrails p {
+  align-items: start !important;
+  color: var(--text-secondary) !important;
+  display: grid !important;
+  font-size: 11.5px !important;
+  gap: 7px !important;
+  grid-template-columns: 15px minmax(0, 1fr) !important;
+  line-height: 1.35 !important;
+  margin: 0 !important;
+}
+
+.admin-app-route .reviewer-workbench .admin-case-guardrails svg {
+  color: var(--accent-primary) !important;
+}
+
+@media (max-width: 760px) {
+  .admin-app-route .reviewer-workbench .seller-decision-brief-grid,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid,
+  .admin-app-route .reviewer-workbench .reviewer-copilot-metrics,
+  .admin-app-route .reviewer-workbench .reviewer-copilot-trail,
+  .admin-app-route .reviewer-workbench .proof-quality-route,
+  .admin-app-route .reviewer-workbench .proof-quality-checks,
+  .admin-app-route .reviewer-workbench .admin-trustops-lanes,
+  .admin-app-route .reviewer-workbench .admin-trustops-topcases,
+  .admin-app-route .reviewer-workbench .admin-case-path,
+  .admin-app-route .reviewer-workbench .admin-case-signal-grid,
+  .admin-app-route .reviewer-workbench .admin-case-bottom-grid,
+  .admin-app-route .reviewer-workbench .admin-case-tools {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .admin-trustops-head,
+  .admin-app-route .reviewer-workbench .admin-case-file-head {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-decision-brief-grid div,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid div:nth-child(2),
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief .seller-decision-brief-grid div:nth-child(-n + 2),
+  .admin-app-route .reviewer-workbench .reviewer-copilot-metrics div {
+    border-bottom: 1px solid var(--border-subtle) !important;
+    border-right: 0 !important;
+  }
+
+  .admin-app-route .reviewer-workbench .seller-decision-brief-grid div:last-child,
+  .admin-app-route .reviewer-workbench .reviewer-copilot-metrics div:last-child {
+    border-bottom: 0 !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-upload-card-facts div + div {
+    border-left: 0 !important;
+    border-top: 1px solid var(--border-subtle) !important;
+  }
+
+  .admin-app-route .reviewer-workbench .reviewer-copilot-evidence li {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-decision-brief,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .reviewer-copilot-brief,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .seller-review-card,
+  .admin-app-route .reviewer-workbench .seller-packet-selected-stack > .reviewer-guidance {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
   }
 }

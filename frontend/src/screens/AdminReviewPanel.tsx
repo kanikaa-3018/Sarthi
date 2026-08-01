@@ -47,6 +47,7 @@ type SellerApplicationReview = AdminReviewQueue["seller_applications"][number];
 type VerificationDocumentReview = AdminReviewQueue["documents"][number];
 type ListingDraftReview = AdminReviewQueue["listing_drafts"][number];
 type ProofAssetReview = AdminReviewQueue["proof_assets"][number];
+type AdminQueueSnapshot = AdminReviewQueue["active_queue"][number];
 type SellerLaneId = "needs_decision" | "docs_blocked" | "products" | "proofs" | "clear";
 type SellerLane = {
   id: SellerLaneId;
@@ -64,6 +65,7 @@ type SellerPacketItem =
       status: string;
       group: string;
       readyForReview: boolean;
+      queueItem?: AdminQueueSnapshot;
       prescreen: AdminPrescreenSuggestion;
       item: SellerApplicationReview;
     }
@@ -75,6 +77,7 @@ type SellerPacketItem =
       status: string;
       group: string;
       readyForReview: boolean;
+      queueItem?: AdminQueueSnapshot;
       prescreen: AdminPrescreenSuggestion;
       item: VerificationDocumentReview;
     }
@@ -86,6 +89,7 @@ type SellerPacketItem =
       status: string;
       group: string;
       readyForReview: boolean;
+      queueItem?: AdminQueueSnapshot;
       prescreen: AdminPrescreenSuggestion;
       item: ListingDraftReview;
     }
@@ -97,6 +101,7 @@ type SellerPacketItem =
       status: string;
       group: string;
       readyForReview: boolean;
+      queueItem?: AdminQueueSnapshot;
       prescreen: AdminPrescreenSuggestion;
       item: ProofAssetReview;
     };
@@ -111,6 +116,7 @@ type UploadQueueRow =
       status: string;
       submittedAt: string | null;
       readyForReview: boolean;
+      queueItem?: AdminQueueSnapshot;
       prescreen: AdminPrescreenSuggestion;
       searchText: string;
       item: VerificationDocumentReview;
@@ -124,6 +130,7 @@ type UploadQueueRow =
       status: string;
       submittedAt: string | null;
       readyForReview: boolean;
+      queueItem?: AdminQueueSnapshot;
       prescreen: AdminPrescreenSuggestion;
       searchText: string;
       item: ProofAssetReview;
@@ -526,6 +533,8 @@ function AgentRoomView({
         />
       </div>
 
+      <TrustOpsSummaryPanel queue={queue} />
+
       {queue.automation_plan.caution && (
         <div className="admin-mode-alert">
           <AlertTriangle size={15} />
@@ -682,6 +691,7 @@ function AgentQueueCard({
 }) {
   const title = readableQueueTitle(item);
   const subtitle = readableQueueSubtitle(item);
+  const caseFile = item.case_file ?? null;
   return (
     <article className={`admin-priority-card ${item.sla_state}`}>
       <ItemTypeIcon itemType={item.item_type} />
@@ -689,6 +699,17 @@ function AgentQueueCard({
         <strong>{title}</strong>
         <span>{subtitle}</span>
         <small>{item.primary_action}</small>
+        {caseFile && (
+          <div className="admin-case-mini-row" aria-label="Case file summary">
+            <em>{caseFile.evidence_conflicts.length} conflict{caseFile.evidence_conflicts.length === 1 ? "" : "s"}</em>
+            <em>{caseFile.evidence_missing.length} gap{caseFile.evidence_missing.length === 1 ? "" : "s"}</em>
+            <em>{caseFile.seller_tasks.length} task{caseFile.seller_tasks.length === 1 ? "" : "s"}</em>
+          </div>
+        )}
+        <div className="admin-priority-impact">
+          <span>{item.buyer_impact}</span>
+          <strong>{queueTrustLiftLabel(item)}</strong>
+        </div>
       </div>
       <div className="admin-priority-meta">
         <RiskPill level={item.risk_level} score={item.risk_score} />
@@ -699,6 +720,48 @@ function AgentQueueCard({
         Open
       </button>
     </article>
+  );
+}
+
+function TrustOpsSummaryPanel({ queue }: { queue: AdminReviewQueue }) {
+  return (
+    <section className="admin-trustops-panel" aria-label="TrustOps copilot summary">
+      <div className="admin-trustops-head">
+        <div>
+          <span>Closed-loop TrustOps</span>
+          <strong>{queue.trust_ops.headline}</strong>
+          <p>{queue.trust_ops.summary}</p>
+        </div>
+        <b>{queue.trust_ops.impact_points_waiting} trust pts</b>
+      </div>
+
+      <div className="admin-trustops-lanes">
+        {queue.trust_ops.lanes.map((lane) => (
+          <article key={lane.key}>
+            <span>{lane.label}</span>
+            <strong>{lane.count}</strong>
+            <p>{lane.detail}</p>
+          </article>
+        ))}
+      </div>
+
+      <div className="admin-trustops-guard">
+        <ShieldCheck size={15} />
+        <span>{queue.trust_ops.guardrails[0]}</span>
+      </div>
+
+      {queue.trust_ops.top_cases.length > 0 && (
+        <div className="admin-trustops-topcases" aria-label="Top TrustOps cases">
+          {queue.trust_ops.top_cases.slice(0, 3).map((item) => (
+            <div key={item.queue_item_id}>
+              <strong>{item.seller_name}</strong>
+              <span>{item.trigger}</span>
+              <em>{item.conflicts} conflict{item.conflicts === 1 ? "" : "s"} | +{item.trust_impact_points} trust</em>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1243,6 +1306,7 @@ function SellerPacketRow({
       <div className="seller-packet-row-meta">
         <StatusPill value={item.status} />
         {item.readyForReview && <span className={`seller-upload-check ${checks.tone}`}>{checks.label}</span>}
+        {item.queueItem && <span className="seller-upload-check impact">{queueTrustLiftLabel(item.queueItem)}</span>}
       </div>
     </button>
   );
@@ -1279,7 +1343,9 @@ function SellerPacketSelectedItem({
         <StatusPill value={item.status} />
       </div>
 
-      <DecisionBrief prescreen={item.prescreen} readyForReview={item.readyForReview} />
+      <DecisionBrief prescreen={item.prescreen} readyForReview={item.readyForReview} queueItem={item.queueItem} />
+      <ReviewerCopilotBrief prescreen={item.prescreen} readyForReview={item.readyForReview} queueItem={item.queueItem} />
+      <AdminCaseFilePanel caseFile={item.queueItem?.case_file ?? null} />
 
       {item.kind === "application" && (
         <SellerApplicationCard
@@ -1407,6 +1473,180 @@ function SellerPacketSelectedItem({
       )}
 
       <ReviewActionChecklist item={item} />
+    </div>
+  );
+}
+
+function AdminCaseFilePanel({ caseFile }: { caseFile: AdminQueueSnapshot["case_file"] | null | undefined }) {
+  if (!caseFile) return null;
+  const conflictCount = caseFile.evidence_conflicts.length;
+  const gapCount = caseFile.evidence_missing.length;
+  const agreeCount = caseFile.evidence_agrees.length;
+
+  return (
+    <section className="admin-case-file-panel" aria-label="Admin case file">
+      <div className="admin-case-file-head">
+        <div>
+          <span>TrustOps case file</span>
+          <strong>{caseFile.primary_question}</strong>
+          <p>{caseFile.trigger}</p>
+        </div>
+        <StatusPill value={caseFile.recommendation.confidence} />
+      </div>
+
+      <div className="admin-case-review-question">
+        <Bot size={15} />
+        <div>
+          <span>Recommendation</span>
+          <strong>{caseFile.recommendation.action}</strong>
+          <p>{caseFile.recommendation.why}</p>
+        </div>
+      </div>
+
+      <div className="admin-case-path" aria-label="Evidence path">
+        {caseFile.evidence_path.map((step) => (
+          <article className={`admin-case-path-step ${step.status}`} key={`${caseFile.case_id}-${step.label}`}>
+            {step.status === "pass" ? <CheckCircle2 size={14} /> : step.status === "warn" ? <AlertTriangle size={14} /> : <XCircle size={14} />}
+            <div>
+              <strong>{step.label}</strong>
+              <span>{step.detail}</span>
+              <small>{labelize(step.source_type)}</small>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="admin-case-signal-grid">
+        <AdminSignalColumn title="Evidence agrees" count={agreeCount} tone="good" signals={caseFile.evidence_agrees} />
+        <AdminSignalColumn title="Conflicts" count={conflictCount} tone={conflictCount ? "bad" : "good"} signals={caseFile.evidence_conflicts} empty="No contradiction found." />
+        <AdminSignalColumn title="Missing" count={gapCount} tone={gapCount ? "warn" : "good"} signals={caseFile.evidence_missing} empty="No critical gap found." />
+      </div>
+
+      <div className="admin-case-bottom-grid">
+        <section className="admin-case-impact" aria-label="Trust impact simulator">
+          <div>
+            <span>Trust impact simulator</span>
+            <strong>{caseFile.score_simulation.current_score}/100 now</strong>
+            <p>{caseFile.score_simulation.buyer_label_after_approval}</p>
+          </div>
+          <div className="admin-case-impact-bars">
+            <AdminScoreBar label="Approve" value={caseFile.score_simulation.next_if_approved} tone="good" />
+            <AdminScoreBar label="Reject" value={caseFile.score_simulation.next_if_rejected} tone="bad" />
+          </div>
+          {caseFile.score_simulation.remaining_blockers.length > 0 && (
+            <div className="admin-case-blockers">
+              {caseFile.score_simulation.remaining_blockers.map((blocker) => (
+                <span key={blocker}>{blocker}</span>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="admin-case-task-panel" aria-label="Seller root cause tasks">
+          <div>
+            <span>Seller tasks</span>
+            <strong>{caseFile.seller_tasks.length ? "Generated from blockers" : "No seller task needed"}</strong>
+          </div>
+          {caseFile.seller_tasks.length ? (
+            <div className="admin-case-task-list">
+              {caseFile.seller_tasks.slice(0, 3).map((task) => (
+                <article key={task.task_id}>
+                  <span>{labelize(task.priority)}</span>
+                  <strong>{task.title}</strong>
+                  <p>{task.detail}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="admin-case-empty-copy">Reviewer can decide without creating a seller correction task.</p>
+          )}
+        </section>
+      </div>
+
+      <details className="admin-case-technical">
+        <summary>
+          <span>Agent tools and guardrails</span>
+          <em>{caseFile.tool_chain.length} tools</em>
+        </summary>
+        <div className="admin-case-tools">
+          {caseFile.tool_chain.map((toolItem) => (
+            <article className={toolItem.status} key={toolItem.key}>
+              <strong>{toolItem.label}</strong>
+              <span>{toolItem.detail}</span>
+            </article>
+          ))}
+        </div>
+        <div className="admin-case-guardrails">
+          {caseFile.human_guardrails.map((guardrail) => (
+            <p key={guardrail}>
+              <ShieldCheck size={13} />
+              <span>{guardrail}</span>
+            </p>
+          ))}
+        </div>
+        <div className="admin-case-timeline">
+          {caseFile.audit_timeline.map((event) => (
+            <article className={event.status} key={`${event.label}-${event.detail}`}>
+              <strong>{event.label}</strong>
+              <span>{event.detail}</span>
+              {event.timestamp && <small>{formatDate(event.timestamp)}</small>}
+            </article>
+          ))}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function AdminSignalColumn({
+  title,
+  count,
+  tone,
+  signals,
+  empty = "No signal yet."
+}: {
+  title: string;
+  count: number;
+  tone: "good" | "warn" | "bad";
+  signals: NonNullable<AdminQueueSnapshot["case_file"]>["evidence_agrees"];
+  empty?: string;
+}) {
+  return (
+    <section className={`admin-case-signal-column ${tone}`}>
+      <div>
+        <span>{title}</span>
+        <strong>{count}</strong>
+      </div>
+      {signals.length ? (
+        signals.slice(0, 3).map((signal) => (
+          <article className={signal.severity} key={`${title}-${signal.label}`}>
+            <strong>{signal.label}</strong>
+            <p>{signal.detail}</p>
+          </article>
+        ))
+      ) : (
+        <p className="admin-case-empty-copy">{empty}</p>
+      )}
+    </section>
+  );
+}
+
+function AdminScoreBar({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: number;
+  tone: "good" | "bad";
+}) {
+  return (
+    <div className={`admin-case-score-row ${tone}`}>
+      <div>
+        <span>{label}</span>
+        <strong>{value}/100</strong>
+      </div>
+      <em style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
     </div>
   );
 }
@@ -1747,6 +1987,12 @@ function UploadQueueCard({
           <dt>Checks</dt>
           <dd className={checks.tone}>{checks.label}</dd>
         </div>
+        {row.queueItem && (
+          <div>
+            <dt>Impact</dt>
+            <dd>{queueTrustLiftLabel(row.queueItem)}</dd>
+          </div>
+        )}
         <div>
           <dt>Submitted</dt>
           <dd>{formatDate(row.submittedAt)}</dd>
@@ -1792,6 +2038,9 @@ function UploadReviewPanel({
         </div>
         <StatusPill value={row.status} />
       </div>
+
+      <DecisionBrief prescreen={row.prescreen} readyForReview={row.readyForReview} queueItem={row.queueItem} />
+      <ReviewerCopilotBrief prescreen={row.prescreen} readyForReview={row.readyForReview} queueItem={row.queueItem} />
 
       {row.kind === "document" ? (
         <DocumentReviewCard
@@ -2177,6 +2426,15 @@ function ProofAssetCard({
           <DetailTile label="Submitted" value={formatDate(proof.submitted_at ?? proof.created_at)} />
           <DetailTile label="Reviewed" value={formatDate(proof.reviewed_at)} />
         </DetailGrid>
+
+        {proof.buyer_doubt_examples?.length ? (
+          <div className="seller-proof-doubt-list" aria-label="Buyer doubts linked to this proof">
+            <span>Buyer doubts linked</span>
+            {proof.buyer_doubt_examples.slice(0, 3).map((doubt) => (
+              <p key={doubt}>{doubt}</p>
+            ))}
+          </div>
+        ) : null}
       </ReviewFoldout>
 
       <PrescreenBox prescreen={proof.prescreen} />
@@ -2387,10 +2645,12 @@ function PrescreenBox({ prescreen }: { prescreen: AdminPrescreenSuggestion }) {
 
 function DecisionBrief({
   prescreen,
-  readyForReview
+  readyForReview,
+  queueItem
 }: {
   prescreen: AdminPrescreenSuggestion;
   readyForReview: boolean;
+  queueItem?: AdminQueueSnapshot;
 }) {
   const failedChecks = prescreen.checks.filter((check) => check.status === "fail");
   const warningChecks = prescreen.checks.filter((check) => check.status === "warn");
@@ -2413,6 +2673,8 @@ function DecisionBrief({
         <DecisionBriefMetric label="Confidence" value={labelize(prescreen.confidence)} />
         <DecisionBriefMetric label="Checks" value={`${passedChecks}/${totalChecks || 0} passed`} />
         <DecisionBriefMetric label="Route" value={prescreen.route_to === "senior_reviewer" ? "Senior review" : "Standard"} />
+        {queueItem && <DecisionBriefMetric label="SLA" value={queueSlaLabel(queueItem)} />}
+        {queueItem && <DecisionBriefMetric label="Trust lift" value={queueTrustLiftLabel(queueItem)} />}
       </div>
 
       <div className="seller-decision-brief-note">
@@ -2429,6 +2691,144 @@ function DecisionBrief({
         )}
       </div>
     </section>
+  );
+}
+
+function ReviewerCopilotBrief({
+  prescreen,
+  readyForReview,
+  queueItem
+}: {
+  prescreen: AdminPrescreenSuggestion;
+  readyForReview: boolean;
+  queueItem?: AdminQueueSnapshot;
+}) {
+  const evidence = (queueItem?.evidence?.length ? queueItem.evidence : prescreen.evidence).slice(0, 3);
+  const blocker = queueItem?.blocker ?? null;
+  const guardrail = blocker
+    ? blocker
+    : prescreen.route_to === "senior_reviewer"
+      ? "Senior reviewer must confirm before any approval."
+      : "Human reviewer remains final owner; the agent only pre-reads evidence.";
+
+  return (
+    <section className="reviewer-copilot-brief" aria-label="Reviewer copilot impact">
+      <div className="reviewer-copilot-head">
+        <Bot size={16} />
+        <div>
+          <span>Reviewer copilot</span>
+          <strong>{prescreen.route_to === "senior_reviewer" ? "Senior review route" : "Standard review route"}</strong>
+          <p><span className="reviewer-copilot-inline-label">Buyer impact</span>{queueItem?.buyer_impact ?? prescreen.learn}</p>
+        </div>
+      </div>
+
+      <div className="reviewer-copilot-metrics">
+        <CopilotMetric label="Waiting" value={queueItem ? queueAgeLabel(queueItem) : "History"} />
+        <CopilotMetric label="SLA" value={queueItem ? queueSlaLabel(queueItem) : readyForReview ? "Review now" : "Closed"} />
+        <CopilotMetric label="Risk" value={`${labelize(prescreen.risk_level)} ${prescreen.risk_score}`} />
+        <CopilotMetric label="Trust lift" value={queueItem ? queueTrustLiftLabel(queueItem) : "No active lift"} />
+      </div>
+
+      {prescreen.proof_quality && <ProofQualityCopilot quality={prescreen.proof_quality} />}
+
+      <div className="reviewer-copilot-trail" aria-label="Agent pre-check trail">
+        <div>
+          <span>Observed</span>
+          <p>{prescreen.observe}</p>
+        </div>
+        <div>
+          <span>Reason</span>
+          <p>{prescreen.reason}</p>
+        </div>
+        <div>
+          <span>Safe action</span>
+          <p>{prescreen.act}</p>
+        </div>
+      </div>
+
+      <div className={`reviewer-copilot-guardrail ${blocker ? "blocked" : "safe"}`}>
+        {blocker ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
+        <span>{guardrail}</span>
+      </div>
+
+      {evidence.length > 0 && (
+        <div className="reviewer-copilot-evidence">
+          <span>Evidence used</span>
+          <ul>
+            {evidence.map((item) => (
+              <li key={`${item.source_id}-${item.label}`}>
+                <strong>{item.label}</strong>
+                <em>{item.value}</em>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProofQualityCopilot({ quality }: { quality: NonNullable<AdminPrescreenSuggestion["proof_quality"]> }) {
+  const tone = quality.decision === "approve" ? "pass" : quality.decision === "reject" ? "fail" : "warn";
+
+  return (
+    <section className={`proof-quality-copilot ${tone}`} aria-label="Proof quality reviewer">
+      <div className="proof-quality-head">
+        <div>
+          <span>Proof quality reviewer</span>
+          <strong>{quality.headline}</strong>
+          <p>{quality.summary}</p>
+        </div>
+        <b>{quality.score}/100</b>
+      </div>
+
+      <div className="proof-quality-route">
+        <div>
+          <span>Buyer doubt</span>
+          <strong>{quality.buyer_doubt}</strong>
+        </div>
+        <div>
+          <span>Claim checked</span>
+          <strong>{quality.claim_checked}</strong>
+        </div>
+        <div>
+          <span>Copilot says</span>
+          <strong>{proofQualityDecisionLabel(quality.decision)}</strong>
+        </div>
+      </div>
+
+      <div className="proof-quality-checks" aria-label="Proof quality checks">
+        {quality.checks.map((check) => (
+          <div className={`proof-quality-check ${check.status}`} key={`${check.key}-${check.label}`}>
+            {check.status === "pass" ? <CheckCircle2 size={14} /> : check.status === "warn" ? <AlertTriangle size={14} /> : <XCircle size={14} />}
+            <div>
+              <strong>{check.label}</strong>
+              <span>{check.detail}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="proof-quality-guardrail">
+        <ShieldCheck size={14} />
+        <span>{quality.reviewer_instruction} Final decision stays with the human reviewer.</span>
+      </div>
+    </section>
+  );
+}
+
+function proofQualityDecisionLabel(decision: NonNullable<AdminPrescreenSuggestion["proof_quality"]>["decision"]) {
+  if (decision === "approve") return "Approve after visual check";
+  if (decision === "reject") return "Reject with clear note";
+  return "Ask seller for revision";
+}
+
+function CopilotMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
@@ -2450,7 +2850,7 @@ function ReviewActionChecklist({ item }: { item: SellerPacketItem }) {
         },
         {
           label: "3. Decide",
-          detail: `${suggestedAction}. The final approval, rejection, or revision stays human-controlled.`
+          detail: `${suggestedAction}. ${item.queueItem ? item.queueItem.buyer_impact : "The final approval, rejection, or revision stays human-controlled."}`
         }
       ]
     : [
@@ -2519,6 +2919,25 @@ function providerText(provider: AdminPrescreenSuggestion["agent_provider"]) {
   if (provider === "gemini") return "Gemini pre-check";
   if (provider === "fallback_after_llm_error") return "Rules fallback";
   return "Rules pre-check";
+}
+
+function queueTrustLiftLabel(item: Pick<AdminQueueSnapshot, "trust_impact_points">) {
+  const points = Number(item.trust_impact_points ?? 0);
+  return points > 0 ? `+${points} trust` : "No direct lift";
+}
+
+function queueAgeLabel(item: Pick<AdminQueueSnapshot, "age_hours">) {
+  const hours = Math.max(0, Math.round(Number(item.age_hours ?? 0)));
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+function queueSlaLabel(item: Pick<AdminQueueSnapshot, "sla_state" | "age_hours" | "sla_hours">) {
+  const state = item.sla_state === "breached" ? "Breached" : item.sla_state === "due_today" ? "Due today" : "On track";
+  const age = queueAgeLabel(item);
+  const slaHours = Math.max(1, Math.round(Number(item.sla_hours ?? 0)));
+  const target = slaHours < 24 ? `${slaHours}h` : `${Math.round(slaHours / 24)}d`;
+  return `${state} (${age}/${target})`;
 }
 
 function NoteEditor({
@@ -2719,6 +3138,7 @@ function sellerLaneLabel(queue: AdminReviewQueue, seller: AdminSellerDossier) {
 }
 
 function buildSellerPacketItems(report: SellerReport): SellerPacketItem[] {
+  const queueItemById = new Map(report.queueItems.map((item) => [item.queue_item_id, item]));
   const applications: SellerPacketItem[] = report.applications.map((application) => ({
     id: `application-${application.application_id}`,
     kind: "application",
@@ -2727,6 +3147,7 @@ function buildSellerPacketItems(report: SellerReport): SellerPacketItem[] {
     status: application.status,
     group: "Seller identity",
     readyForReview: application.status === "pending_review" && report.seller.pending_documents.length === 0,
+    queueItem: queueItemById.get(application.application_id),
     prescreen: application.prescreen,
     item: application
   }));
@@ -2739,6 +3160,7 @@ function buildSellerPacketItems(report: SellerReport): SellerPacketItem[] {
     status: document.status,
     group: "Documents",
     readyForReview: document.status === "submitted" || document.status === "under_review",
+    queueItem: queueItemById.get(document.document_id),
     prescreen: document.prescreen,
     item: document
   }));
@@ -2751,6 +3173,7 @@ function buildSellerPacketItems(report: SellerReport): SellerPacketItem[] {
     status: draft.status,
     group: "Product drafts",
     readyForReview: draft.status === "submitted",
+    queueItem: queueItemById.get(draft.draft_id),
     prescreen: draft.prescreen,
     item: draft
   }));
@@ -2763,6 +3186,7 @@ function buildSellerPacketItems(report: SellerReport): SellerPacketItem[] {
     status: proof.status,
     group: "Proof uploads",
     readyForReview: proof.status === "submitted",
+    queueItem: queueItemById.get(proof.proof_id),
     prescreen: proof.prescreen,
     item: proof
   }));
@@ -2784,6 +3208,7 @@ function packetKindToItemType(kind: PacketItemKind): AdminPrescreenSuggestion["i
 }
 
 function buildUploadRows(queue: AdminReviewQueue): UploadQueueRow[] {
+  const queueItemById = new Map(queue.active_queue.map((item) => [item.queue_item_id, item]));
   const documentRows: UploadQueueRow[] = queue.documents.map((document) => ({
     id: `document-${document.document_id}`,
     kind: "document",
@@ -2793,6 +3218,7 @@ function buildUploadRows(queue: AdminReviewQueue): UploadQueueRow[] {
     status: document.status,
     submittedAt: document.submitted_at,
     readyForReview: document.status === "submitted" || document.status === "under_review",
+    queueItem: queueItemById.get(document.document_id),
     prescreen: document.prescreen,
     searchText: [
       document.seller_name,
@@ -2815,6 +3241,7 @@ function buildUploadRows(queue: AdminReviewQueue): UploadQueueRow[] {
     status: proof.status,
     submittedAt: proof.submitted_at ?? proof.created_at,
     readyForReview: proof.status === "submitted",
+    queueItem: queueItemById.get(proof.proof_id),
     prescreen: proof.prescreen,
     searchText: [
       proof.seller_name,
@@ -2866,6 +3293,7 @@ function countPrescreenChecks(prescreens: AdminPrescreenSuggestion[]) {
 function buildSellerReport(queue: AdminReviewQueue, seller: AdminSellerDossier) {
   return {
     seller,
+    queueItems: queue.active_queue.filter((item) => item.seller_id === seller.seller_id),
     applications: sortByReviewState(queue.seller_applications.filter((item) => item.seller_id === seller.seller_id)),
     documents: sortByReviewState(queue.documents.filter((item) => item.seller_id === seller.seller_id)),
     drafts: sortByReviewState(queue.listing_drafts.filter((item) => item.seller_id === seller.seller_id)),
@@ -2889,6 +3317,13 @@ function reviewStatePriority(status: string) {
 }
 
 function suggestedAuditNote(prescreen: AdminPrescreenSuggestion, fallback: string) {
+  if (prescreen.proof_quality) {
+    const quality = prescreen.proof_quality;
+    if (quality.decision === "approve") {
+      return `Proof quality ${quality.score}/100: ${quality.headline}. Reviewer verified ${quality.claim_checked} before approval.`;
+    }
+    return `Proof quality ${quality.score}/100: ${quality.reviewer_instruction}`;
+  }
   const action = prescreen.act?.trim();
   const reason = prescreen.reason?.trim();
   if (action && reason) return `${action} ${reason}`;

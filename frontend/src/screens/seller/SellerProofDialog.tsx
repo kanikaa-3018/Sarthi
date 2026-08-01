@@ -1,7 +1,7 @@
-import { FileText, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { AlertCircle, Bot, CheckCircle2, FileText, ShieldCheck, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SellerEvidenceCoachTask } from "../../types/api";
-import { proofTaskContext, proofTaskReason, proofTypeLabel } from "./sellerModel";
+import { proofPacketForTask, proofTaskContext, proofTaskReason, proofTypeLabel, type SellerProofPacket } from "./sellerModel";
 import { useDialogLock } from "./useDialogLock";
 
 export type SellerProofSubmission = {
@@ -12,14 +12,23 @@ export type SellerProofSubmission = {
 
 type SellerProofDialogProps = {
   task: SellerEvidenceCoachTask;
+  proofPacket?: SellerProofPacket | null;
   submitting: boolean;
   apiError: string | null;
   onClose: () => void;
   onSubmit: (submission: SellerProofSubmission) => Promise<void>;
 };
 
-export function SellerProofDialog({ task, submitting, apiError, onClose, onSubmit }: SellerProofDialogProps) {
+type ProofPrecheckItem = {
+  key: string;
+  label: string;
+  detail: string;
+  status: "pass" | "warn" | "blocked";
+};
+
+export function SellerProofDialog({ task, proofPacket, submitting, apiError, onClose, onSubmit }: SellerProofDialogProps) {
   const dialogRef = useRef<HTMLElement>(null);
+  const packet = useMemo(() => proofPacket ?? proofPacketForTask(task), [proofPacket, task]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assetUrl, setAssetUrl] = useState("");
@@ -28,15 +37,21 @@ export function SellerProofDialog({ task, submitting, apiError, onClose, onSubmi
   const context = proofTaskContext(task);
   const isReturnEvidence = context === "return-signal";
   const isRejectedEvidence = context === "rejected-proof";
+  const proofPrecheck = useMemo(
+    () => buildProofPrecheck({ title, description, assetUrl, packet }),
+    [assetUrl, description, packet, title]
+  );
+  const precheckReady = proofPrecheck.filter((item) => item.status === "pass").length;
+  const precheckBlocked = proofPrecheck.some((item) => item.status === "blocked");
   useDialogLock(true, dialogRef, onClose, submitting);
 
   useEffect(() => {
-    setTitle(`${proofTypeLabel(task.recommended_proof_type)} proof`);
-    setDescription(`${task.product_title}: evidence for ${task.attribute} review.`);
+    setTitle(packet.prefillTitle);
+    setDescription(packet.prefillDescription);
     setAssetUrl("");
     setFileName("");
     setErrors({});
-  }, [task]);
+  }, [packet]);
 
   async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -105,6 +120,38 @@ export function SellerProofDialog({ task, submitting, apiError, onClose, onSubmi
             </dl>
           </section>
 
+          <section className="seller-proof-packet" aria-label="Prepared proof packet">
+            <div className="seller-proof-packet-head">
+              <span><Bot size={15} aria-hidden="true" /> Prepared packet</span>
+              <strong>{packet.title}</strong>
+              <p>{packet.buyerDemand} buyer asks, +{packet.trustLift} trust after approval, target {packet.target.toLowerCase()}.</p>
+            </div>
+            <ul>
+              {packet.checklist.map((item) => (
+                <li key={item}><CheckCircle2 size={14} aria-hidden="true" />{item}</li>
+              ))}
+            </ul>
+            <small><ShieldCheck size={14} aria-hidden="true" />{packet.reviewerGate}</small>
+          </section>
+
+          <section className="seller-proof-precheck" aria-label="Proof quality precheck">
+            <header>
+              <span><ShieldCheck size={15} aria-hidden="true" /> Proof precheck</span>
+              <strong>{precheckReady}/{proofPrecheck.length} ready</strong>
+            </header>
+            <ul>
+              {proofPrecheck.map((item) => (
+                <li key={item.key} className={`precheck-${item.status}`}>
+                  {item.status === "pass" ? <CheckCircle2 size={15} aria-hidden="true" /> : <AlertCircle size={15} aria-hidden="true" />}
+                  <div>
+                    <strong>{item.label}</strong>
+                    <p>{item.detail}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+
           {apiError && <div className="seller-form-error-summary" role="alert" tabIndex={-1}>{apiError}</div>}
 
           <div className="seller-field">
@@ -145,11 +192,58 @@ export function SellerProofDialog({ task, submitting, apiError, onClose, onSubmi
 
         <footer className="seller-dialog-footer">
           <button type="button" className="seller-button seller-button-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" form="seller-proof-form" className="seller-button seller-button-primary" disabled={submitting}>{submitting ? "Submitting for review" : "Submit for review"}</button>
+          <button type="submit" form="seller-proof-form" className="seller-button seller-button-primary" disabled={submitting}>{submitting ? "Submitting for review" : precheckBlocked ? "Submit for review" : "Submit checked proof"}</button>
         </footer>
       </section>
     </div>
   );
+}
+
+function buildProofPrecheck({
+  title,
+  description,
+  assetUrl,
+  packet
+}: {
+  title: string;
+  description: string;
+  assetUrl: string;
+  packet: SellerProofPacket;
+}): ProofPrecheckItem[] {
+  const cleanTitle = title.trim();
+  const cleanDescription = description.trim();
+  const hasAllowedReference = isAllowedProofReference(assetUrl);
+  const text = `${cleanTitle} ${cleanDescription}`.toLowerCase();
+  const hasPrivacyRisk = /\b(phone|mobile|address|whatsapp|upi|buyer id|buyer name|customer name|customer phone)\b/i.test(text);
+  const productToken = packet.productTitle.split(/\s+/).find((part) => part.length >= 4)?.toLowerCase();
+  const mentionsProduct = Boolean(productToken && text.includes(productToken));
+
+  return [
+    {
+      key: "reference",
+      label: "Evidence attached",
+      detail: hasAllowedReference ? "File or secure proof link is ready for reviewer upload." : "Attach a JPG, PNG, WebP, PDF, or secure proof link.",
+      status: hasAllowedReference ? "pass" : "blocked"
+    },
+    {
+      key: "copy",
+      label: "Reviewer copy",
+      detail: cleanDescription.length >= 12 ? "Description explains what the reviewer should verify." : "Add one clear sentence about what this proof shows.",
+      status: cleanDescription.length >= 12 ? "pass" : "blocked"
+    },
+    {
+      key: "product",
+      label: "Product match",
+      detail: cleanTitle.length >= 5 && mentionsProduct ? "Title and copy point to this product packet." : cleanTitle.length >= 5 ? "Title is usable; mention the exact product if the proof covers multiple variants." : "Use a specific proof title.",
+      status: cleanTitle.length < 5 ? "blocked" : mentionsProduct ? "pass" : "warn"
+    },
+    {
+      key: "privacy",
+      label: "Privacy safe",
+      detail: hasPrivacyRisk ? "Remove buyer identifiers or contact details before review." : "No obvious buyer identity or contact detail is included.",
+      status: hasPrivacyRisk ? "warn" : "pass"
+    }
+  ];
 }
 
 function isAllowedProofReference(value: string): boolean {
