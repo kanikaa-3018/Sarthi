@@ -1,8 +1,8 @@
 # Product Readiness
 
-## Current Prototype Contract
+## Current Evaluation Contract
 
-Sarthi is a connected prototype with three role-specific surfaces and one shared evidence layer:
+Sarthi is a connected product build with three role-specific surfaces and one shared evidence layer:
 
 ```text
 Buyer trust decisions
@@ -11,7 +11,7 @@ Admin human-in-loop review
 Audit and readiness disclosure
 ```
 
-The current implementation is suitable for hackathon/judge evaluation because the main flows are API-backed, role-separated, and inspectable. It is not a production deployment because marketplace connectors, production identity, document storage, observability, and reviewer operations are not yet attached.
+The current implementation is suitable for finalist evaluation because the main flows are API-backed, role-separated, and inspectable. It is not a production deployment because marketplace connectors, production identity, document storage, observability, and reviewer operations are not yet attached.
 
 ## Working Today
 
@@ -58,14 +58,14 @@ The current implementation is suitable for hackathon/judge evaluation because th
 
 - Fastify API with role and ownership checks.
 - MongoDB-backed seed data and evidence documents.
-- Optional Gemini grounded responses and confidence language.
-- Optional Gemini embeddings plus Atlas Vector Search.
+- Bedrock-first grounded responses with Gemini fallback when configured.
+- Provider-specific embeddings with Atlas Vector Search or local cosine fallback.
 - Optional Neo4j graph projection.
 - Deterministic fallback when optional integrations are unavailable.
 - System readiness endpoint disclosing runtime integrations, source health, controls, connectors, and blockers.
 - Backend trust/RBAC test coverage.
 
-## Prototype Data Disclosure
+## Evaluation Data Disclosure
 
 The current data is deterministic seeded data. It is designed to test product logic and reviewer behavior, not to represent live marketplace performance.
 
@@ -104,10 +104,10 @@ Before production, Sarthi needs:
 
 ## What Judges Should Credit
 
-- The prototype is not just a landing page or static UI.
+- Sarthi is not just a landing page or static UI.
 - Buyer, seller, and admin flows share the same trust/evidence model.
 - Admin review is human-in-loop and does not auto-publish seller claims.
-- Gemini is optional and bounded by deterministic services and auditability.
+- Bedrock/Gemini assistance is optional and bounded by deterministic services and auditability.
 - Weak evidence leads to caution, proof request, or abstention.
 - Seller workflow improves evidence without exposing buyer private memory.
 - System readiness and production gaps are disclosed.
@@ -115,8 +115,8 @@ Before production, Sarthi needs:
 ## What Judges Should Not Assume
 
 - The seeded trust scores are not live marketplace scores.
-- The document upload flow stores prototype metadata, not secure production files.
-- Gemini is not required for the prototype to run.
+- The document upload flow stores evaluation metadata, not secure production files.
+- Bedrock/Gemini is not required for the product build to run.
 - Neo4j and Atlas Vector Search are optional runtime enhancements.
 - Payment, KYC, logistics, and production review operations are not integrated yet.
 
@@ -124,11 +124,11 @@ Before production, Sarthi needs:
 
 | Dimension | Status |
 | --- | --- |
-| Working prototype | Ready for local evaluation. |
+| Working product build | Ready for local evaluation. |
 | Buyer journey | Implemented end-to-end against seed data. |
 | Seller journey | Implemented for evidence, proof, onboarding, and drafts. |
 | Admin journey | Implemented for review queue and human decisions. |
 | API-backed flows | Implemented. |
 | Role separation | Implemented in backend middleware and tests. |
-| Gemini automation | Optional, with fallback. |
+| AI assistance | Bedrock-first with Gemini fallback when configured; deterministic fallback always available. |
 | Production launch | Not ready until connectors and operations are attached. |

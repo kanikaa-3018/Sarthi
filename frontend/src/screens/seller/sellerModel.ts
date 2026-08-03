@@ -57,6 +57,72 @@ export type MarketComparison = {
   recommendation: SellerActionItem;
 };
 
+export type SellerProofPacket = {
+  task: SellerEvidenceCoachTask;
+  taskKey: string;
+  title: string;
+  productTitle: string;
+  proofType: string;
+  buyerDemand: number;
+  trustLift: number;
+  target: string;
+  prefillTitle: string;
+  prefillDescription: string;
+  checklist: string[];
+  reviewerGate: string;
+};
+
+export type SellerBulkProofGroup = {
+  key: string;
+  title: string;
+  detail: string;
+  productCount: number;
+  buyerDemand: number;
+  trustLift: number;
+  taskKeys: string[];
+  firstTask: SellerEvidenceCoachTask;
+};
+
+export type SellerListingSuggestion = {
+  productId: string;
+  title: string;
+  reason: string;
+  action: string;
+  tone: "urgent" | "watch" | "stable";
+};
+
+export type SellerClaimRisk = {
+  productId: string;
+  title: string;
+  issue: string;
+  riskyClaim: string;
+  saferClaim: string;
+  evidenceNeeded: string;
+  action: string;
+  tone: "urgent" | "watch";
+};
+
+export type SellerAutomationActivity = {
+  key: string;
+  label: string;
+  detail: string;
+  status: "done" | "next" | "blocked";
+};
+
+export type SellerAutomationSummary = {
+  headline: string;
+  summary: string;
+  stats: Array<{ label: string; value: string; detail: string }>;
+  proofPacket: SellerProofPacket | null;
+  bulkProofGroups: SellerBulkProofGroup[];
+  rootCause: SellerListingSuggestion | null;
+  listingSuggestions: SellerListingSuggestion[];
+  claimRisks: SellerClaimRisk[];
+  activity: SellerAutomationActivity[];
+  demoStory: SellerAutomationActivity[];
+  guardrail: string;
+};
+
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 } as const;
 
 export function parseSellerRoute(pathname: string, search = ""): SellerRoute {
@@ -157,7 +223,17 @@ export function buildSellerActions(input: {
     });
   }
 
-  return actions.sort((first, second) => PRIORITY_RANK[first.priority] - PRIORITY_RANK[second.priority]);
+  const selectedProofTaskKey = input.coach?.proof_agent?.selected_task_key ?? null;
+  return actions.sort((first, second) =>
+    sellerActionSortRank(first, selectedProofTaskKey) - sellerActionSortRank(second, selectedProofTaskKey) ||
+    PRIORITY_RANK[first.priority] - PRIORITY_RANK[second.priority]
+  );
+}
+
+function sellerActionSortRank(action: SellerActionItem, selectedProofTaskKey: string | null) {
+  if (action.action.type === "verification") return -20;
+  if (selectedProofTaskKey && action.proofTask && proofKey(action.proofTask) === selectedProofTaskKey) return -10;
+  return PRIORITY_RANK[action.priority];
 }
 
 function actionFromBoard(card: SellerActionBoard["cards"][number]): SellerActionItem {
@@ -264,8 +340,334 @@ export function buildProofLanes(coach: SellerEvidenceCoachResponse | null): Sell
   };
 }
 
+export function buildSellerAutomation(input: {
+  actions: SellerActionItem[];
+  productRows: SellerProductRow[];
+  proofLanes: SellerProofLanes;
+  coach: SellerEvidenceCoachResponse | null;
+}): SellerAutomationSummary {
+  const selectedTaskKey = input.coach?.proof_agent?.selected_task_key ?? null;
+  const selectedTask = selectedTaskKey
+    ? input.proofLanes.openTasks.find((task) => proofKey(task) === selectedTaskKey) ?? null
+    : null;
+  const firstProofTask = selectedTask
+    ?? input.actions.find((action) => action.proofTask)?.proofTask
+    ?? input.proofLanes.openTasks[0]
+    ?? null;
+  const proofPacket = firstProofTask ? proofPacketForTask(firstProofTask) : null;
+  const bulkProofGroups = buildBulkProofGroups(input.proofLanes.openTasks);
+  const listingSuggestions = buildListingSuggestions(input.productRows);
+  const claimRisks = buildClaimRisks(input.productRows);
+  const rootCause = listingSuggestions.find((item) => item.tone === "urgent") ?? listingSuggestions[0] ?? null;
+  const waitingBuyers = input.proofLanes.openTasks.reduce((sum, task) => sum + Math.max(0, Number(task.buyer_demand ?? 0)), 0);
+  const proofTasks = input.proofLanes.openTasks.length + input.proofLanes.rejected.length;
+  const listingFixes = Math.max(listingSuggestions.length, claimRisks.length);
+  const reviewerItems = input.proofLanes.inReview.length;
+  const readyCount = Number(Boolean(proofPacket)) + bulkProofGroups.length + listingFixes + reviewerItems;
+  const headline = proofPacket
+    ? "Autopilot has one proof packet ready"
+    : listingFixes
+      ? "Autopilot found listing work to approve"
+      : reviewerItems
+        ? "Autopilot is waiting on reviewer decisions"
+        : "Autopilot is monitoring seller trust";
+
+  return {
+    headline,
+    summary: proofPacket
+      ? `${proofPacket.productTitle} is the next seller-approved proof action. Nothing is published until TrustOps reviews it.`
+      : listingFixes
+        ? `${listingFixes} listing ${listingFixes === 1 ? "improvement is" : "improvements are"} ready for seller review.`
+        : "No seller action is being taken automatically. Sarthi will surface buyer-proof demand when it appears.",
+    stats: [
+      { label: "Proof fixes", value: String(proofTasks), detail: waitingBuyers ? `${waitingBuyers} buyer asks` : "No buyer asks waiting" },
+      { label: "Batch groups", value: String(bulkProofGroups.length), detail: bulkProofGroups.length ? "similar proof work" : "no repeat batch" },
+      { label: "Listing fixes", value: String(listingFixes), detail: listingFixes ? "seller approval needed" : "claims look stable" },
+      { label: "Reviewer gate", value: String(reviewerItems), detail: reviewerItems ? "already submitted" : "none in review" }
+    ],
+    proofPacket,
+    bulkProofGroups,
+    rootCause,
+    listingSuggestions,
+    claimRisks,
+    activity: buildAutomationActivity(input.coach, proofPacket, bulkProofGroups, listingSuggestions),
+    demoStory: buildDemoStory(input.coach, proofPacket, claimRisks, reviewerItems, readyCount),
+    guardrail: "Sarthi prepares and ranks seller work. Sellers approve changes, and reviewers approve proof before buyer confidence changes."
+  };
+}
+
+export function proofPacketForTask(task: SellerEvidenceCoachTask): SellerProofPacket {
+  const proofType = proofTypeLabel(task.recommended_proof_type);
+  const trustLift = proofTrustLift(task);
+  return {
+    task,
+    taskKey: proofKey(task),
+    title: `${proofType} packet`,
+    productTitle: task.product_title,
+    proofType,
+    buyerDemand: Math.max(0, Number(task.buyer_demand ?? 0)),
+    trustLift,
+    target: proofTaskTarget(task),
+    prefillTitle: `${proofType} for ${shortProductTitle(task.product_title)}`,
+    prefillDescription: `${task.product_title}: ${proofType.toLowerCase()} for ${labelize(task.attribute).toLowerCase()} review. ${task.buyer_impact ?? proofTaskReason(task)}`,
+    checklist: proofPacketChecklist(task),
+    reviewerGate: "Reviewer approval is required before this proof appears to buyers."
+  };
+}
+
 function proofKey(item: { product_id: string; attribute: string }) {
   return `${item.product_id}:${item.attribute}`;
+}
+
+function buildBulkProofGroups(tasks: SellerEvidenceCoachTask[]): SellerBulkProofGroup[] {
+  const groups = new Map<string, SellerEvidenceCoachTask[]>();
+  for (const task of tasks) {
+    const key = `${task.attribute}:${task.recommended_proof_type}`;
+    groups.set(key, [...(groups.get(key) ?? []), task]);
+  }
+  return [...groups.entries()]
+    .map(([key, group]) => {
+      const buyerDemand = group.reduce((sum, task) => sum + Math.max(0, Number(task.buyer_demand ?? 0)), 0);
+      const trustLift = group.reduce((sum, task) => sum + proofTrustLift(task), 0);
+      const firstTask = group.sort((left, right) => Number(right.buyer_demand ?? 0) - Number(left.buyer_demand ?? 0))[0];
+      return {
+        key,
+        title: `${labelize(firstTask.attribute)} proof batch`,
+        detail: `${group.length} product${group.length === 1 ? "" : "s"}, ${buyerDemand} buyer ask${buyerDemand === 1 ? "" : "s"}, +${trustLift} trust after review`,
+        productCount: group.length,
+        buyerDemand,
+        trustLift,
+        taskKeys: group.map(proofKey),
+        firstTask
+      };
+    })
+    .filter((group) => group.productCount > 1 || group.buyerDemand >= 6)
+    .sort((left, right) => right.buyerDemand - left.buyerDemand || right.trustLift - left.trustLift)
+    .slice(0, 3);
+}
+
+function buildListingSuggestions(rows: SellerProductRow[]): SellerListingSuggestion[] {
+  return rows
+    .map((row): SellerListingSuggestion | null => {
+      const issue = row.listing.top_issue;
+      if (row.proofTask?.type === "broken_expectation" || issue) {
+        const issueLabel = issue ? labelize(issue.return_reason).toLowerCase() : labelize(row.proofTask?.attribute ?? "proof").toLowerCase();
+        return {
+          productId: row.listing.product.product_id,
+          title: shortProductTitle(row.listing.product.title),
+          reason: issue ? `${issue.count} recent ${issue.count === 1 ? "return points" : "returns point"} to ${issueLabel}.` : row.concern,
+          action: row.actionKind === "measurement" ? "Approve measurement correction" : "Approve proof-backed listing edit",
+          tone: "urgent" as const
+        };
+      }
+      if (row.state === "attention" || row.listing.metrics.evidence_strength === "weak" || row.listing.metrics.evidence_strength === "unknown") {
+        return {
+          productId: row.listing.product.product_id,
+          title: shortProductTitle(row.listing.product.title),
+          reason: row.concern,
+          action: row.actionKind === "proof" ? "Attach proof before trust lift" : "Review listing promise",
+          tone: "watch" as const
+        };
+      }
+      return null;
+    })
+    .filter((item): item is SellerListingSuggestion => Boolean(item))
+    .slice(0, 4);
+}
+
+function buildClaimRisks(rows: SellerProductRow[]): SellerClaimRisk[] {
+  return rows
+    .map((row): SellerClaimRisk | null => {
+      if (row.state === "healthy" && row.listing.metrics.evidence_strength !== "weak") return null;
+      const issue = row.listing.top_issue?.return_reason ?? row.proofTask?.attribute ?? "evidence";
+      const template = claimRiskTemplate(issue, row.proofTask?.recommended_proof_type);
+      return {
+        productId: row.listing.product.product_id,
+        title: shortProductTitle(row.listing.product.title),
+        issue: template.issue,
+        riskyClaim: template.riskyClaim,
+        saferClaim: template.saferClaim,
+        evidenceNeeded: template.evidenceNeeded,
+        action: row.actionKind === "measurement" ? "Prepare size evidence" : row.actionKind === "proof" ? "Prepare proof packet" : "Review listing",
+        tone: row.state === "attention" || row.proofTask?.priority === "high" ? "urgent" : "watch"
+      };
+    })
+    .filter((item): item is SellerClaimRisk => Boolean(item))
+    .slice(0, 4);
+}
+
+function claimRiskTemplate(issue: string, proofType?: SellerEvidenceCoachTask["recommended_proof_type"]) {
+  if (issue === "too_large" || issue === "too_small" || issue === "size") {
+    return {
+      issue: "Fit expectation",
+      riskyClaim: "Claiming exact fit without current measurements.",
+      saferClaim: "Show verified chest and length values before promising fit.",
+      evidenceNeeded: "Measurement chart"
+    };
+  }
+  if (issue === "color_different" || issue === "color") {
+    return {
+      issue: "Colour expectation",
+      riskyClaim: "Relying only on catalog colour photos.",
+      saferClaim: "Add a daylight photo and describe colour plainly.",
+      evidenceNeeded: proofType ? proofTypeLabel(proofType) : "Daylight photo"
+    };
+  }
+  if (issue === "fabric_different" || issue === "fabric" || issue === "transparency") {
+    return {
+      issue: "Fabric expectation",
+      riskyClaim: "Using broad fabric claims without close proof.",
+      saferClaim: "Show texture, lining, and transparency where relevant.",
+      evidenceNeeded: proofType ? proofTypeLabel(proofType) : "Fabric close-up"
+    };
+  }
+  if (issue === "damaged" || issue === "wrong_item" || issue === "packaging") {
+    return {
+      issue: "Dispatch expectation",
+      riskyClaim: "Assuming packaging quality is obvious to buyers.",
+      saferClaim: "Show packing and variant labels before dispatch claims.",
+      evidenceNeeded: proofType ? proofTypeLabel(proofType) : "Packaging photo"
+    };
+  }
+  return {
+    issue: "Evidence gap",
+    riskyClaim: "Making a trust claim without reviewer-visible proof.",
+    saferClaim: "Keep the promise factual and attach evidence first.",
+    evidenceNeeded: proofType ? proofTypeLabel(proofType) : "Reviewer proof"
+  };
+}
+
+function buildAutomationActivity(
+  coach: SellerEvidenceCoachResponse | null,
+  proofPacket: SellerProofPacket | null,
+  groups: SellerBulkProofGroup[],
+  suggestions: SellerListingSuggestion[]
+): SellerAutomationActivity[] {
+  const agent = coach?.proof_agent;
+  const entries: SellerAutomationActivity[] = [
+    {
+      key: "demand",
+      label: "Demand scanned",
+      detail: agent ? `${agent.metrics.waiting_buyers} aggregate buyer asks checked without exposing identities.` : "Waiting for proof demand.",
+      status: "done"
+    }
+  ];
+  if (proofPacket) {
+    entries.push({
+      key: "packet",
+      label: "Proof packet prepared",
+      detail: `${proofPacket.proofType} is ready for ${shortProductTitle(proofPacket.productTitle)}.`,
+      status: "next"
+    });
+  }
+  if (groups.length) {
+    entries.push({
+      key: "bulk",
+      label: "Bulk work grouped",
+      detail: `${groups[0].title} can reduce repeated seller work.`,
+      status: "next"
+    });
+  }
+  if (suggestions.length) {
+    entries.push({
+      key: "listing",
+      label: "Listing risk flagged",
+      detail: `${suggestions[0].title}: ${suggestions[0].reason}`,
+      status: "next"
+    });
+  }
+  entries.push({
+    key: "review",
+    label: "Reviewer gate",
+    detail: agent?.guardrail ?? "Reviewer approval is required before buyer confidence changes.",
+    status: proofPacket ? "blocked" : "done"
+  });
+  return entries.slice(0, 5);
+}
+
+function buildDemoStory(
+  coach: SellerEvidenceCoachResponse | null,
+  proofPacket: SellerProofPacket | null,
+  claimRisks: SellerClaimRisk[],
+  reviewerItems: number,
+  readyCount: number
+): SellerAutomationActivity[] {
+  const waitingBuyers = coach?.proof_agent?.metrics.waiting_buyers ?? proofPacket?.buyerDemand ?? 0;
+  return [
+    {
+      key: "buyer-signal",
+      label: "Buyer signal",
+      detail: waitingBuyers ? `${waitingBuyers} aggregate asks become seller work, without exposing buyer identity.` : "Sarthi keeps watching for buyer-proof demand.",
+      status: "done"
+    },
+    {
+      key: "seller-work",
+      label: "Seller work",
+      detail: proofPacket ? `${proofPacket.proofType} packet is prepared with reviewer-safe copy.` : `${readyCount} seller tasks are ranked by impact.`,
+      status: proofPacket || readyCount ? "next" : "done"
+    },
+    {
+      key: "listing-risk",
+      label: "Claim control",
+      detail: claimRisks.length ? `${claimRisks.length} risky listing promises have safer proof-backed wording.` : "No risky product promise is currently flagged.",
+      status: claimRisks.length ? "next" : "done"
+    },
+    {
+      key: "reviewer-gate",
+      label: "Trust gate",
+      detail: reviewerItems ? `${reviewerItems} item${reviewerItems === 1 ? " is" : "s are"} already with reviewers.` : "Buyer-visible trust changes wait for reviewer approval.",
+      status: proofPacket ? "blocked" : "done"
+    }
+  ];
+}
+
+function proofTrustLift(task: SellerEvidenceCoachTask): number {
+  const fallbackByAttribute: Partial<Record<SellerEvidenceCoachTask["attribute"], number>> = {
+    size: 7,
+    fabric: 6,
+    transparency: 6,
+    color: 5,
+    packaging: 4,
+    offer: 3
+  };
+  const fallback = fallbackByAttribute[task.attribute] ?? 4;
+  const demandBoost = Math.min(3, Math.max(0, Number(task.buyer_demand ?? 0) - 1));
+  return Math.max(1, Number(task.trust_lift_points ?? fallback + demandBoost));
+}
+
+function proofTaskTarget(task: SellerEvidenceCoachTask): string {
+  const age = Number(task.age_hours ?? 0);
+  const slaHours = Number(task.response_sla_hours ?? (task.priority === "high" ? 12 : 24));
+  if (!age || !slaHours) return task.priority === "high" ? "Today" : "This week";
+  const remaining = Math.round(slaHours - age);
+  if (remaining <= 0) return "SLA breached";
+  if (remaining < 24) return `${remaining}h left`;
+  return `${Math.round(remaining / 24)}d left`;
+}
+
+function proofPacketChecklist(task: SellerEvidenceCoachTask): string[] {
+  const common = [
+    "Use the same product and variant buyers will receive.",
+    "Avoid edited catalog photos; reviewers need real evidence.",
+    "Keep buyer identity and private fit memory out of the proof."
+  ];
+  if (task.recommended_proof_type === "measurement_chart") {
+    return ["Show chest and length values clearly.", "Mention tight/loose fit only if the measurements support it.", ...common.slice(2)];
+  }
+  if (task.recommended_proof_type === "fabric_closeup") {
+    return ["Capture close fabric texture in natural light.", "Show lining or transparency honestly if relevant.", ...common.slice(1)];
+  }
+  if (task.recommended_proof_type === "daylight_photo") {
+    return ["Show the actual colour in daylight.", "Keep filters, studio tint, and heavy edits out.", ...common.slice(0, 1)];
+  }
+  if (task.recommended_proof_type === "packaging_photo") {
+    return ["Show product and dispatch packaging together.", "Keep address or buyer data hidden.", ...common.slice(0, 1)];
+  }
+  return common;
+}
+
+function shortProductTitle(title: string): string {
+  return title.split("-")[0].trim();
 }
 
 export function buildMarketComparison(

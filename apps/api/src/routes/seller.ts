@@ -6,6 +6,7 @@ import {
   correctSellerMeasurement,
   createListingDraft,
   listSellers,
+  parseListingDescriptionWithAi,
   sellerEvidenceCoach,
   sellerOnboarding,
   sellerPanel,
@@ -114,5 +115,18 @@ export async function registerSellerRoutes(app: FastifyInstance, db: Db) {
       xl_chest: z.number().positive()
     }).parse(request.body);
     return correctSellerMeasurement(db, account.seller_id, productId, body);
+  });
+
+  app.post("/seller/me/listing-drafts/ai-parse", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "seller");
+    const { description } = z.object({
+      description: z.string().trim().min(3)
+    }).parse(request.body);
+
+    const result = await parseListingDescriptionWithAi(description);
+    if (!result) {
+      return reply.code(400).send({ detail: "AI failed to extract structured attributes from description." });
+    }
+    return result;
   });
 }

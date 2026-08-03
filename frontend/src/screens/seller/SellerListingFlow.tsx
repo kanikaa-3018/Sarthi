@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, Check, ImageOff, PencilLine, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { parseListingWithAi } from "../../api/client";
 import type { ListingDraft, SellerOnboardingResponse } from "../../types/api";
 import { SellerVerificationPanel, type SellerVerificationSubmission } from "./SellerVerificationPanel";
 
@@ -56,9 +57,44 @@ export function SellerListingFlow({
   const [stage, setStage] = useState(1);
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [errors, setErrors] = useState<DraftErrors>({});
+  const [agentPrompt, setAgentPrompt] = useState("");
+  const [agentNotes, setAgentNotes] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
   const verification = onboarding?.seller_verification.verification_status ?? "pending";
   const isEditing = Boolean(editingDraft);
+
+  async function handleAgentFill() {
+    if (!agentPrompt.trim() || agentPrompt.trim().length < 8) {
+      setAiError("Enter at least a short product description before parsing.");
+      return;
+    }
+    setAiLoading(true);
+    setAiError(null);
+    setAgentNotes([]);
+    try {
+      const result = await parseListingWithAi(agentPrompt.trim());
+      const updates: Partial<DraftState> = {};
+      const notes: string[] = [];
+      
+      if (result.title) { updates.title = result.title; notes.push("Title"); }
+      if (result.category) { updates.category = result.category; notes.push("Category"); }
+      if (result.garment_type) { updates.garment_type = result.garment_type; notes.push("Garment Type"); }
+      if (result.fabric) { updates.fabric = result.fabric; notes.push("Fabric"); }
+      if (result.color_family) { updates.color_family = result.color_family; notes.push("Colour"); }
+      if (result.base_price) { updates.base_price = String(result.base_price); notes.push("Price"); }
+      if (result.image_url) { updates.image_url = result.image_url; notes.push("Image Link"); }
+      
+      setDraft((current) => ({ ...current, ...updates }));
+      setAgentNotes(notes.length ? [`Auto-filled: ${notes.join(", ")}`] : ["Extracted details successfully."]);
+      setErrors({});
+    } catch (err: any) {
+      setAiError(err.message || "Failed to extract product details using AI. Please fill fields manually.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!editingDraft) return;
@@ -178,6 +214,35 @@ export function SellerListingFlow({
         <p className="seller-step-count">Step {stage} of 3</p>
         {stage === 1 && (
           <div className="seller-form-grid">
+            <div className="seller-field seller-field-wide seller-description-field">
+              <label htmlFor="seller-agent-prompt">Product description / Supplier notes</label>
+              <div className="seller-description-input-wrapper">
+                <textarea
+                  id="seller-agent-prompt"
+                  value={agentPrompt}
+                  onChange={(event) => { setAgentPrompt(event.target.value); setAiError(null); }}
+                  placeholder="e.g. Pink rayon kurti for daily wear, straight fit, Rs 449, photo at https://..."
+                  rows={3}
+                />
+                <button
+                  type="button"
+                  className="seller-button seller-button-secondary seller-ai-fill-btn"
+                  onClick={() => void handleAgentFill()}
+                  disabled={aiLoading}
+                >
+                  {aiLoading ? "Extracting details..." : "Auto-fill with AI"}
+                </button>
+              </div>
+              {aiError && (
+                <span className="seller-field-error" style={{ display: 'block', marginTop: '6px' }}>{aiError}</span>
+              )}
+              {agentNotes.length > 0 && !aiLoading && (
+                <div className="seller-ai-feedback-notes" style={{ fontSize: '12px', color: 'var(--accent-primary)', fontWeight: 600, marginTop: '8px' }}>
+                  {agentNotes.join(" · ")}
+                </div>
+              )}
+            </div>
+
             <div className="seller-field seller-field-wide seller-field-title">
               <label htmlFor="seller-title">Product title</label>
               <input id="seller-title" name="title" value={draft.title} onChange={(event) => update("title", event.target.value)} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? "seller-title-error" : undefined} />

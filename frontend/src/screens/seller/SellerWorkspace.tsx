@@ -32,6 +32,7 @@ import { sellerCopy } from "./sellerCopy";
 import {
   buildProductRows,
   buildProofLanes,
+  buildSellerAutomation,
   buildSellerActions,
   labelize,
   parseSellerRoute,
@@ -120,6 +121,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
   const actions = useMemo(() => buildSellerActions({ onboarding, panel, coach }), [coach, onboarding, panel]);
   const productRows = useMemo(() => buildProductRows(listings, coach?.tasks ?? []), [coach?.tasks, listings]);
   const proofLanes = useMemo(() => buildProofLanes(coach), [coach]);
+  const automation = useMemo(() => buildSellerAutomation({ actions, productRows, proofLanes, coach }), [actions, coach, productRows, proofLanes]);
   const editingDraft = useMemo(
     () => onboarding?.listing_drafts.find((draft) => draft.draft_id === editingDraftId) ?? null,
     [editingDraftId, onboarding?.listing_drafts]
@@ -282,7 +284,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
   }
 
   if (!seller && loading) {
-    return <div className="seller-workspace-loading" role="status"><span />{copy.loading}</div>;
+    return <SellerWorkspaceLoader copy={copy} />;
   }
 
   if (!seller) {
@@ -306,16 +308,14 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
     <SellerShell
       seller={seller}
       verificationStatus={verification?.verification_status === "verified" ? "Seller verified" : verification ? labelize(verification.verification_status) : "Verification unavailable"}
-      activeRoute={activeRoute}
       copy={copy}
       loading={loading}
-      onNavigate={navigateSeller}
     >
       {error && <div className="seller-inline-error" role="alert"><span>{error}</span><button type="button" onClick={() => void loadWorkspace()}>{copy.retry}</button></div>}
       {statusMessage && <div ref={statusRef} className="seller-inline-status" role="status" tabIndex={-1}>{statusMessage}</div>}
 
-      {activeRoute === "today" && <SellerTodayPage actions={actions} facts={facts} copy={copy} onAction={handleAction} />}
-      {activeRoute === "products" && <SellerProductsPage rows={productRows} copy={copy} onAction={handleProductAction} onCompare={openMarketComparison} />}
+      {activeRoute === "today" && <SellerTodayPage actions={actions} facts={facts} automation={automation} proofAgent={coach?.proof_agent ?? null} copy={copy} onAction={handleAction} onOpenProofs={() => navigateSeller("proofs")} />}
+      {activeRoute === "products" && <SellerProductsPage rows={productRows} automation={automation} copy={copy} onAction={handleProductAction} onCompare={openMarketComparison} />}
       {activeRoute === "new" && (
         <SellerListingFlow
           onboarding={onboarding}
@@ -337,11 +337,43 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
           }}
         />
       )}
-      {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} copy={copy} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
+      {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} rows={productRows} automation={automation} agent={coach?.proof_agent ?? null} copy={copy} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
       {activeRoute === "market" && <SellerMarketPage listings={listings} competitors={panel?.competing_listings ?? []} actions={actions} initialProductId={new URLSearchParams(location.search).get("product")} onAction={handleAction} />}
 
-      {activeProofTask && <SellerProofDialog task={activeProofTask} submitting={proofSubmitting} apiError={proofError} onClose={() => { if (!proofSubmitting) setActiveProofTask(null); }} onSubmit={handleProofSubmit} />}
+      {activeProofTask && <SellerProofDialog task={activeProofTask} proofPacket={automation.proofPacket?.taskKey === `${activeProofTask.product_id}:${activeProofTask.attribute}` ? automation.proofPacket : null} submitting={proofSubmitting} apiError={proofError} onClose={() => { if (!proofSubmitting) setActiveProofTask(null); }} onSubmit={handleProofSubmit} />}
       {activeMeasurementRow && <SellerMeasurementDialog row={activeMeasurementRow} submitting={measurementSubmitting} apiError={measurementError} onClose={() => { if (!measurementSubmitting) setActiveMeasurementRow(null); }} onSubmit={handleMeasurementSubmit} />}
     </SellerShell>
+  );
+}
+
+function SellerWorkspaceLoader({ copy }: { copy: ReturnType<typeof sellerCopy> }) {
+  const steps = ["Proof demand", "Listing risks", "Reviewer queue"];
+  return (
+    <main className="seller-app seller-loading-shell" role="status" aria-live="polite">
+      <section className="seller-loading-hero">
+        <div>
+          <span>Seller workspace</span>
+          <h1>{copy.loading}</h1>
+          <p>Preparing proof work, product actions, and review status from seller data.</p>
+        </div>
+        <div className="seller-loading-meter" aria-hidden="true"><span /></div>
+      </section>
+
+      <div className="seller-loading-steps" aria-label="Seller workspace loading steps">
+        {steps.map((step, index) => (
+          <article key={step}>
+            <span>{index + 1}</span>
+            <strong>{step}</strong>
+            <i aria-hidden="true" />
+          </article>
+        ))}
+      </div>
+
+      <div className="seller-loading-grid" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </main>
   );
 }

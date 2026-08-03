@@ -18,6 +18,9 @@ dist/
 coverage/
 playwright-report/
 test-results/
+output/
+artifacts/
+frontend/artifacts/
 .worktrees/
 .playwright-cli/
 .runtime/
@@ -27,11 +30,45 @@ test-results/
 buyer-*.png
 payment-*.png
 proof-login-smoke.png
+safety_check_loader.png
+safety_session_loader.png
+tmp-*.png
+*-viewport.png
+*-desktop.png
+*-mobile.png
 .DS_Store
 *.log
 
+# Local generated demo media/proof assets. Keep curated marketplace assets tracked explicitly.
+frontend/public/catalog/*-model.png
+frontend/public/catalog/*-model.jpg
+frontend/public/catalog/*-front.png
+frontend/public/catalog/*-front.jpg
+frontend/public/catalog/*-fabric.png
+frontend/public/catalog/*-fabric.jpg
+frontend/public/catalog/*-measurement.png
+frontend/public/catalog/*-measurement.jpg
+frontend/public/catalog/*-back.png
+frontend/public/catalog/*-inside.jpg
+frontend/public/catalog/*-material.jpg
+frontend/public/catalog/*-product.jpg
+frontend/public/catalog/*-scale.jpg
+frontend/public/catalog/*-room.jpg
+frontend/public/catalog/*-set.jpg
+frontend/public/catalog/*-fit.jpg
+frontend/public/catalog/*-length.jpg
+frontend/public/catalog/phone-kit-*.png
+frontend/public/seeded/
+
 # Internal planning notes kept locally, not in the public submission repo.
 docs/PHASE_*.md
+docs/sarthi-ui-dna.md
 docs/LOOPHOLE_CLOSURE_REVIEW.md
 docs/PRODUCT_DECISION.md
 docs/REFERENCE_NOTES.md
+docs/BACKEND_DEEP_DIVE.md
+docs/BACKEND_FUNCTIONALITY_MAP_FOR_MENTOR.md
+docs/FINALIST_WORKING_PLAN.md
+docs/GRAND_FINALE_STRENGTHENING_PLAN.md
+docs/MENTOR_*.md
+docs/PRODUCTION_HARDENING_PLAN.md

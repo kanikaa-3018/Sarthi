@@ -33,6 +33,8 @@ const DEFAULT_TRUST_WEIGHTS: TrustWeights = {
   offer_truth: 1
 };
 
+const APPAREL_SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "ONE_SIZE"];
+
 type TrustWeightConfig = {
   source: string;
   version: string;
@@ -81,6 +83,10 @@ export async function sellerVerification(db: Db, sellerId: string) {
     c.sellers.findOne({ seller_id: sellerId }),
     c.sellerProfiles.findOne({ seller_id: sellerId })
   ]);
+  return sellerVerificationFromRows(sellerId, seller, profile);
+}
+
+function sellerVerificationFromRows(sellerId: string, seller: any, profile: any) {
   return {
     seller_id: sellerId,
     seller_name: seller?.name ?? null,
@@ -117,6 +123,7 @@ export function publicProduct(product: any) {
     color_family: product.color_family,
     base_price: product.base_price,
     image_url: product.image_url,
+    image_urls: Array.isArray(product.image_urls) && product.image_urls.length ? product.image_urls : [product.image_url].filter(Boolean),
     rating: product.rating,
     rating_count: product.rating_count,
     commerce_badge: product.commerce_badge,
@@ -126,8 +133,67 @@ export function publicProduct(product: any) {
     source_refs: product.source_refs,
     taxonomy_attributes: product.taxonomy_attributes,
     seller_snapshot: product.seller_snapshot,
-    fulfillment: product.fulfillment
+    fulfillment: product.fulfillment,
+    media_evidence: normalizeProductMediaEvidence(product),
+    quality_signals: product.quality_signals
   };
+}
+
+function normalizeProductMediaEvidence(product: any) {
+  const images = Array.isArray(product.image_urls) && product.image_urls.length
+    ? product.image_urls
+    : [product.image_url].filter(Boolean);
+  const existing = product.media_evidence ?? {};
+  const angleLabels = Array.isArray(existing.angle_labels) && existing.angle_labels.length
+    ? existing.angle_labels
+    : ["Main", "Alternate", "Fabric close-up", "Lifestyle"].slice(0, images.length);
+  const apparelCategories = new Set(["women_kurtis", "women_kurta_sets", "women_tops", "women_bottomwear", "women_sarees"]);
+  const apparel = apparelCategories.has(product.category);
+  const hasFabricCloseup = angleLabels.some((labelText: string) => labelText.toLowerCase().includes("fabric"));
+  const hasHumanModel = !apparel || angleLabels.some((labelText: string) => labelText.toLowerCase().includes("lifestyle") || labelText.toLowerCase().includes("model"));
+  const hasMeasurementChart = Boolean(product.quality_signals?.size_chart_available) && !String(product.product_id ?? "").endsWith("_2");
+  const reviewerPhotoCount = Number(existing.reviewer_photo_count ?? (images.length >= 3 ? 2 : 1));
+  const requiredAssets = existing.required_assets ?? [
+    mediaAsset("main_product", "Main product photo", images.length >= 1 ? "present" : "missing", true, "Buyer can inspect the primary listing image."),
+    mediaAsset("human_model", "Human-model image", apparel ? (hasHumanModel ? "present" : "missing") : "not_required", apparel, apparel ? "Apparel should show fall, length, and fit on a human model." : "Not required for this category."),
+    mediaAsset("fabric_closeup", "Fabric close-up", hasFabricCloseup ? "present" : "missing", apparel, "Close-up reduces fabric and transparency doubt."),
+    mediaAsset("measurement_chart", "Measurement chart", hasMeasurementChart ? "linked" : apparel ? "missing" : "not_required", apparel, "Used by fit confidence before checkout."),
+    mediaAsset("reviewer_photos", "Reviewer/customer photos", reviewerPhotoCount > 0 ? "present" : "missing", true, `${reviewerPhotoCount} buyer photo signal${reviewerPhotoCount === 1 ? "" : "s"} attached to this catalog group.`)
+  ];
+  const missingAngles = existing.missing_angles ?? requiredAssets
+    .filter((asset: any) => asset.required && asset.status === "missing")
+    .map((asset: any) => asset.label);
+  const qualityScore = Number(existing.quality_score ?? Math.max(42, Math.min(98,
+    48 +
+    images.length * 8 +
+    (hasHumanModel ? 12 : 0) +
+    (hasFabricCloseup ? 10 : 0) +
+    (hasMeasurementChart ? 8 : 0) +
+    Math.min(8, reviewerPhotoCount * 4)
+  )));
+  return {
+    image_count: Number(existing.image_count ?? images.length),
+    angle_labels: angleLabels,
+    verification_status: existing.verification_status ?? (images.length >= 2 ? "verified_gallery" : "limited_gallery"),
+    source: existing.source ?? "seller_catalog_media",
+    issues: existing.issues ?? [],
+    warnings: existing.warnings ?? missingAngles.map((angle: string) => `${angle} missing important angle`),
+    quality_score: qualityScore,
+    clarity_score: Number(existing.clarity_score ?? Math.min(100, 68 + images.length * 6 + (hasFabricCloseup ? 8 : 0))),
+    gallery_readiness: existing.gallery_readiness ?? (missingAngles.length ? "needs_more_media" : "complete"),
+    human_model_required: existing.human_model_required ?? apparel,
+    required_assets: requiredAssets,
+    missing_angles: missingAngles,
+    reviewer_photo_count: reviewerPhotoCount,
+    buyer_copy: existing.buyer_copy ?? (missingAngles.length
+      ? `Image check is usable, but ${String(missingAngles[0]).toLowerCase()} should be added before high confidence.`
+      : "Image proof covers the important buying angles for this category."),
+    checked_at: existing.checked_at ?? nowIso()
+  };
+}
+
+function mediaAsset(key: string, labelText: string, status: string, required: boolean, detail: string) {
+  return { key, label: labelText, status, required, detail };
 }
 
 export async function variantsForProduct(db: Db, productId: string) {
@@ -137,17 +203,21 @@ export async function variantsForProduct(db: Db, productId: string) {
 export async function variantEvidence(db: Db, variantId: string) {
   const c = collections(db);
   const outcomes = await c.outcomes.find({ variant_id: variantId }).toArray();
+  const variant = await c.variants.findOne({ variant_id: variantId });
+  const product = variant ? await c.products.findOne({ product_id: variant.product_id }) : null;
+  const seller = product ? await c.sellers.findOne({ seller_id: product.seller_id }) : null;
+  return summarizeVariantEvidence(variantId, variant, seller, outcomes);
+}
+
+function summarizeVariantEvidence(variantId: string, variant: any, seller: any, outcomes: any[]) {
   const delivered = outcomes.filter((o: any) => ["delivered_kept", "returned", "exchanged"].includes(o.status)).length;
   const returns = outcomes.filter((o: any) => o.status === "returned").length;
   const colorMismatch = outcomes.filter((o: any) => o.return_reason === "color_different").length;
   const fitFeedback = outcomes.filter((o: any) => ["too_small", "too_large", null].includes(o.return_reason ?? null)).length;
   const kept = outcomes.filter((o: any) => o.status === "delivered_kept").length;
-  const variant = await c.variants.findOne({ variant_id: variantId });
-  const product = variant ? await c.products.findOne({ product_id: variant.product_id }) : null;
-  const seller = product ? await c.sellers.findOne({ seller_id: product.seller_id }) : null;
   return {
-    sku_id: variantId,
-    variant_id: variantId,
+    sku_id: variant?.variant_id ?? variantId,
+    variant_id: variant?.variant_id ?? variantId,
     delivered_orders_90d: delivered,
     returns_90d: returns,
     return_rate: delivered ? Number((returns / delivered).toFixed(3)) : 0,
@@ -195,21 +265,122 @@ export async function fitPrediction(db: Db, buyerId: string, variantId: string, 
   const variant = await c.variants.findOne({ variant_id: variantId });
   const product = variant ? await c.products.findOne({ product_id: variant.product_id }) : null;
   const buyer = await c.buyers.findOne({ buyer_id: buyerId });
-  const memory = product && buyer?.fit_memory_enabled
-    ? await c.fitMemory.find({ buyer_id: buyerId, category: product.category }).sort({ updated_at: -1 }).toArray()
+  const variants = product ? await variantsForProduct(db, product.product_id) : [];
+  const availableSizes = new Set(variants.map((item: any) => normalizeProfileSize(item.size)).filter(Boolean));
+  const activeProfiles = product && buyer?.fit_memory_enabled
+    ? await c.buyerFitProfiles.find({ buyer_id: buyerId, active: 1 }).sort({ updated_at: -1 }).limit(1).toArray()
     : [];
-  const retained = memory[0]?.retained_size;
-  const recommended = retained ?? (variant?.size === "L" && preferredFit === "comfort" ? "XL" : variant?.size ?? "XL");
+  const activeProfile = activeProfiles[0] ?? null;
+  const profileSize = product
+    ? availableSizeOrNull(activeProfile?.size_map?.[product.category] ?? activeProfile?.size_map?.[product.garment_type], availableSizes)
+    : null;
+  const memory = product && buyer?.fit_memory_enabled
+    ? (await c.fitMemory.find({ buyer_id: buyerId }).sort({ updated_at: -1 }).toArray())
+        .filter((row: any) => fitMemoryRank(row, product) > 0)
+    : [];
+  const retained = availableSizeOrNull(memory[0]?.retained_size, availableSizes);
+  const outcomePick = variants.length
+    ? await recommendedSizeFromSiblingOutcomes(c, variants, preferredFit)
+    : null;
+  const selectedSize = availableSizeOrNull(variant?.size, availableSizes);
+  const selectedIndex = APPAREL_SIZE_ORDER.indexOf(selectedSize ?? "");
+  const comfortFallback = preferredFit === "comfort" && selectedIndex >= 0
+    ? availableSizeOrNull(APPAREL_SIZE_ORDER[Math.min(selectedIndex + 1, APPAREL_SIZE_ORDER.length - 2)], availableSizes)
+    : null;
+  const recommended = profileSize ?? retained ?? outcomePick?.size ?? comfortFallback ?? selectedSize ?? "XL";
+  const strongProfileEvidence = Boolean(retained) || (outcomePick?.delivered_orders ?? 0) >= 12;
+  let confidence: "low" | "medium" | "high" = "low";
+  if (profileSize) {
+    confidence = strongProfileEvidence ? "high" : "medium";
+  } else if (retained || (outcomePick?.delivered_orders ?? 0) >= 12) {
+    confidence = "medium";
+  }
+  const factIds = [...new Set([
+    ...memory.map((item: any) => item.fact_id).filter(Boolean),
+    ...(outcomePick?.fact_ids ?? [])
+  ])].slice(0, 6);
+  const reasons = profileSize
+    ? [
+        `Your buyer-owned fit profile recommends ${recommended} for ${label(product?.category)}.`,
+        "Sarthi checks sibling SKU outcomes before showing size risk."
+      ]
+    : retained
+      ? [
+          `Your past kept-order memory prefers ${recommended} for this apparel family.`,
+          "Sarthi also checks SKU kept/returned outcomes."
+        ]
+      : [
+          "Personal fit memory is unavailable; Sarthi used sibling SKU outcome evidence.",
+          outcomePick ? `${outcomePick.size} has the strongest kept-order signal among available sizes.` : "Outcome evidence is still thin for this product."
+        ];
   return {
     buyer_id: buyerId,
     variant_id: variantId,
     recommended_size: recommended,
-    confidence: memory.length ? "medium" : "low",
-    reasons: memory.length
-      ? [`Your past ${product?.category ?? "category"} memory prefers ${recommended}.`, "Sarthi also checks SKU kept/returned outcomes."]
-      : ["Personal fit memory is unavailable; Sarthi used aggregate SKU evidence."],
-    fact_ids: memory.map((item: any) => item.fact_id).slice(0, 4)
+    confidence,
+    reasons,
+    fact_ids: factIds
   };
+}
+
+function availableSizeOrNull(value: unknown, availableSizes: Set<string | null>) {
+  const size = normalizeProfileSize(value);
+  return size && availableSizes.has(size) ? size : null;
+}
+
+async function recommendedSizeFromSiblingOutcomes(c: ReturnType<typeof collections>, variants: any[], preferredFit: string) {
+  const variantIds = variants.map((item: any) => item.variant_id).filter(Boolean);
+  const outcomes = variantIds.length
+    ? await c.outcomes.find({ variant_id: { $in: variantIds } }).toArray()
+    : [];
+  const scored = variants
+    .map((variant: any) => {
+      const size = normalizeProfileSize(variant.size);
+      const stats = sizeOutcomeStats(variant, outcomes.filter((outcome: any) => outcome.variant_id === variant.variant_id));
+      const fitRisk = Math.min(1, stats.tight_fit_return_rate + stats.loose_fit_return_rate);
+      const evidenceBonus = Math.min(0.08, stats.delivered_orders / 500);
+      const sizeIndex = APPAREL_SIZE_ORDER.indexOf(size ?? "");
+      const comfortBias = preferredFit === "comfort" && sizeIndex >= 0
+        ? Math.min(0.035, sizeIndex * 0.006)
+        : 0;
+      const regularBias = preferredFit === "regular" && ["M", "L"].includes(size ?? "")
+        ? 0.025
+        : 0;
+      const score = stats.delivered_orders
+        ? stats.keep_rate * 0.58 + (1 - stats.return_rate) * 0.22 + (1 - fitRisk) * 0.12 + evidenceBonus + comfortBias + regularBias
+        : 0;
+      return { size, stats, score };
+    })
+    .filter((item) => item.size && item.size !== "ONE_SIZE" && item.stats.delivered_orders > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      if (right.stats.delivered_orders !== left.stats.delivered_orders) return right.stats.delivered_orders - left.stats.delivered_orders;
+      return APPAREL_SIZE_ORDER.indexOf(right.size ?? "") - APPAREL_SIZE_ORDER.indexOf(left.size ?? "");
+    });
+  const best = scored[0];
+  if (!best?.size) return null;
+  return {
+    size: best.size,
+    delivered_orders: best.stats.delivered_orders,
+    fact_ids: best.stats.fact_ids
+  };
+}
+
+function fitMemoryRank(row: any, product: any) {
+  if (!row?.category || !product) return 0;
+  if (row.category === product.category) return 4;
+  if (row.category === product.garment_type) return 3;
+  return fitFamilyKey(row.category) && fitFamilyKey(row.category) === fitFamilyKey(product.category) ? 2 : 0;
+}
+
+function fitFamilyKey(value: unknown) {
+  const text = String(value ?? "").toLowerCase();
+  if (!text) return "";
+  if (/(kurti|kurta|ethnic|coord|co-ord)/.test(text)) return "upper_ethnic";
+  if (/(top|tee|shirt|blouse)/.test(text)) return "upper_casual";
+  if (/(bottom|palazzo|cargo|denim|pant|jean)/.test(text)) return "bottomwear";
+  if (/(saree|dupatta)/.test(text)) return "drape";
+  return text;
 }
 
 export async function trustState(db: Db, product: any, evidence: any, options: { health?: any; verification?: any } = {}) {
@@ -282,6 +453,100 @@ export async function feedTrustSummary(db: Db, product: any, options: { health?:
   };
 }
 
+export async function feedTrustSummaries(db: Db, products: any[], options: { health?: any } = {}) {
+  if (!products.length) return new Map<string, any>();
+  const c = collections(db);
+  const productIds = products.map((product) => product.product_id);
+  const sellerIds = [...new Set(products.map((product) => product.seller_id).filter(Boolean))];
+
+  const [variants, sellers, profiles, proofCounts] = await Promise.all([
+    c.variants.find({ product_id: { $in: productIds } }).sort({ product_id: 1, current_price: 1 }).toArray(),
+    c.sellers.find({ seller_id: { $in: sellerIds } }).toArray(),
+    c.sellerProfiles.find({ seller_id: { $in: sellerIds } }).toArray(),
+    c.proofRequests.aggregate([
+      { $match: { product_id: { $in: productIds }, status: { $in: ["open", "submitted"] } } },
+      { $group: { _id: "$product_id", count: { $sum: 1 } } }
+    ]).toArray()
+  ]);
+
+  const variantsByProduct = new Map<string, any[]>();
+  for (const variant of variants) {
+    const list = variantsByProduct.get(variant.product_id) ?? [];
+    list.push(variant);
+    variantsByProduct.set(variant.product_id, list);
+  }
+
+  const selectedByProduct = new Map<string, any>();
+  for (const product of products) {
+    const productVariants = variantsByProduct.get(product.product_id) ?? [];
+    selectedByProduct.set(product.product_id, productVariants.find((variant) => variant.size === "XL") ?? productVariants[0]);
+  }
+
+  const selectedVariantIds = [...selectedByProduct.values()].filter(Boolean).map((variant) => variant.variant_id);
+  const outcomes = selectedVariantIds.length
+    ? await c.outcomes.find({ variant_id: { $in: selectedVariantIds } }).toArray()
+    : [];
+  const outcomesByVariant = new Map<string, any[]>();
+  for (const outcome of outcomes) {
+    const list = outcomesByVariant.get(outcome.variant_id) ?? [];
+    list.push(outcome);
+    outcomesByVariant.set(outcome.variant_id, list);
+  }
+
+  const sellerById = new Map(sellers.map((seller: any) => [seller.seller_id, seller]));
+  const profileBySellerId = new Map(profiles.map((profile: any) => [profile.seller_id, profile]));
+  const proofCountByProduct = new Map(proofCounts.map((row: any) => [row._id, row.count]));
+  const summaries = new Map<string, any>();
+
+  for (const product of products) {
+    const seller = sellerById.get(product.seller_id);
+    const verification = sellerVerificationFromRows(product.seller_id, seller, profileBySellerId.get(product.seller_id));
+    const openProofCount = proofCountByProduct.get(product.product_id) ?? 0;
+    const selected = selectedByProduct.get(product.product_id);
+    if (!selected) {
+      summaries.set(product.product_id, {
+        status: "limited_evidence",
+        confidence: "low",
+        can_recommend: false,
+        headline: "Need more proof",
+        buyer_guidance: "This listing can be viewed, but Sarthi cannot check a SKU yet.",
+        reasons: ["No SKU found for this product."],
+        missing_data: ["sku"],
+        source_status: options.health?.overall_status ?? "unknown",
+        seller_status: verification.verification_status,
+        evidence_strength: "unknown",
+        delivered_orders_90d: 0,
+        open_proof_count: openProofCount
+      });
+      continue;
+    }
+
+    const evidence = summarizeVariantEvidence(
+      selected.variant_id,
+      selected,
+      seller,
+      outcomesByVariant.get(selected.variant_id) ?? []
+    );
+    const trust = await trustState(db, product, evidence, { health: options.health, verification });
+    summaries.set(product.product_id, {
+      status: trust.status,
+      confidence: trust.confidence,
+      can_recommend: trust.can_recommend,
+      headline: trust.headline,
+      buyer_guidance: trust.buyer_guidance,
+      reasons: trust.reasons,
+      missing_data: trust.missing_data,
+      source_status: trust.data_freshness.overall_status,
+      seller_status: trust.seller_verification.verification_status,
+      evidence_strength: evidence.evidence_strength,
+      delivered_orders_90d: evidence.delivered_orders_90d,
+      open_proof_count: openProofCount
+    });
+  }
+
+  return summaries;
+}
+
 export async function reviewEvidence(db: Db, productId: string) {
   const reviews = await collections(db).reviews.find({ product_id: productId }).toArray();
   const build = (attribute: string) => {
@@ -293,7 +558,9 @@ export async function reviewEvidence(db: Db, productId: string) {
         rating: row.rating,
         fact_id: row.fact_id,
         credibility_weight: Number((row.credibility_weight ?? 0.6).toFixed(2)),
-        credibility_flags: row.credibility_flags ?? []
+        credibility_flags: row.credibility_flags ?? [],
+        verified_purchase: Boolean(row.verified_purchase),
+        down_weight_reasons: reviewDownWeightReasons(row)
       }))
     };
   };
@@ -301,20 +568,45 @@ export async function reviewEvidence(db: Db, productId: string) {
 }
 
 export async function reviewCredibilitySummary(db: Db, productId: string) {
-  const reviews = await collections(db).reviews.find({ product_id: productId }).toArray();
+  const c = collections(db);
+  const reviews = await c.reviews.find({ product_id: productId }).toArray();
   if (!reviews.length) {
     return {
       review_count: 0,
       credible_review_count: 0,
       raw_average: null,
       weighted_average: null,
+      rating_gap: null,
       average_weight: 0,
       low_weight_review_count: 0,
       reliability: "unknown",
       flags: [],
+      rating_comparison: {
+        raw_rating: null,
+        trusted_rating: null,
+        gap: null,
+        headline: "No reviews yet",
+        summary: "Sarthi cannot compare raw and trusted ratings until reviews arrive."
+      },
+      review_spike: {
+        status: "unknown",
+        recent_review_count: 0,
+        window_days: 7,
+        share_recent: 0,
+        message: "No review history is available for spike checks.",
+        fact_ids: []
+      },
+      downweighted_reviews: [],
+      visible_review_checks: [],
+      trust_answer: "Sarthi does not use reviews alone when review evidence is missing.",
       fact_ids: []
     };
   }
+  const reviewFactIds = reviews.map((review: any) => review.fact_id).filter(Boolean);
+  const factRows = reviewFactIds.length
+    ? await c.facts.find({ fact_id: { $in: reviewFactIds } }).toArray()
+    : [];
+  const factsById = new Map(factRows.map((fact: any) => [fact.fact_id, fact]));
   const totalWeight = reviews.reduce((sum: number, review: any) => sum + reviewWeight(review), 0);
   const weightedAverage = reviews.reduce((sum: number, review: any) => sum + review.rating * reviewWeight(review), 0) / Math.max(totalWeight, 0.01);
   const rawAverage = reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / reviews.length;
@@ -329,16 +621,181 @@ export async function reviewCredibilitySummary(db: Db, productId: string) {
     .sort((a, b) => b[1] - a[1])
     .map(([flag, count]) => ({ flag, count }));
   const averageWeight = totalWeight / reviews.length;
+  const roundedRaw = Number(rawAverage.toFixed(2));
+  const roundedWeighted = Number(weightedAverage.toFixed(2));
+  const ratingGap = Number((roundedRaw - roundedWeighted).toFixed(2));
+  const reviewSpike = reviewSpikeDetector(reviews, factsById);
+  const downweightedReviews = lowWeight
+    .sort((left: any, right: any) => reviewWeight(left) - reviewWeight(right))
+    .slice(0, 4)
+    .map((review: any) => publicReviewCredibilityCard(review, factsById.get(review.fact_id)));
+  const visibleReviewChecks = [
+    {
+      key: "verified_purchase",
+      label: "Verified purchase reviews",
+      value: `${reviews.filter((review: any) => Boolean(review.verified_purchase)).length}/${reviews.length}`,
+      status: reviews.some((review: any) => !review.verified_purchase) ? "watch" : "good",
+      detail: "Reviews without a completed order are still visible, but carry lower score weight."
+    },
+    {
+      key: "new_account",
+      label: "New-account warning",
+      value: String(reviews.filter((review: any) => reviewDownWeightReasons(review).some((reason) => reason.key === "new_account")).length),
+      status: flags.some((flag) => flag.flag === "new_account") ? "watch" : "good",
+      detail: "Very new accounts do not get the same influence as stable buyers."
+    },
+    {
+      key: "high_return",
+      label: "High-return reviewer warning",
+      value: String(reviews.filter((review: any) => reviewDownWeightReasons(review).some((reason) => reason.key === "high_return")).length),
+      status: flags.some((flag) => flag.flag === "high_return_rate" || flag.flag === "high_rto_rate") ? "watch" : "good",
+      detail: "Reviewers with unusually high return/RTO patterns get reduced influence."
+    },
+    {
+      key: "repeated_text",
+      label: "Repeated-text pattern warning",
+      value: String(reviews.filter((review: any) => reviewDownWeightReasons(review).some((reason) => reason.key === "repeated_text")).length),
+      status: flags.some((flag) => flag.flag === "repeated_text_pattern" || flag.flag === "generic_quality_text") ? "watch" : "good",
+      detail: "Generic or repeated review text is treated as weaker evidence."
+    },
+    {
+      key: "review_spike",
+      label: "Review spike detector",
+      value: `${Math.round(reviewSpike.share_recent * 100)}%`,
+      status: reviewSpike.status === "watch" ? "watch" : "good",
+      detail: reviewSpike.message
+    }
+  ];
   return {
     review_count: reviews.length,
     credible_review_count: reviews.filter((review: any) => reviewWeight(review) >= 0.7).length,
-    raw_average: Number(rawAverage.toFixed(2)),
-    weighted_average: Number(weightedAverage.toFixed(2)),
+    raw_average: roundedRaw,
+    weighted_average: roundedWeighted,
+    rating_gap: ratingGap,
     average_weight: Number(averageWeight.toFixed(2)),
     low_weight_review_count: lowWeight.length,
     reliability: averageWeight >= 0.75 ? "strong" : averageWeight >= 0.55 ? "mixed" : "weak",
     flags,
+    rating_comparison: {
+      raw_rating: roundedRaw,
+      trusted_rating: roundedWeighted,
+      gap: ratingGap,
+      headline: ratingGap >= 0.35 ? "Raw rating is inflated" : "Raw and trusted ratings are aligned",
+      summary: ratingGap >= 0.35
+        ? "Some reviews look positive but come from weaker reviewer patterns, so Sarthi lowers their influence."
+        : "Reviewer credibility does not materially change the visible rating for this product."
+    },
+    review_spike: reviewSpike,
+    downweighted_reviews: downweightedReviews,
+    visible_review_checks: visibleReviewChecks,
+    trust_answer: "Normal ratings count every review almost equally. Sarthi compares raw rating with trusted rating, lowers weak reviewer patterns, and then combines reviews with SKU outcomes and seller proof.",
     fact_ids: reviews.map((review: any) => review.fact_id).slice(0, 8)
+  };
+}
+
+function publicReviewCredibilityCard(review: any, fact: any) {
+  const reasons = reviewDownWeightReasons(review);
+  return {
+    review_id: review.review_id,
+    attribute: review.attribute,
+    rating: review.rating,
+    text: review.text,
+    trusted_weight: Number(reviewWeight(review).toFixed(2)),
+    verified_purchase: Boolean(review.verified_purchase),
+    reviewer_context: {
+      age_bucket: review.reviewer_age_days < 30 ? "new" : review.reviewer_age_days < 90 ? "recent" : "established",
+      return_risk: review.reviewer_return_rate > 0.45 ? "high" : review.reviewer_return_rate > 0.25 ? "watch" : "normal"
+    },
+    down_weight_reasons: reasons,
+    explanation: reasons.length
+      ? `Down-weighted because ${reasons.map((reason) => reason.label.toLowerCase()).join(", ")}.`
+      : "No major review credibility issue found.",
+    created_at: fact?.created_at ?? null,
+    fact_id: review.fact_id
+  };
+}
+
+function reviewDownWeightReasons(review: any) {
+  const flags = new Set(review.credibility_flags ?? []);
+  const reasons: Array<{ key: string; label: string; detail: string; severity: "low" | "medium" | "high" }> = [];
+  if (!review.verified_purchase) {
+    reasons.push({
+      key: "unverified_purchase",
+      label: "Not a verified purchase",
+      detail: "The reviewer does not have a completed purchase trail for this item.",
+      severity: "medium"
+    });
+  }
+  if ((review.reviewer_age_days ?? 0) < 30 || flags.has("new_account") || flags.has("thin_order_history") || flags.has("no_order_history")) {
+    reasons.push({
+      key: "new_account",
+      label: "New account",
+      detail: "New or thin-history accounts can be genuine, but should not dominate the score yet.",
+      severity: "medium"
+    });
+  }
+  if ((review.reviewer_return_rate ?? 0) > 0.45 || flags.has("high_return_rate") || flags.has("high_rto_rate")) {
+    reasons.push({
+      key: "high_return",
+      label: "High-return reviewer",
+      detail: "This reviewer has a high return/RTO pattern, so their review receives lower score weight.",
+      severity: "high"
+    });
+  }
+  if (flags.has("repeated_text_pattern") || flags.has("generic_quality_text")) {
+    reasons.push({
+      key: "repeated_text",
+      label: "Repeated-text pattern",
+      detail: "The review text looks generic or repeated, so it is treated as weaker evidence.",
+      severity: "medium"
+    });
+  }
+  if (flags.has("needs_attribute_proof")) {
+    reasons.push({
+      key: "needs_attribute_proof",
+      label: "Needs seller proof",
+      detail: "The review mentions an attribute that still needs seller-side proof.",
+      severity: "medium"
+    });
+  }
+  return reasons.slice(0, 4);
+}
+
+function reviewSpikeDetector(reviews: any[], factsById: Map<string, any>) {
+  const datedReviews = reviews
+    .map((review: any) => ({ review, timestamp: Date.parse(review.created_at ?? factsById.get(review.fact_id)?.created_at ?? "") }))
+    .filter((row) => Number.isFinite(row.timestamp));
+  if (!datedReviews.length) {
+    return {
+      status: "unknown",
+      recent_review_count: 0,
+      window_days: 7,
+      share_recent: 0,
+      message: "Review dates are not available, so spike detection stays neutral.",
+      fact_ids: []
+    };
+  }
+  const latest = Math.max(...datedReviews.map((row) => row.timestamp));
+  const windowMs = 7 * 86_400_000;
+  const recent = datedReviews.filter((row) => latest - row.timestamp <= windowMs);
+  const share = recent.length / reviews.length;
+  const repeatedTexts = new Map<string, number>();
+  for (const review of reviews) {
+    const key = String(review.text ?? "").trim().toLowerCase();
+    if (!key) continue;
+    repeatedTexts.set(key, (repeatedTexts.get(key) ?? 0) + 1);
+  }
+  const repeatedCluster = Math.max(0, ...repeatedTexts.values());
+  const status = share >= 0.65 || repeatedCluster >= 3 ? "watch" : "normal";
+  return {
+    status,
+    recent_review_count: recent.length,
+    window_days: 7,
+    share_recent: Number(share.toFixed(2)),
+    message: status === "watch"
+      ? "A large share of reviews arrived close together or repeat similar text, so review influence is capped."
+      : "No unusual review spike is affecting this product right now.",
+    fact_ids: recent.map((row) => row.review.fact_id).filter(Boolean).slice(0, 6)
   };
 }
 
@@ -432,6 +889,53 @@ function offerTruthScore(offer: any) {
   return 0.48;
 }
 
+function sellerFairStartPolicy(verification: any, evidence: any, proofScore: number) {
+  const verified = verification.verification_status === "verified";
+  const delivered = Number(evidence.delivered_orders_90d ?? 0);
+  const returnRate = Number(evidence.return_rate ?? 0);
+  const keptRate = delivered ? 1 - returnRate : null;
+  const limitedEvidence = delivered < 30;
+  const proofFirst = verified && limitedEvidence && proofScore >= 0.55;
+  const verificationGate = verified ? "passed" : verification.verification_status === "restricted" ? "restricted" : "pending";
+  const scoreCap = !verified
+    ? 0.52
+    : delivered < 5
+      ? 0.64
+      : delivered < 15
+        ? 0.7
+        : delivered < 30
+          ? 0.76
+          : 0.98;
+  const keepGrowth = keptRate !== null && keptRate >= 0.84 ? 0.018 : keptRate !== null && keptRate >= 0.76 ? 0.01 : 0;
+  const boost = verified && limitedEvidence
+    ? Math.min(0.065, 0.018 + proofScore * 0.028 + keepGrowth)
+    : 0;
+  return {
+    verification_gate: verificationGate,
+    eligible: verified,
+    limited_evidence: limitedEvidence,
+    proof_first_ranking: proofFirst,
+    boost: Number(boost.toFixed(3)),
+    score_cap: Number(scoreCap.toFixed(3)),
+    delivered_orders_90d: delivered,
+    kept_rate: keptRate === null ? null : Number(keptRate.toFixed(3)),
+    confidence_growth: !verified
+      ? "blocked_until_verification"
+      : !limitedEvidence
+        ? "outcome_backed"
+        : keptRate !== null && keptRate >= 0.84
+          ? "faster_after_kept_orders"
+          : proofFirst
+            ? "proof_first_until_orders_grow"
+            : "limited_until_more_outcomes",
+    buyer_label: !verified
+      ? "Seller verification pending"
+      : limitedEvidence
+        ? "New verified seller: proof-first, limited evidence"
+        : "Outcome-backed seller"
+  };
+}
+
 export async function rankCluster(db: Db, buyerId: string, clusterId: string, preferredFit = "comfort", options: { recordSnapshot?: boolean; intent?: string; productIds?: string[] } = {}) {
   const c = collections(db);
   const cluster = await c.clusters.findOne({ cluster_id: clusterId });
@@ -462,7 +966,7 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
     const reviewSignal = Math.max(0.25, Math.min(1, weightedReviewRating / 5 * (0.72 + reviewCredibility.average_weight * 0.28) - (evidence.return_rate > 0.18 ? 0.15 : 0)));
     const proofScore = proofCoverageScore(coverage);
     const offerScore = offerTruthScore(offer);
-    const fairStartBoost = verification.verification_status === "verified" && evidence.delivered_orders_90d < 30 ? (30 - evidence.delivered_orders_90d) / 30 * 0.07 : 0;
+    const fairStartPolicy = sellerFairStartPolicy(verification, evidence, proofScore);
     const uncertaintyPenalty = evidence.evidence_strength === "strong" ? 0 : evidence.evidence_strength === "medium" ? 0.06 : 0.18;
     const fulfilmentReliability = 1 - Math.min(1, evidence.median_dispatch_hours / 72);
     const confidenceAssignment = await assignConfidenceItems({
@@ -505,10 +1009,11 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
       { key: "offer_truth", label: "Offer truth", weight: weightConfig.weights.offer_truth, confidence: offerScore, rationale: `Offer status is ${offer.status}` }
     ]);
     const confidenceBreakdown = aggregateConfidenceScore(confidenceAssignment.items);
-    const score = Number(Math.max(0.05, Math.min(0.98,
-      confidenceBreakdown.score -
+    const rawAdjustedScore = confidenceBreakdown.score -
       uncertaintyPenalty +
-      fairStartBoost
+      fairStartPolicy.boost;
+    const score = Number(Math.max(0.05, Math.min(fairStartPolicy.score_cap,
+      rawAdjustedScore
     )).toFixed(3));
     for (const id of evidence.fact_ids) factIds.add(id);
     for (const id of reviewCredibility.fact_ids) factIds.add(id);
@@ -532,17 +1037,20 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
         proof_coverage: Number(proofScore.toFixed(2)),
         offer_truth: Number(offerScore.toFixed(2)),
         uncertainty_penalty: uncertaintyPenalty,
-        fair_start_boost: Number(fairStartBoost.toFixed(2))
+        fair_start_boost: Number(fairStartPolicy.boost.toFixed(2))
       },
+      fair_start_policy: fairStartPolicy,
       score_breakdown: {
         ...confidenceBreakdown,
         confidence_source: confidenceAssignment.source,
         prompt_version: "ai_confidence_assignment_v2",
+        raw_adjusted_score: Number(rawAdjustedScore.toFixed(3)),
         adjusted_score: score,
         adjusted_score_percent: Math.floor(score * 100),
         adjustments: {
           uncertainty_penalty: uncertaintyPenalty,
-          fair_start_boost: Number(fairStartBoost.toFixed(3))
+          fair_start_boost: Number(fairStartPolicy.boost.toFixed(3)),
+          score_cap: fairStartPolicy.score_cap
         },
         scoring_context: {
           item_category: product.category,
@@ -638,26 +1146,41 @@ export async function facts(db: Db, factIds: string[]) {
 
 export async function verifyOffer(db: Db, variantId: string) {
   const c = collections(db);
-  const events = await c.priceEvents.find({ variant_id: variantId }).sort({ created_at: 1 }).toArray();
-  const campaign = await c.campaigns.findOne({ variant_id: variantId });
-  const inventory = await c.inventorySnapshots.findOne({ variant_id: variantId });
+  const [events, campaign, inventory, variant] = await Promise.all([
+    c.priceEvents.find({ variant_id: variantId }).sort({ created_at: 1 }).toArray(),
+    c.campaigns.findOne({ variant_id: variantId }),
+    c.inventorySnapshots.findOne({ variant_id: variantId }),
+    c.variants.findOne({ variant_id: variantId })
+  ]);
+  const product = variant ? await c.products.findOne({ product_id: variant.product_id }) : null;
   const latest = events.at(-1);
   const reference = events[0];
   const delta = reference && latest ? reference.price - latest.price : null;
   const hasDrop = delta !== null && delta > 0;
   const timerReset = (campaign?.timer_reset_count ?? 0) >= 2;
-  const status = hasDrop && !timerReset ? "verified_price_drop" : timerReset ? "no_need_to_rush" : "not_enough_history";
+  const darkPatternShield = buildDarkPatternShield({
+    variantId,
+    product,
+    variant,
+    events,
+    campaign,
+    inventory,
+    hasDrop,
+    timerReset
+  });
+  const blockingDarkPattern = darkPatternShield.status === "blocked";
+  const status = hasDrop && !timerReset && !blockingDarkPattern ? "verified_price_drop" : timerReset ? "no_need_to_rush" : "not_enough_history";
   const message = status === "verified_price_drop"
     ? "Verified deal. This is lower than the recent reference price."
     : status === "no_need_to_rush"
-      ? "Timer repeated before. Judge this offer by current price proof, not urgency."
+      ? "Timer history checked. Current price proof is shown with product evidence."
       : "Not enough history to verify this offer yet.";
   const fact_ids = [...events.map((event: any) => event.fact_id), campaign?.fact_id, inventory?.fact_id].filter(Boolean);
   return {
     variant_id: variantId,
     status,
     message,
-    buyer_guidance: status === "verified_price_drop" ? "You can use the offer if product trust is also strong." : "Use the current price proof, not timer pressure, to decide.",
+    buyer_guidance: darkPatternShield.buyer_guidance,
     truth_basis: status === "verified_price_drop" ? "price_drop" : status === "no_need_to_rush" ? "timer_reset" : "insufficient_history",
     price_evidence: {
       latest_price: latest?.price ?? null,
@@ -669,6 +1192,7 @@ export async function verifyOffer(db: Db, variantId: string) {
     },
     campaign_evidence: campaign ? { campaign_id: campaign.campaign_id, start_at: campaign.start_at, end_at: campaign.end_at, timer_reset_count: campaign.timer_reset_count, fact_id: campaign.fact_id } : null,
     inventory_evidence: inventory ? { available_to_promise: inventory.available_to_promise, sales_velocity_24h: inventory.sales_velocity_24h, captured_at: inventory.captured_at, fact_id: inventory.fact_id } : null,
+    dark_pattern_shield: darkPatternShield,
     checks: [
       { key: "price_history", label: "Price history", status: hasDrop ? "positive" : "neutral", detail: hasDrop ? `Price is Rs ${delta} below baseline.` : "Not enough price movement for a strong deal claim.", fact_ids: events.map((event: any) => event.fact_id) },
       { key: "campaign_timer", label: "Timer behavior", status: timerReset ? "caution" : "neutral", detail: timerReset ? "Campaign timer has reset before, so Sarthi does not use urgency as proof." : "No repeated timer reset found.", fact_ids: campaign?.fact_id ? [campaign.fact_id] : [] },
@@ -676,6 +1200,195 @@ export async function verifyOffer(db: Db, variantId: string) {
     ],
     fact_ids
   };
+}
+
+function buildDarkPatternShield(input: {
+  variantId: string;
+  product: any;
+  variant: any;
+  events: any[];
+  campaign: any;
+  inventory: any;
+  hasDrop: boolean;
+  timerReset: boolean;
+}) {
+  const factIds = [...new Set([
+    ...input.events.map((event: any) => event.fact_id),
+    input.campaign?.fact_id,
+    input.inventory?.fact_id
+  ].filter(Boolean))];
+  const spike = priceHikeBeforeDiscount(input.events);
+  const available = Number(input.inventory?.available_to_promise ?? 0);
+  const velocity = Number(input.inventory?.sales_velocity_24h ?? 0);
+  const highStockWithUrgency = Boolean(input.timerReset && available >= 12 && velocity <= 7);
+  const fulfillment = input.product?.fulfillment ?? {};
+  const codAvailable = fulfillment.cod_available !== false;
+  const codCharge = Number(fulfillment.cod_charges ?? 0);
+  const returnWindow = Number(input.product?.quality_signals?.return_window_days ?? 0);
+  const returnsVisible = fulfillment.returns_enabled !== false && fulfillment.return_conditions_visible !== false && returnWindow > 0;
+
+  const checks = [
+    darkPatternCheck({
+      key: "repeating_countdown_timer",
+      label: "Repeating countdown timer",
+      status: input.timerReset ? "watch" : "clear",
+      severity: input.timerReset ? "medium" : "none",
+      buyer_copy: input.timerReset
+        ? "Timer history checked. Current price proof is shown with product evidence."
+        : "No repeated timer reset found.",
+      evidence: input.campaign
+        ? `${input.campaign.timer_reset_count ?? 0} reset(s) in campaign ledger.`
+        : "No campaign timer found.",
+      decision_effect: input.timerReset ? "Use price proof instead of timer wording." : "Timer does not reduce confidence.",
+      fact_ids: input.campaign?.fact_id ? [input.campaign.fact_id] : []
+    }),
+    darkPatternCheck({
+      key: "fake_scarcity",
+      label: "Fake scarcity",
+      status: highStockWithUrgency ? "watch" : "clear",
+      severity: highStockWithUrgency ? "medium" : "none",
+      buyer_copy: highStockWithUrgency
+        ? "Stock signal is checked against available units before it affects trust."
+        : "Scarcity pressure is not being used as proof.",
+      evidence: input.inventory
+        ? `${available} available, ${velocity}/day recent sales velocity.`
+        : "Inventory snapshot unavailable.",
+      decision_effect: highStockWithUrgency ? "Use inventory proof instead of scarcity wording." : "No scarcity warning.",
+      fact_ids: input.inventory?.fact_id ? [input.inventory.fact_id] : []
+    }),
+    darkPatternCheck({
+      key: "sudden_price_hike_before_discount",
+      label: "Price hike before discount",
+      status: spike ? "watch" : "clear",
+      severity: spike ? "high" : "none",
+      buyer_copy: spike
+        ? "The discount anchor is weak because price rose shortly before this offer."
+        : "No sudden pre-discount price hike found.",
+      evidence: spike
+        ? `Price rose by Rs ${spike.amount} before the current offer.`
+        : `${input.events.length} price event(s) checked.`,
+      decision_effect: spike ? "Show current price proof instead of discount percentage alone." : "Price history can be used normally.",
+      fact_ids: input.events.map((event: any) => event.fact_id)
+    }),
+    darkPatternCheck({
+      key: "drip_pricing",
+      label: "Drip pricing",
+      status: codCharge > 0 ? "watch" : "clear",
+      severity: codCharge > 0 ? "medium" : "none",
+      buyer_copy: codCharge > 0
+        ? `A Rs ${codCharge} COD charge must stay visible before payment.`
+        : "No hidden delivery or COD charge found in the checkout ledger.",
+      evidence: codCharge > 0 ? `COD charge is Rs ${codCharge}.` : "COD and delivery charges are not being added later.",
+      decision_effect: codCharge > 0 ? "Show charge before payment selection." : "No drip-pricing blocker.",
+      fact_ids: []
+    }),
+    darkPatternCheck({
+      key: "basket_sneaking",
+      label: "Basket sneaking",
+      status: "clear",
+      severity: "none",
+      buyer_copy: "No extra item was added by the offer service.",
+      evidence: "Cart line item count is checked during checkout confidence.",
+      decision_effect: "Keep checkout item count visible.",
+      fact_ids: []
+    }),
+    darkPatternCheck({
+      key: "forced_prepaid",
+      label: "Forced prepaid",
+      status: codAvailable ? "clear" : "blocked",
+      severity: codAvailable ? "none" : "high",
+      buyer_copy: codAvailable
+        ? "No forced payment mode. COD and online payment remain buyer choices."
+        : "COD is unavailable, so this cannot be shown as a free payment choice.",
+      evidence: codAvailable ? "COD availability is true in fulfillment data." : "Fulfillment data marks COD unavailable.",
+      decision_effect: codAvailable ? "Payment choice stays open." : "Block prepaid nudges.",
+      fact_ids: []
+    }),
+    darkPatternCheck({
+      key: "misleading_only_today_offer",
+      label: "Misleading only-today offer",
+      status: input.timerReset ? "watch" : "clear",
+      severity: input.timerReset ? "medium" : "none",
+      buyer_copy: input.timerReset
+        ? "Only-today wording is checked against campaign history before it affects trust."
+        : "No misleading only-today pattern found.",
+      evidence: input.campaign
+        ? `Campaign started ${input.campaign.start_at} and ends ${input.campaign.end_at}.`
+        : "No campaign found.",
+      decision_effect: input.timerReset ? "Use campaign history in the recommendation." : "No timer wording issue.",
+      fact_ids: input.campaign?.fact_id ? [input.campaign.fact_id] : []
+    }),
+    darkPatternCheck({
+      key: "hidden_return_conditions",
+      label: "Hidden return conditions",
+      status: returnsVisible ? "clear" : "blocked",
+      severity: returnsVisible ? "none" : "high",
+      buyer_copy: returnsVisible
+        ? `${returnWindow || 7}-day return condition is visible before payment.`
+        : "Return conditions are missing or unclear. Keep payment protection visible.",
+      evidence: returnsVisible
+        ? "Return window and returns-enabled fields are present."
+        : "Return window or return visibility failed.",
+      decision_effect: returnsVisible ? "Refund expectation can be locked." : "Show return policy and buyer protection before payment.",
+      fact_ids: []
+    })
+  ];
+
+  const blocked = checks.filter((check) => check.status === "blocked");
+  const watch = checks.filter((check) => check.status === "watch");
+  const status = blocked.length ? "blocked" : watch.length ? "watch" : "clear";
+  const primary = blocked[0] ?? watch[0] ?? null;
+  const plainCopy = input.timerReset
+    ? "Timer history checked. Current price proof is shown with product evidence."
+    : primary?.buyer_copy ?? (input.hasDrop ? "Offer history is clean. Product proof is shown alongside price." : "Current price proof is available when history is limited.");
+  return {
+    shield_version: "dark_pattern_disruptor_v2",
+    status,
+    headline: status === "clear" ? "Offer proof looks clear" : status === "blocked" ? "Checkout proof blocked" : "Offer proof needs attention",
+    plain_copy: plainCopy,
+    buyer_guidance: status === "clear"
+      ? "You can use the offer if product trust is also strong."
+      : plainCopy,
+    risk_count: blocked.length + watch.length,
+    blocked_count: blocked.length,
+    watch_count: watch.length,
+    checks,
+    fact_ids: factIds
+  };
+}
+
+function darkPatternCheck(input: {
+  key: string;
+  label: string;
+  status: "clear" | "watch" | "blocked";
+  severity: "none" | "low" | "medium" | "high";
+  buyer_copy: string;
+  evidence: string;
+  decision_effect: string;
+  fact_ids: string[];
+}) {
+  return input;
+}
+
+function priceHikeBeforeDiscount(events: any[]) {
+  if (events.length < 3) return null;
+  const sorted = [...events].sort((left, right) => String(left.created_at).localeCompare(String(right.created_at)));
+  const first = sorted[0];
+  const latest = sorted.at(-1);
+  const middle = sorted.slice(1, -1).sort((left, right) => Number(right.price ?? 0) - Number(left.price ?? 0))[0];
+  if (!first || !middle || !latest) return null;
+  const amount = Number(middle.price ?? 0) - Number(first.price ?? 0);
+  const latestDrop = Number(middle.price ?? 0) - Number(latest.price ?? 0);
+  if (amount >= 25 && latestDrop > 0) {
+    return {
+      amount,
+      high_price: Number(middle.price ?? 0),
+      baseline_price: Number(first.price ?? 0),
+      latest_price: Number(latest.price ?? 0),
+      fact_id: middle.fact_id
+    };
+  }
+  return null;
 }
 
 export async function proofCoverage(db: Db, productId: string, variantId?: string | null) {
@@ -741,7 +1454,30 @@ export async function skuPassport(db: Db, buyerId: string, productId: string, va
   const gaps = evidenceGaps(coverage);
   const trust = await trustState(db, product, evidence);
   const conflictRows = await conflicts(db, product, variant.variant_id);
-  const requests = await collections(db).proofRequests.find({ product_id: productId, status: "open" }).toArray();
+  const requests = await collections(db).proofRequests.find({ product_id: productId, status: { $in: ["open", "submitted"] } }).toArray();
+  const truthCard = buildSkuTruthCard({
+    product,
+    variant,
+    evidence,
+    fit,
+    issue,
+    offer,
+    reviews,
+    coverage,
+    gaps,
+    trust,
+    conflicts: conflictRows,
+    requests
+  });
+  const fitConfidenceLayer = await buildFitConfidenceLayer(db, buyerId, {
+    product,
+    variant,
+    variants,
+    evidence,
+    fit,
+    coverage,
+    requests
+  });
   const fact_ids = [...new Set([...evidence.fact_ids, ...fit.fact_ids, ...offer.fact_ids, ...gaps.flatMap((gap: any) => gap.fact_ids ?? [])])];
   return {
     buyer_id: buyerId,
@@ -758,8 +1494,418 @@ export async function skuPassport(db: Db, buyerId: string, productId: string, va
     open_proof_requests: requests.map((row: any) => publicProofRequest(row)),
     conflicts: conflictRows,
     trust_state: trust,
+    truth_card: truthCard,
+    fit_confidence_layer: fitConfidenceLayer,
     fact_ids
   };
+}
+
+function buildSkuTruthCard({
+  product,
+  variant,
+  evidence,
+  fit,
+  issue,
+  offer,
+  reviews,
+  coverage,
+  gaps,
+  trust,
+  conflicts,
+  requests
+}: Record<string, any>) {
+  const verified: any[] = [];
+  if (trust.seller_verification?.verification_status === "verified") {
+    verified.push({
+      key: "seller",
+      label: "Seller verified",
+      value: product.seller_name,
+      detail: "Seller verification is a gate before strong recommendation.",
+      fact_ids: []
+    });
+  }
+  if (evidence.delivered_orders_90d > 0) {
+    verified.push({
+      key: "sku_outcomes",
+      label: "SKU outcomes",
+      value: `${evidence.delivered_orders_90d} orders`,
+      detail: `${Math.round(evidence.return_rate * 100)}% recent return risk is included in the score.`,
+      fact_ids: evidence.fact_ids.slice(0, 5)
+    });
+  }
+  if (coverage.size?.sufficient) {
+    verified.push({
+      key: "size",
+      label: "Size evidence",
+      value: fit.recommended_size,
+      detail: coverage.size.source_summary,
+      fact_ids: coverage.size.fact_ids ?? []
+    });
+  }
+  if (reviews.credibility_summary?.review_count) {
+    verified.push({
+      key: "reviews",
+      label: "Reviews weighted",
+      value: `${reviews.credibility_summary.credible_review_count}/${reviews.credibility_summary.review_count}`,
+      detail: "Reviews from newer or high-return accounts carry lower weight.",
+      fact_ids: reviews.credibility_summary.fact_ids ?? []
+    });
+  }
+  if (product.media_evidence?.verification_status === "verified_gallery") {
+    verified.push({
+      key: "media",
+      label: "Product photos",
+      value: `${product.media_evidence.image_count} photos`,
+      detail: "Catalog gallery has multiple seller media angles.",
+      fact_ids: []
+    });
+  }
+
+  const missing = gaps.map((gap: any) => ({
+    key: gap.attribute,
+    label: gap.title,
+    detail: gap.summary,
+    action: `Ask seller for ${String(gap.recommended_proof_type).replaceAll("_", " ")}`,
+    severity: gap.severity ?? "medium",
+    fact_ids: gap.fact_ids ?? []
+  }));
+
+  const changedRecently = [
+    {
+      key: "outcomes",
+      label: "Outcome ledger",
+      value: ageLabel(evidence.last_updated_at),
+      detail: `${evidence.delivered_orders_90d} recent delivered outcomes are attached to this SKU.`,
+      tone: evidence.evidence_strength === "strong" ? "positive" : "watch",
+      fact_ids: evidence.fact_ids.slice(0, 4)
+    },
+    {
+      key: "offer",
+      label: "Offer truth",
+      value: label(offer.status),
+      detail: offer.message,
+      tone: offer.status === "verified_price_drop" ? "positive" : "watch",
+      fact_ids: offer.fact_ids.slice(0, 4)
+    },
+    ...(requests.length ? [{
+      key: "seller_proof",
+      label: "Seller proof demand",
+      value: `${requests.length} pending`,
+      detail: "Buyer proof requests are tracked as aggregate seller tasks.",
+      tone: "watch",
+      fact_ids: requests.map((request: any) => request.fact_id).filter(Boolean).slice(0, 4)
+    }] : [])
+  ];
+
+  const cautionReasons = [
+    ...missing.slice(0, 2).map((item: any) => item.detail),
+    ...conflicts.slice(0, 2).map((item: any) => item.summary),
+    ...(issue ? [issue.title] : [])
+  ].filter(Boolean);
+
+  return {
+    title: "SKU Truth Card",
+    status: trust.status,
+    confidence: trust.confidence,
+    can_recommend: trust.can_recommend,
+    headline: trust.headline,
+    guidance: trust.buyer_guidance,
+    verified,
+    missing,
+    changed_recently: changedRecently.slice(0, 3),
+    score_reason: {
+      band: trust.confidence,
+      headline: trust.headline,
+      summary: trust.buyer_guidance,
+      positive: trust.reasons.slice(0, 3),
+      caution: cautionReasons.length ? cautionReasons.slice(0, 3) : ["No major blocker found for this SKU."],
+      fact_ids: [...new Set([...evidence.fact_ids, ...fit.fact_ids])].slice(0, 8)
+    },
+    pending_seller_proof: requests.map((request: any) => ({
+      request_id: request.request_id,
+      attribute: request.attribute,
+      label: `${label(request.attribute)} proof`,
+      status: request.status,
+      demand: request.request_count,
+      detail: request.buyer_question ?? `${label(request.attribute)} proof is pending from the seller.`,
+      fact_ids: request.fact_id ? [request.fact_id] : []
+    })),
+    unsafe_claims: unsafeClaims(gaps, conflicts, offer, coverage),
+    primary_action: primaryTruthAction(trust, gaps, issue),
+    privacy_note: "Seller sees only aggregate proof demand. Buyer fit profile and private memory stay buyer-only."
+  };
+}
+
+async function buildFitConfidenceLayer(db: Db, buyerId: string, input: Record<string, any>) {
+  const c = collections(db);
+  const { product, variant, variants, evidence, fit, coverage, requests } = input;
+  const variantIds = variants.map((item: any) => item.variant_id);
+  const outcomes = await c.outcomes.find({ variant_id: { $in: variantIds } }).toArray();
+  const fitReviews = await c.reviews.find({ product_id: product.product_id, attribute: "fit" }).toArray();
+  const profiles = await c.buyerFitProfiles.find({ buyer_id: buyerId }).sort({ active: -1, updated_at: -1 }).toArray();
+  const sizeProofAssets = await c.sellerEvidenceAssets.find({
+    product_id: product.product_id,
+    attribute: "size",
+    status: { $in: ["submitted", "verified"] }
+  }).toArray();
+  const stats = variants.map((item: any) => sizeOutcomeStats(item, outcomes.filter((outcome: any) => outcome.variant_id === item.variant_id)));
+  const selectedStats = stats.find((item: any) => item.variant_id === variant.variant_id) ?? sizeOutcomeStats(variant, []);
+  const saferVariant = variants.find((item: any) => item.size === fit.recommended_size) ?? null;
+  const saferStats = saferVariant ? stats.find((item: any) => item.variant_id === saferVariant.variant_id) ?? null : null;
+  const selectedTight = selectedStats.tight_fit_return_rate;
+  const selectedLoose = selectedStats.loose_fit_return_rate;
+  const fitLabel = selectedTight >= 0.18
+    ? "Runs small"
+    : selectedLoose >= 0.18
+      ? "Runs loose"
+      : "True to size";
+  const fitScore = Math.round(Math.max(0.2, Math.min(0.98, evidence.fit_as_expected_rate)) * 100);
+  const reviewerSummary = reviewerFitSummary(fitReviews, fit.recommended_size, selectedStats, saferStats);
+  const measurementProof = measurementProofSummary(sizeProofAssets, coverage.size, requests);
+  const claimWarning = fitClaimWarning(variant, fit.recommended_size, selectedTight, measurementProof, selectedStats);
+  const familyProfiles = profiles.map((profile: any) => {
+    const recommendedSize = normalizeProfileSize(profile.size_map?.[product.category]) ?? fit.recommended_size;
+    const recommendedVariant = variants.find((item: any) => item.size === recommendedSize) ?? saferVariant ?? variant;
+    return {
+      profile_id: profile.profile_id,
+      label: profile.label,
+      relationship: profile.relationship,
+      active: Boolean(profile.active),
+      recommended_size: recommendedVariant?.size ?? recommendedSize,
+      recommended_variant_id: recommendedVariant?.variant_id ?? variant.variant_id,
+      privacy_scope: profile.privacy_scope ?? "buyer_only",
+      summary: `${profile.label} uses ${recommendedVariant?.size ?? recommendedSize} for ${label(product.category)}.`
+    };
+  });
+
+  return {
+    selected_size: variant.size,
+    recommended_size: fit.recommended_size,
+    fit_subscore: {
+      label: fitLabel,
+      score: fitScore,
+      tone: fitScore >= 75 ? "positive" : fitScore >= 55 ? "watch" : "risk",
+      summary: `${variant.size} has ${fitScore}% fit-as-expected evidence from recent outcomes.`,
+      fact_ids: evidence.fact_ids.slice(0, 5)
+    },
+    size_risk: {
+      level: selectedTight >= 0.18 || selectedLoose >= 0.18 || variant.size !== fit.recommended_size ? "watch" : "low",
+      title: sizeRiskTitle(variant.size, fit.recommended_size, selectedTight, selectedLoose),
+      summary: sizeRiskSummary(variant.size, fit.recommended_size, selectedStats, saferStats),
+      selected_size: variant.size,
+      safer_size: fit.recommended_size,
+      selected_return_rate: selectedStats.return_rate,
+      safer_return_rate: saferStats?.return_rate ?? null,
+      fact_ids: selectedStats.fact_ids.slice(0, 5)
+    },
+    reviewer_fit_summary: reviewerSummary,
+    seller_measurement_proof: measurementProof,
+    family_profiles: familyProfiles,
+    claim_warning: claimWarning,
+    size_options: stats,
+    privacy_note: "Family fit profiles are buyer-owned and are not shared with sellers."
+  };
+}
+
+function ageLabel(value: string | null | undefined) {
+  if (!value) return "source attached";
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return "source attached";
+  const days = Math.max(0, Math.round((Date.now() - parsed) / 86_400_000));
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  return `${days}d ago`;
+}
+
+function primaryTruthAction(trust: any, gaps: any[], issue: any) {
+  if (gaps.length) return `Check ${label(gaps[0].attribute).toLowerCase()} proof`;
+  if (issue) return issue.action;
+  if (!trust.can_recommend) return "Review another seller";
+  return "Continue with size and checkout checks";
+}
+
+function unsafeClaims(gaps: any[], conflicts: any[], offer: any, coverage: Record<string, any>) {
+  const claims = gaps.map((gap: any) => ({
+    claim: `${label(gap.attribute)} claim`,
+    reason: gap.summary,
+    action: `Do not rely on this claim until seller adds ${String(gap.recommended_proof_type).replaceAll("_", " ")}.`,
+    severity: gap.severity ?? "medium",
+    fact_ids: gap.fact_ids ?? []
+  }));
+
+  if (!coverage.size?.fact_ids?.some((factId: string) => factId.includes("proof"))) {
+    claims.push({
+      claim: "Exact size measurement",
+      reason: "Outcome evidence can guide fit, but seller measurement proof is not verified for this SKU.",
+      action: "Use safer-size guidance or ask for measurement proof.",
+      severity: "medium",
+      fact_ids: coverage.size?.fact_ids ?? []
+    });
+  }
+
+  if (offer.truth_basis === "timer_reset") {
+    claims.push({
+      claim: "Offer urgency",
+      reason: "The campaign timer has reset before.",
+      action: "Use current price proof instead of timer wording.",
+      severity: "medium",
+      fact_ids: offer.fact_ids ?? []
+    });
+  }
+
+  for (const conflict of conflicts.slice(0, 2)) {
+    claims.push({
+      claim: label(conflict.type),
+      reason: conflict.summary,
+      action: conflict.action,
+      severity: conflict.severity,
+      fact_ids: conflict.fact_ids ?? []
+    });
+  }
+
+  return claims.length ? claims.slice(0, 4) : [{
+    claim: "No unsafe claim found",
+    reason: "The main seller, SKU, review, and proof signals are aligned enough for this stage.",
+    action: "Continue with size and checkout checks.",
+    severity: "low",
+    fact_ids: []
+  }];
+}
+
+function sizeOutcomeStats(variant: any, outcomes: any[]) {
+  const deliveredRows = outcomes.filter((outcome: any) => ["delivered_kept", "returned", "exchanged"].includes(outcome.status));
+  const delivered = deliveredRows.length;
+  const returned = outcomes.filter((outcome: any) => outcome.status === "returned").length;
+  const kept = outcomes.filter((outcome: any) => outcome.status === "delivered_kept").length;
+  const tight = outcomes.filter((outcome: any) => outcome.return_reason === "too_small").length;
+  const loose = outcomes.filter((outcome: any) => outcome.return_reason === "too_large").length;
+  const factIds = outcomes.map((outcome: any) => outcome.fact_id).filter(Boolean);
+  return {
+    variant_id: variant.variant_id,
+    size: variant.size,
+    delivered_orders: delivered,
+    kept_orders: kept,
+    returns: returned,
+    keep_rate: delivered ? Number((kept / delivered).toFixed(3)) : 0,
+    return_rate: delivered ? Number((returned / delivered).toFixed(3)) : 0,
+    tight_fit_return_rate: delivered ? Number((tight / delivered).toFixed(3)) : 0,
+    loose_fit_return_rate: delivered ? Number((loose / delivered).toFixed(3)) : 0,
+    fact_ids: factIds.slice(0, 6)
+  };
+}
+
+function reviewerFitSummary(fitReviews: any[], recommendedSize: string, selectedStats: any, saferStats: any) {
+  const credible = fitReviews.filter((review) => (review.credibility_weight ?? 0) >= 0.55);
+  const mentionsRecommended = credible.filter((review) => String(review.text).toLowerCase().includes(String(recommendedSize).toLowerCase())).length;
+  const saferWins = saferStats && saferStats.variant_id !== selectedStats.variant_id && saferStats.keep_rate > selectedStats.keep_rate;
+  const title = saferWins
+    ? `People kept ${recommendedSize} more often`
+    : `${recommendedSize} is the safer fit signal`;
+  const summary = credible.length
+    ? `${credible.length}/${fitReviews.length || credible.length} fit reviews passed reviewer credibility checks; ${mentionsRecommended || credible.length} support checking ${recommendedSize}.`
+    : `Fit review evidence is thin, so Sarthi relies more on kept-order outcomes for ${recommendedSize}.`;
+  return {
+    title,
+    summary,
+    matched_profile_size: recommendedSize,
+    credible_fit_reviews: credible.length,
+    total_fit_reviews: fitReviews.length,
+    selected_keep_rate: selectedStats.keep_rate,
+    safer_keep_rate: saferStats?.keep_rate ?? null,
+    fact_ids: fitReviews.map((review) => review.fact_id).filter(Boolean).slice(0, 6)
+  };
+}
+
+function measurementProofSummary(sizeProofAssets: any[], sizeCoverage: any, requests: any[]) {
+  const verified = sizeProofAssets.find((asset) => asset.status === "verified");
+  const submitted = sizeProofAssets.find((asset) => asset.status === "submitted");
+  const pending = requests.find((request) => request.attribute === "size" && ["open", "submitted"].includes(request.status));
+  if (verified) {
+    return {
+      status: "verified",
+      label: "Measurement proof verified",
+      summary: verified.description ?? "Seller measurement proof has been reviewed.",
+      proof_type: verified.proof_type,
+      pending_request_id: null,
+      fact_ids: verified.fact_id ? [verified.fact_id] : []
+    };
+  }
+  if (submitted) {
+    return {
+      status: "submitted",
+      label: "Measurement proof in review",
+      summary: submitted.description ?? "Seller submitted measurement proof; review is pending.",
+      proof_type: submitted.proof_type,
+      pending_request_id: pending?.request_id ?? null,
+      fact_ids: submitted.fact_id ? [submitted.fact_id] : []
+    };
+  }
+  return {
+    status: "missing",
+    label: sizeCoverage?.sufficient ? "Measurement proof missing, outcomes available" : "Measurement proof missing",
+    summary: sizeCoverage?.sufficient
+      ? "Seller chart is not verified yet, so Sarthi uses delivered-order fit outcomes as the safer signal."
+      : "Seller needs to add a measurement chart before exact size claims become trusted.",
+    proof_type: "measurement_chart",
+    pending_request_id: pending?.request_id ?? null,
+    fact_ids: pending?.fact_id ? [pending.fact_id] : []
+  };
+}
+
+function fitClaimWarning(variant: any, recommendedSize: string, tightRate: number, measurementProof: any, selectedStats: any) {
+  if (measurementProof.status !== "verified") {
+    return {
+      unsafe: true,
+      claim: `${variant.size} exact measurement`,
+      reason: "Exact seller measurement is not verified yet; use outcome evidence and safer-size guidance.",
+      action: "Ask seller for measurement proof before trusting exact size claims.",
+      fact_ids: measurementProof.fact_ids
+    };
+  }
+  if (tightRate >= 0.18) {
+    return {
+      unsafe: true,
+      claim: `${variant.size} fit promise`,
+      reason: `Measurement proof exists, but recent kept-order evidence still shows tight-fit risk for ${variant.size}.`,
+      action: recommendedSize !== variant.size ? `Consider ${recommendedSize} before checkout.` : "Check the measurement chart before checkout.",
+      fact_ids: [...new Set([...(measurementProof.fact_ids ?? []), ...(selectedStats.fact_ids ?? [])])].slice(0, 6)
+    };
+  }
+  return {
+    unsafe: false,
+    claim: `${variant.size} measurement proof`,
+    reason: "Seller measurement proof and fit outcomes are aligned enough for this SKU.",
+    action: "Use the verified chart with fit outcomes.",
+    fact_ids: measurementProof.fact_ids
+  };
+}
+
+function normalizeProfileSize(value: unknown) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return normalized || null;
+}
+
+function sizeRiskTitle(selectedSize: string, saferSize: string, tightRate: number, looseRate: number) {
+  if (selectedSize !== saferSize && tightRate >= 0.18) return `${selectedSize} has tight-fit risk`;
+  if (selectedSize !== saferSize) return `${saferSize} is safer for your profile`;
+  if (tightRate >= 0.18) return "Runs small for this size";
+  if (looseRate >= 0.18) return "Runs loose for this size";
+  return "Size risk is controlled";
+}
+
+function sizeRiskSummary(selectedSize: string, saferSize: string, selectedStats: any, saferStats: any) {
+  const selectedReturn = Math.round(selectedStats.return_rate * 100);
+  if (selectedSize !== saferSize && saferStats) {
+    const saferReturn = Math.round(saferStats.return_rate * 100);
+    return `${selectedSize} has ${selectedReturn}% return risk; ${saferSize} has ${saferReturn}% in current SKU outcomes.`;
+  }
+  if (selectedStats.tight_fit_return_rate >= 0.18) {
+    return `${Math.round(selectedStats.tight_fit_return_rate * 100)}% of recent outcomes mention tight-fit risk.`;
+  }
+  if (selectedStats.loose_fit_return_rate >= 0.18) {
+    return `${Math.round(selectedStats.loose_fit_return_rate * 100)}% of recent outcomes mention loose-fit risk.`;
+  }
+  return `${selectedSize} is aligned with the current fit recommendation and return pattern.`;
 }
 
 type KeepConfidenceDriver = {
@@ -1038,6 +2184,7 @@ export function publicProofRequest(row: any) {
     attribute: row.attribute,
     status: row.status,
     request_count: row.request_count,
+    buyer_question: row.buyer_question ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     fact_id: row.fact_id

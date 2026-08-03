@@ -99,7 +99,7 @@ describe("provider-neutral AI callers", () => {
       provider: "bedrock" as const,
       model: "nova-test",
       value: {
-        headline: "Seller Coaching for Meesho-style Marketplace",
+        headline: "Seller Coaching for Value-Commerce Marketplace",
         summary: "A chart can reduce buyer doubt.",
         reasons: ["Fit proof is missing"],
         product_coaching: [{

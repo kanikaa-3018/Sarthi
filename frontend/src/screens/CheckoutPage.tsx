@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Banknote, CheckCircle2, CreditCard, Gift, PackageCheck, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, CheckCircle2, CreditCard, Gift, LockKeyhole, PackageCheck, ShieldCheck } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { createExpectationContract, getProductDetail, placeCheckoutOrder, verifyOffer } from "../api/client";
 import { t, type LanguageCode } from "../i18n";
@@ -8,6 +8,7 @@ import type {
   CheckoutResponse,
   ExpectationContract,
   PaymentAssist,
+  PaymentAssistChoice,
   Product,
   ProductDetailResponse,
   Variant
@@ -51,6 +52,27 @@ export function CheckoutPage({ buyerId, language }: Props) {
   const [ordering, setOrdering] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<BuyerOrderItem | null>(null);
 
+  // --- Address State Machine ---
+  type CheckoutStep = "address" | "payment" | "otp" | "upi" | "success";
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("address");
+  const [address, setAddress] = useState({ name: "", phone: "", flat: "", area: "", city: "", pincode: "" });
+  const [addressErrors, setAddressErrors] = useState<Partial<typeof address>>({});
+
+  // COD OTP state
+  const [generatedOtp] = useState(() => String(Math.floor(100000 + Math.random() * 900000)));
+  const [otpInput, setOtpInput] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+
+  // UPI state
+  const [upiId, setUpiId] = useState("");
+  const [upiProcessing, setUpiProcessing] = useState(false);
+  const [upiError, setUpiError] = useState<string | null>(null);
+
+  // Order invoice
+  const [invoiceNo] = useState(() => `SRTH${Date.now().toString().slice(-8)}`);
+  const [trackingId] = useState(() => `TRK${Date.now().toString().slice(-10)}`);
+  const deliveryDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
   useEffect(() => {
     if (!productId || !variantId) {
       setError(copy.missingCheckout);
@@ -75,7 +97,7 @@ export function CheckoutPage({ buyerId, language }: Props) {
         });
 
     Promise.allSettled([
-      getProductDetail(buyerId, productId),
+      getProductDetail(buyerId, productId, variantId),
       verifyOffer(buyerId, variantId),
       contractRequest
     ]).then(([detailResult, checkoutResult, contractResult]) => {
@@ -119,10 +141,13 @@ export function CheckoutPage({ buyerId, language }: Props) {
   const cartConfidence = checkout?.cart_confidence ?? null;
   const keepConfidence = checkout?.keep_confidence ?? null;
   const paymentAssist = cartConfidence?.payment_assist ?? null;
+  const darkPatternShield = paymentAssist?.dark_pattern_shield ?? checkout?.offer.dark_pattern_shield ?? null;
+  const checkoutDecision = paymentAssist?.checkout_confidence ?? null;
   const prepaidRecommended = Boolean(cartConfidence?.checkout_nudge.prepaid_recommended || paymentAssist?.recommended_mode === "prepaid");
   const trustScore = cartConfidence ? Math.round(cartConfidence.overall_score * 100) : null;
   const keepScore = keepConfidence ? Math.round(keepConfidence.score * 100) : null;
   const totalBenefit = paymentAssist?.total_prepaid_benefit_rupees ?? 0;
+  const paymentEconomics = paymentAssist?.payment_economics ?? null;
   const rewardPoints = paymentAssist?.reward_points ?? 0;
   const currentPrice = checkout?.offer.price_evidence.latest_price ?? selectedVariant?.current_price ?? 0;
   const referencePrice = checkout?.offer.price_evidence.reference_price ?? null;
@@ -130,16 +155,19 @@ export function CheckoutPage({ buyerId, language }: Props) {
   const payablePrice = selectedVariant?.current_price ?? currentPrice;
   const referenceSavings = referencePrice && payablePrice && referencePrice > payablePrice ? referencePrice - payablePrice : 0;
   const orderDisabled = !checkout || !selectedVariant || !contract || ordering;
-  const recommendedPaymentLabel = prepaidRecommended ? t(language, "payOnline") : t(language, "cashOnDelivery");
   const selectedPaymentBenefit =
     paymentMode === "prepaid" && totalBenefit > 0
       ? `Rs ${totalBenefit}${rewardPoints > 0 ? ` + ${rewardPoints} ${copy.points}` : ""}`
       : paymentMode === "prepaid"
         ? copy.onlineSafe
         : copy.codStillOpen;
+  const recommendationTitle = checkoutDecision?.headline ?? (prepaidRecommended ? copy.payOnlineTitle : copy.codTitle);
+  const recommendationReason = checkoutDecision?.payment_reason ?? paymentAssist?.summary ?? (prepaidRecommended ? copy.payOnlineBody : copy.codBody);
+  const paymentBenefitLine = paymentEconomics?.buyer_benefit_copy ?? (prepaidRecommended ? copy.payOnlineBody : copy.codBody);
+  const paymentImpactLine = paymentEconomics?.company_benefit_copy ?? cartConfidence?.checkout_nudge.company_benefit ?? copy.paymentImpactFallback;
   const paymentSafetyChecks = paymentAssist?.safety_checks.slice(0, 2) ?? [];
   const paymentAgentActions = paymentAssist?.agent_actions.slice(0, 1) ?? [];
-  const protectionItems = contract?.contract.items.slice(0, 3) ?? [];
+  const protectionItems = contract?.contract.items ?? [];
   const primaryProtection = protectionItems[0]?.claim ?? contract?.contract.summary ?? copy.protectionPending;
   const decisionFacts = [
     {
@@ -156,45 +184,301 @@ export function CheckoutPage({ buyerId, language }: Props) {
     }
   ];
 
+  function validateAddress() {
+    const errs: Partial<typeof address> = {};
+    if (!address.name.trim()) errs.name = "Name required";
+    if (!/^\d{10}$/.test(address.phone)) errs.phone = "10-digit number required";
+    if (!address.flat.trim()) errs.flat = "House / flat required";
+    if (!address.area.trim()) errs.area = "Area required";
+    if (!address.city.trim()) errs.city = "City required";
+    if (!/^\d{6}$/.test(address.pincode)) errs.pincode = "6-digit pincode";
+    setAddressErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleAddressNext() {
+    if (validateAddress()) setCheckoutStep("payment");
+  }
+
   async function handlePlaceOrder() {
     if (!selectedVariant || !checkout || !contract || ordering) return;
+    if (paymentMode === "cod") {
+      setCheckoutStep("otp");
+      return;
+    }
+    if (paymentMode === "prepaid") {
+      setCheckoutStep("upi");
+      return;
+    }
+  }
+
+  async function handleOtpConfirm() {
+    if (otpInput.trim() !== generatedOtp) {
+      setOtpError("OTP does not match. Please check and retry.");
+      return;
+    }
+    setOtpError(null);
     setOrdering(true);
-    setError(null);
     try {
       const response = await placeCheckoutOrder({
         buyer_id: buyerId,
-        variant_id: selectedVariant.variant_id,
-        contract_id: contract.contract_id,
-        payment_mode: paymentMode,
+        variant_id: selectedVariant!.variant_id,
+        contract_id: contract!.contract_id,
+        payment_mode: "cod",
         buying_for_someone_else: wearerMode !== "self",
         wearer_label: wearerLabelFor(wearerMode, language)
       });
       setPlacedOrder(response.order);
+      setCheckoutStep("success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
+      setOtpError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
     } finally {
       setOrdering(false);
     }
   }
 
-  if (placedOrder) {
+  async function handleUpiConfirm() {
+    if (!upiId.trim() || !upiId.includes("@")) {
+      setUpiError("Enter a valid UPI ID (e.g. name@upi)");
+      return;
+    }
+    setUpiError(null);
+    setUpiProcessing(true);
+    // Simulate UPI processing
+    await new Promise(res => setTimeout(res, 2200));
+    try {
+      const response = await placeCheckoutOrder({
+        buyer_id: buyerId,
+        variant_id: selectedVariant!.variant_id,
+        contract_id: contract!.contract_id,
+        payment_mode: "prepaid",
+        buying_for_someone_else: wearerMode !== "self",
+        wearer_label: wearerLabelFor(wearerMode, language)
+      });
+      setPlacedOrder(response.order);
+      setCheckoutStep("success");
+    } catch (err) {
+      setUpiError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
+    } finally {
+      setUpiProcessing(false);
+    }
+  }
+
+  // ---- Render: Success ----
+  if (checkoutStep === "success" || placedOrder) {
     return (
       <section className="checkout-page-shell">
-        <div className="checkout-success-panel">
-          <span className="checkout-success-icon"><PackageCheck size={30} /></span>
-          <div>
-            <span className="eyebrow">{t(language, "orderPlaced")}</span>
-            <h1>{copy.orderPlacedTitle}</h1>
-            <p>{paymentMode === "prepaid" ? copy.prepaidOrderBody : copy.codOrderBody}</p>
+        <div className="checkout-success-shell">
+          <div className="checkout-success-badge-container">
+            <div className="checkout-success-icon-check">✓</div>
+          </div>
+          <h1>Order placed!</h1>
+          <p className="checkout-success-sub">
+            {paymentMode === "cod" ? "Cash on delivery – pay when you receive." : "Payment confirmed via UPI."}
+          </p>
+          
+          <div className="checkout-success-invoice">
+            {product && (
+              <div className="checkout-success-product-strip">
+                <img
+                  src={checkoutProductImage(product)}
+                  alt=""
+                  onError={(event) => { event.currentTarget.src = fallbackProductImage(product.color_family); }}
+                  className="checkout-success-product-img"
+                />
+                <div className="checkout-success-product-info">
+                  <h4>{product.title.split("-")[0].trim()}</h4>
+                  <p>Size {selectedVariant?.size || "XL"}</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="checkout-success-receipt-divider" />
+
+            <div className="checkout-invoice-row">
+              <span>Invoice No.</span>
+              <strong>{invoiceNo}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Tracking ID</span>
+              <strong>{trackingId}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Estimated Delivery</span>
+              <strong>{deliveryDate}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Amount</span>
+              <strong>Rs {payablePrice || "--"}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Payment</span>
+              <strong>{paymentMode === "cod" ? "Cash on Delivery" : "UPI Prepaid"}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Delivery to</span>
+              <strong>{address.name}, {address.flat}, {address.area}, {address.city} – {address.pincode}</strong>
+            </div>
           </div>
           <div className="checkout-success-actions">
             <button type="button" className="checkout-page-primary" onClick={() => navigate("/shop/orders")}>
-              {t(language, "viewMyOrders")}
+              Track Order
             </button>
             <button type="button" className="checkout-page-secondary" onClick={() => navigate("/shop")}>
-              {t(language, "continueShopping")}
+              Continue Shopping
             </button>
           </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ---- Render: COD OTP ----
+  if (checkoutStep === "otp") {
+    return (
+      <section className="checkout-page-shell">
+        <div className="checkout-otp-shell">
+          <button type="button" className="checkout-back-link" onClick={() => setCheckoutStep("payment")}>
+            <ArrowLeft size={16} /> Back
+          </button>
+          <div className="checkout-otp-card">
+            <Banknote size={28} style={{ color: "var(--accent-green, #16a34a)" }} />
+            <h2>Confirm your order with OTP</h2>
+            <p>A one-time password has been sent to <strong>{address.phone}</strong></p>
+            <div className="checkout-otp-display">
+              <span>Your OTP: </span>
+              <strong className="otp-code">{generatedOtp}</strong>
+              <small>(Simulated – shown for demo)</small>
+            </div>
+            <label className="checkout-otp-label">
+              Enter OTP
+              <input
+                type="text"
+                maxLength={6}
+                value={otpInput}
+                onChange={e => setOtpInput(e.target.value.replace(/\D/g, ""))}
+                placeholder="6-digit OTP"
+                className="checkout-otp-input"
+                autoFocus
+              />
+            </label>
+            {otpError && <div className="notice error">{otpError}</div>}
+            <button
+              type="button"
+              className="checkout-page-primary"
+              onClick={() => void handleOtpConfirm()}
+              disabled={ordering || otpInput.length < 6}
+            >
+              {ordering ? "Placing order..." : "Verify & Place Order"}
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ---- Render: UPI ----
+  if (checkoutStep === "upi") {
+    return (
+      <section className="checkout-page-shell">
+        <div className="checkout-otp-shell">
+          <button type="button" className="checkout-back-link" onClick={() => { setCheckoutStep("payment"); setUpiProcessing(false); }}>
+            <ArrowLeft size={16} /> Back
+          </button>
+          <div className="checkout-otp-card">
+            <CreditCard size={28} style={{ color: "var(--accent-blue, #2563eb)" }} />
+            <h2>Pay via UPI</h2>
+            <p>Enter your UPI ID to complete the payment of <strong>Rs {payablePrice}</strong></p>
+            {upiProcessing ? (
+              <div className="checkout-upi-processing">
+                <div className="upi-spinner" />
+                <p>Processing payment...</p>
+                <small>Please wait, do not close this page.</small>
+              </div>
+            ) : (
+              <>
+                <label className="checkout-otp-label">
+                  UPI ID
+                  <input
+                    type="text"
+                    value={upiId}
+                    onChange={e => setUpiId(e.target.value)}
+                    placeholder="e.g. name@upi or phone@paytm"
+                    className="checkout-otp-input"
+                    autoFocus
+                  />
+                </label>
+                {upiError && <div className="notice error">{upiError}</div>}
+                <button
+                  type="button"
+                  className="checkout-page-primary"
+                  onClick={() => void handleUpiConfirm()}
+                  disabled={!upiId.trim()}
+                >
+                  Pay Rs {payablePrice}
+                </button>
+                <small style={{ textAlign: "center", color: "#888", marginTop: "8px" }}>
+                  <LockKeyhole size={12} style={{ verticalAlign: "middle" }} /> Secured payment
+                </small>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ---- Render: Address ----
+  if (checkoutStep === "address") {
+    return (
+      <section className="checkout-page-shell">
+        <header className="checkout-page-header">
+          <button type="button" onClick={() => navigate(product ? `/shop/product/${encodeURIComponent(product.product_id)}` : "/shop")}>
+            <ArrowLeft size={16} />
+            Back
+          </button>
+          <div>
+            <span className="eyebrow">Step 1 of 3</span>
+            <h1>Delivery address</h1>
+          </div>
+        </header>
+        <nav className="checkout-progress" aria-label="Checkout steps">
+          <span className="active"><b>1</b> Address</span>
+          <span><b>2</b> Payment</span>
+          <span><b>3</b> Confirm</span>
+        </nav>
+
+        <div className="checkout-address-form">
+          <div className="address-form-grid">
+            {([
+              { key: "name", label: "Full name", placeholder: "Your name", type: "text" },
+              { key: "phone", label: "Phone number", placeholder: "10-digit mobile", type: "tel" },
+              { key: "flat", label: "House / flat / floor", placeholder: "e.g. 12B, 2nd floor", type: "text" },
+              { key: "area", label: "Area / street", placeholder: "Colony, street name", type: "text" },
+              { key: "city", label: "City", placeholder: "Mumbai, Delhi...", type: "text" },
+              { key: "pincode", label: "Pincode", placeholder: "6-digit pincode", type: "text" }
+            ] as const).map(({ key, label, placeholder, type }) => (
+              <label key={key} className="address-field">
+                <span>{label}</span>
+                <input
+                  type={type}
+                  value={address[key]}
+                  onChange={e => setAddress(prev => ({ ...prev, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  className={addressErrors[key] ? "error" : ""}
+                />
+                {addressErrors[key] && <small className="field-error">{addressErrors[key]}</small>}
+              </label>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="checkout-page-primary"
+            onClick={handleAddressNext}
+            disabled={loading}
+          >
+            Continue to Payment
+          </button>
         </div>
       </section>
     );
@@ -289,7 +573,6 @@ export function CheckoutPage({ buyerId, language }: Props) {
         <span><b>3</b> Place order</span>
       </nav>
       <p className="checkout-continuity-note">
-        <ShieldCheck size={15} />
         Your item, payment choice, and buyer protection stay visible until you place the order.
       </p>
 
@@ -331,8 +614,8 @@ export function CheckoutPage({ buyerId, language }: Props) {
             </div>
 
             <div className="checkout-protection-line">
-              <ShieldCheck size={17} />
               <div>
+                <span className="checkout-protection-badge">Guarantee Active</span>
                 <strong>{contract ? copy.protectionLocked : copy.protectionPending}</strong>
                 <p>{primaryProtection}</p>
               </div>
@@ -348,74 +631,22 @@ export function CheckoutPage({ buyerId, language }: Props) {
               </div>
             </div>
 
-            <div className={`checkout-payment-recommendation ${prepaidRecommended ? "prepaid" : "cod"}`}>
-              <div>
-                <span>{copy.sarthiRecommendation}</span>
-                <strong>{recommendedPaymentLabel}</strong>
-                <p>{paymentAssist?.summary ?? (prepaidRecommended ? copy.payOnlineBody : copy.codBody)}</p>
-              </div>
-              <div className="checkout-recommendation-facts" aria-label={copy.whatSarthiChecked}>
-                {decisionFacts.map((fact) => (
-                  <span key={fact.label}>
-                    <b>{fact.value}</b>
-                    <small>{fact.label}</small>
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {(paymentSafetyChecks.length > 0 || paymentAgentActions.length > 0) && (
-              <div className="checkout-payment-proofline" aria-label={copy.paymentConfidence}>
-                {paymentSafetyChecks.map((check) => (
-                  <span key={check.key} className={check.status}>
-                    {check.status === "passed" ? <CheckCircle2 size={13} /> : <ShieldCheck size={13} />}
-                    {check.label}
-                  </span>
-                ))}
-                {paymentAgentActions.map((action) => (
-                  <span key={action.label} className={action.done ? "passed" : "watch"}>
-                    {action.done ? <CheckCircle2 size={13} /> : <ShieldCheck size={13} />}
-                    {action.label}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <div className="checkout-payment-options-page" aria-label={copy.paymentOptions}>
-              <PaymentChoiceCard
-                mode="prepaid"
-                selected={paymentMode === "prepaid"}
-                recommended={prepaidRecommended}
-                disabled={!checkout}
-                title={t(language, "payOnline")}
-                badge={prepaidRecommended ? copy.recommended : copy.available}
-                body={prepaidRecommended ? benefitLine(paymentAssist, language, copy) : copy.onlineAvailableButNotPushed}
-                onSelect={setPaymentMode}
-              />
-              <PaymentChoiceCard
-                mode="cod"
-                selected={paymentMode === "cod"}
-                recommended={!prepaidRecommended}
-                disabled={!checkout}
-                title={t(language, "cashOnDelivery")}
-                badge={!prepaidRecommended ? copy.recommended : copy.backup}
-                body={!prepaidRecommended ? copy.codRecommendedReason : copy.codBackupReason}
-                onSelect={setPaymentMode}
-              />
-            </div>
-
-            {paymentAssist && paymentAssist.offers.length > 0 && (
-              <div className="checkout-offer-strip" aria-label={copy.offersChecked}>
-                <span>{copy.offersChecked}</span>
-                <div>
-                  {paymentAssist.offers.slice(0, 3).map((offer) => (
-                    <b key={offer.offer_id} className={offer.eligible ? "eligible" : ""}>
-                      {offer.label}: {offer.eligible && offer.amount_rupees > 0 ? `Rs ${offer.amount_rupees}` : copy.notEligible}
-                    </b>
-                  ))}
-                </div>
-              </div>
-            )}
+            <PaymentCoachPanel
+              paymentAssist={paymentAssist}
+              paymentMode={paymentMode}
+              onSelect={setPaymentMode}
+              disabled={!checkout}
+              prepaidRecommended={prepaidRecommended}
+              decisionFacts={decisionFacts}
+              darkPatternShield={darkPatternShield}
+              checkoutDecision={checkoutDecision}
+              contractLocked={Boolean(contract)}
+              totalBenefit={totalBenefit}
+              rewardPoints={rewardPoints}
+              codCharge={paymentEconomics?.cod_extra_charge_rupees ?? 0}
+              copy={copy}
+              language={language}
+            />
           </section>
 
           <section className="checkout-step-card checkout-wearer-page">
@@ -464,11 +695,31 @@ export function CheckoutPage({ buyerId, language }: Props) {
                 <strong>{copy.protectionLocked}</strong>
                 <p>{contract.contract.summary}</p>
                 {protectionItems.length > 0 && (
-                  <ul>
-                    {protectionItems.map((item) => (
-                      <li key={`${item.dimension}-${item.claim}`}>{item.claim}</li>
-                    ))}
-                  </ul>
+                  <table className="checkout-protection-table">
+                    <thead>
+                      <tr>
+                        <th>Guarantee</th>
+                        <th>Coverage details</th>
+                        <th>Lock status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {protectionItems.map((item) => {
+                        const statusClass = (item.status || item.confidence || "").toLowerCase();
+                        return (
+                          <tr key={`${item.dimension}-${item.claim}`} className={`status-${statusClass}`}>
+                            <td className="col-guarantee">{labelize(item.dimension)}</td>
+                            <td className="col-claim">{item.claim}</td>
+                            <td className="col-status">
+                              <span className={`status-pill status-pill--${statusClass}`}>
+                                {item.status ? labelize(item.status) : labelize(item.confidence)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
             )}
@@ -514,8 +765,9 @@ export function CheckoutPage({ buyerId, language }: Props) {
               <b>{selectedPaymentBenefit}</b>
             </div>
             <div className="checkout-summary-safety">
-              <span><ShieldCheck size={14} /> {copy.trustChecked}</span>
-              <span><Gift size={14} /> {copy.protectionLocked}</span>
+              <span className="safety-tag safety-tag--trust">{copy.trustChecked}</span>
+              <span className="safety-tag safety-tag--protection">{contract ? copy.protectionLocked : copy.protectionPending}</span>
+              <span className="safety-tag safety-tag--payment">{checkoutDecision?.payment_choice.message ?? copy.noForcedPayment}</span>
             </div>
             <button
               type="button"
@@ -535,6 +787,271 @@ export function CheckoutPage({ buyerId, language }: Props) {
       </div>
     </section>
   );
+}
+
+function PaymentCoachPanel({
+  paymentAssist,
+  paymentMode,
+  onSelect,
+  disabled,
+  prepaidRecommended,
+  decisionFacts,
+  darkPatternShield,
+  checkoutDecision,
+  contractLocked,
+  totalBenefit,
+  rewardPoints,
+  codCharge,
+  copy,
+  language
+}: {
+  paymentAssist: PaymentAssist | null;
+  paymentMode: "prepaid" | "cod";
+  onSelect: (mode: "prepaid" | "cod") => void;
+  disabled: boolean;
+  prepaidRecommended: boolean;
+  decisionFacts: Array<{ label: string; value: string }>;
+  darkPatternShield: PaymentAssist["dark_pattern_shield"] | null;
+  checkoutDecision: PaymentAssist["checkout_confidence"] | null;
+  contractLocked: boolean;
+  totalBenefit: number;
+  rewardPoints: number;
+  codCharge: number;
+  copy: CheckoutPageCopy;
+  language: LanguageCode;
+}) {
+  const saving = totalBenefit > 0 ? totalBenefit : 38;
+  const pts = rewardPoints > 0 ? rewardPoints : 25;
+  const codFee = codCharge > 0 ? codCharge : 0;
+
+  return (
+    <div className="pcp-root" aria-label="Payment method">
+
+      {/* PREPAID CARD (Pay Online) */}
+      <button
+        type="button"
+        className={`pcp-card pcp-card--prepaid ${paymentMode === "prepaid" ? "pcp-card--active" : ""}`}
+        onClick={() => onSelect("prepaid")}
+        disabled={disabled}
+        aria-pressed={paymentMode === "prepaid"}
+      >
+        <div className="pcp-card__indicator" />
+        <div className="pcp-card__body">
+          <div className="pcp-card__label-row">
+            <span className="pcp-card__mode">Pay online (UPI, Card, Netbanking)</span>
+            {prepaidRecommended && <span className="pcp-badge pcp-badge--best">Best choice</span>}
+          </div>
+          
+          <div className="pcp-card__trust-list">
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Instant Refund Guarantee: Refund credited to source within 2 hours of return pickup.</span>
+            </div>
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Multi-Bank Protection: Auto-routes transaction to bypass network lags or bank server failures.</span>
+            </div>
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Save Rs {saving} instantly on this checkout + earn {pts} Sarthi points.</span>
+            </div>
+          </div>
+        </div>
+        <div className="pcp-card__radio" />
+      </button>
+
+      {/* CASH ON DELIVERY CARD */}
+      <button
+        type="button"
+        className={`pcp-card pcp-card--cod ${paymentMode === "cod" ? "pcp-card--active" : ""}`}
+        onClick={() => onSelect("cod")}
+        disabled={disabled}
+        aria-pressed={paymentMode === "cod"}
+      >
+        <div className="pcp-card__indicator" />
+        <div className="pcp-card__body">
+          <div className="pcp-card__label-row">
+            <span className="pcp-card__mode">Cash on delivery (COD)</span>
+            {codFee > 0 && <span className="pcp-badge pcp-badge--warn">+Rs {codFee} handling fee</span>}
+          </div>
+          
+          <div className="pcp-card__trust-list">
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Pay only when your item is delivered.</span>
+            </div>
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>UPI/Cash accepted at door. Note: No online discount or reward points applied.</span>
+            </div>
+          </div>
+        </div>
+        <div className="pcp-card__radio" />
+      </button>
+
+      {/* Prepaid switch micro-nudge */}
+      {paymentMode === "cod" && prepaidRecommended && (
+        <div className="pcp-nudge-bar">
+          <span>Switch to Pay online to save Rs {saving} instantly + unlock instant refund promise.</span>
+          <button type="button" className="pcp-nudge-cta" onClick={() => onSelect("prepaid")} disabled={disabled}>
+            Switch to Pay Online
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function paymentModeLabel(choice: PaymentAssistChoice, language: LanguageCode) {
+  return choice.mode === "prepaid" ? t(language, "payOnline") : t(language, "cashOnDelivery");
+}
+
+function fallbackPaymentFacts(
+  choice: PaymentAssistChoice,
+  totalBenefit: number,
+  rewardPoints: number,
+  codCharge: number,
+  copy: CheckoutPageCopy
+): NonNullable<PaymentAssistChoice["quick_facts"]> {
+  if (choice.mode === "prepaid") {
+    const unlocked = choice.recommended && totalBenefit > 0;
+    return [
+      {
+        key: "saving",
+        label: "Save",
+        value: unlocked ? `Rs ${totalBenefit}` : copy.notUnlocked,
+        status: unlocked ? "positive" : "warning",
+        detail: unlocked ? "Offer saving is shown after trust and price checks." : choice.next_step
+      },
+      {
+        key: "reward",
+        label: "Reward",
+        value: unlocked ? `${rewardPoints} pts` : "Pending",
+        status: unlocked ? "positive" : "neutral",
+        detail: unlocked ? "Reward points are estimated for this checkout." : copy.onlineAvailableButNotPushed
+      },
+      {
+        key: "refund",
+        label: "Refund",
+        value: "Locked",
+        status: "positive",
+        detail: "Return and refund expectations are locked before payment."
+      }
+    ];
+  }
+
+  return [
+    {
+      key: "pay_later",
+      label: "Pay",
+      value: "On delivery",
+      status: "neutral",
+      detail: "Cash payment remains open for buyer comfort."
+    },
+    {
+      key: "charge",
+      label: "Charge",
+      value: codCharge > 0 ? `Rs ${codCharge}` : "Rs 0",
+      status: codCharge > 0 ? "warning" : "positive",
+      detail: codCharge > 0 ? "The COD charge is disclosed before order placement." : "No COD charge is added here."
+    },
+    {
+      key: "choice",
+      label: "Choice",
+      value: "Not forced",
+      status: "positive",
+      detail: copy.noForcedPayment
+    }
+  ];
+}
+
+function fallbackPaymentChoices(
+  prepaidRecommended: boolean,
+  totalBenefit: number,
+  rewardPoints: number,
+  codCharge: number,
+  copy: CheckoutPageCopy
+): PaymentAssistChoice[] {
+  return [
+    {
+      mode: "prepaid",
+      label: "Pay online",
+      recommended: prepaidRecommended,
+      enabled: true,
+      confidence_score: prepaidRecommended ? 70 : 50,
+      headline: prepaidRecommended ? copy.payOnlineTitle : copy.onlineAvailableButNotPushed,
+      one_line: prepaidRecommended ? copy.payOnlineBody : copy.codBody,
+      primary_benefit: prepaidRecommended && totalBenefit > 0 ? `Rs ${totalBenefit} + ${rewardPoints} ${copy.points}` : copy.notUnlocked,
+      buyer_outcome: prepaidRecommended ? copy.payOnlineBody : copy.onlineAvailableButNotPushed,
+      marketplace_outcome: copy.paymentImpactFallback,
+      risk_label: prepaidRecommended ? copy.onlineSafe : copy.codSafer,
+      cta: prepaidRecommended ? t("english", "payOnline") : copy.backup,
+      quick_facts: [
+        {
+          key: "saving",
+          label: "Save",
+          value: prepaidRecommended && totalBenefit > 0 ? `Rs ${totalBenefit}` : copy.notUnlocked,
+          status: prepaidRecommended ? "positive" : "warning",
+          detail: prepaidRecommended ? copy.payOnlineBody : copy.onlineAvailableButNotPushed
+        },
+        {
+          key: "reward",
+          label: "Reward",
+          value: prepaidRecommended && rewardPoints > 0 ? `${rewardPoints} pts` : "Pending",
+          status: prepaidRecommended ? "positive" : "neutral",
+          detail: prepaidRecommended ? "Rewards are estimated before order placement." : copy.codRecommendedReason
+        },
+        {
+          key: "refund",
+          label: "Refund",
+          value: "Locked",
+          status: "positive",
+          detail: "Return and refund expectations are locked before payment."
+        }
+      ],
+      checks: [],
+      next_step: prepaidRecommended ? copy.payOnlineBody : copy.codRecommendedReason
+    },
+    {
+      mode: "cod",
+      label: "Cash on delivery",
+      recommended: !prepaidRecommended,
+      enabled: true,
+      confidence_score: prepaidRecommended ? 64 : 72,
+      headline: prepaidRecommended ? copy.codStillOpen : copy.codTitle,
+      one_line: codCharge > 0 ? `Rs ${codCharge} ${copy.codCharge}` : copy.codStillOpen,
+      primary_benefit: codCharge > 0 ? `Rs ${codCharge} ${copy.codCharge}` : copy.codStillOpen,
+      buyer_outcome: copy.codRecommendedReason,
+      marketplace_outcome: copy.paymentImpactFallback,
+      risk_label: copy.noForcedPayment,
+      cta: t("english", "cashOnDelivery"),
+      quick_facts: [
+        {
+          key: "pay_later",
+          label: "Pay",
+          value: "On delivery",
+          status: "neutral",
+          detail: "Cash payment remains open for buyer comfort."
+        },
+        {
+          key: "charge",
+          label: "Charge",
+          value: codCharge > 0 ? `Rs ${codCharge}` : "Rs 0",
+          status: codCharge > 0 ? "warning" : "positive",
+          detail: codCharge > 0 ? "The COD charge is shown before order placement." : "No COD charge is added here."
+        },
+        {
+          key: "choice",
+          label: "Choice",
+          value: "Not forced",
+          status: "positive",
+          detail: copy.noForcedPayment
+        }
+      ],
+      checks: [],
+      next_step: copy.codBackupReason
+    }
+  ];
 }
 
 function PaymentChoiceCard({
@@ -575,6 +1092,110 @@ function PaymentChoiceCard({
   );
 }
 
+function DarkPatternShieldPanel({ shield }: { shield: NonNullable<PaymentAssist["dark_pattern_shield"]> }) {
+  const issues = shield.checks.filter((check) => check.status !== "clear");
+  const visibleChecks = issues.length
+    ? issues.slice(0, 4)
+    : shield.checks
+        .filter((check) => ["repeating_countdown_timer", "drip_pricing", "forced_prepaid", "hidden_return_conditions"].includes(check.key))
+        .slice(0, 4);
+  return (
+    <section className={`checkout-compliance-shield ${shield.status}`} aria-label="Dark pattern disruptor">
+      <div className="checkout-compliance-head">
+        <span className="checkout-compliance-icon">
+          {shield.status === "clear" ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
+        </span>
+        <div>
+          <span>{shield.status === "clear" ? "Pressure check" : "Checkout warning"}</span>
+          <strong>{shield.headline}</strong>
+          <p>{shield.plain_copy}</p>
+        </div>
+        <b>{shield.risk_count === 0 ? "Clear" : `${shield.risk_count} risks`}</b>
+      </div>
+      {visibleChecks.length > 0 && (
+        <div className="checkout-compliance-checks">
+          {visibleChecks.map((check) => (
+            <span key={`${check.key}-${check.product_id ?? "cart"}`} className={check.status}>
+              {check.status === "clear" ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+              {shortDarkPatternLabel(check.key, check.label)}
+            </span>
+          ))}
+        </div>
+      )}
+      {issues.length > 0 && (
+        <details className="checkout-compliance-details">
+          <summary>Why Sarthi slowed this down</summary>
+          <ul>
+            {issues.slice(0, 5).map((check) => (
+              <li key={`${check.key}-detail-${check.product_id ?? "cart"}`}>
+                <strong>{check.label}</strong>
+                <span>{check.buyer_copy}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function CheckoutConfidencePanel({
+  decision,
+  contractLocked
+}: {
+  decision: NonNullable<PaymentAssist["checkout_confidence"]>;
+  contractLocked: boolean;
+}) {
+  const watchFactors = decision.factors.filter((factor) => factor.status !== "passed");
+  const visibleFactors = (watchFactors.length ? watchFactors : decision.factors).slice(0, 4);
+  return (
+    <section className={`checkout-confidence-panel ${decision.recommended_mode}`} aria-label="Checkout confidence">
+      <div className="checkout-confidence-copy">
+        <span>Payment guidance</span>
+        <strong>{decision.headline}</strong>
+        <p>{decision.buyer_next_step}</p>
+      </div>
+      <div className="checkout-confidence-factors" aria-label="Checkout confidence factors">
+        {visibleFactors.map((factor) => (
+          <span key={factor.key} className={factor.status}>
+            {factor.status === "passed" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+            {factor.label}
+          </span>
+        ))}
+      </div>
+      <div className="checkout-safeguard-list" aria-label="Checkout safeguards">
+        {decision.safeguards.map((item) => {
+          const status = item.key === "refund_lock" ? contractLocked ? "passed" : "watch" : item.status;
+          const detail = item.key === "refund_lock" && contractLocked
+            ? "Refund expectation is locked before payment."
+            : item.detail;
+          return (
+            <span key={item.key} className={status}>
+              {item.key === "refund_lock" ? <LockKeyhole size={13} /> : status === "passed" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+              <b>{item.label}</b>
+              <small>{detail}</small>
+            </span>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function shortDarkPatternLabel(key: string, fallback: string) {
+  const labels: Record<string, string> = {
+    repeating_countdown_timer: "Timer stable",
+    fake_scarcity: "Scarcity checked",
+    sudden_price_hike_before_discount: "Price history checked",
+    drip_pricing: "No hidden fee",
+    basket_sneaking: "No add-on sneaked",
+    forced_prepaid: "Payment choice open",
+    misleading_only_today_offer: "Offer wording checked",
+    hidden_return_conditions: "Return terms visible"
+  };
+  return labels[key] ?? fallback;
+}
+
 function wearerLabelFor(value: WearerMode, language: LanguageCode) {
   if (value === "mother") return t(language, "mother");
   if (value === "sister") return t(language, "sister");
@@ -604,9 +1225,9 @@ function checkoutProductImage(product: Product) {
   return source;
 }
 
-type CheckoutPageCopy = ReturnType<typeof checkoutPageCopy>;
+type CheckoutPageCopy = Record<string, string>;
 
-function checkoutPageCopy(language: LanguageCode) {
+function checkoutPageCopy(language: LanguageCode): CheckoutPageCopy {
   if (language === "hindi") {
     return {
       title: "Checkout",
@@ -620,14 +1241,23 @@ function checkoutPageCopy(language: LanguageCode) {
       reviewItemTitle: "Item review karo",
       reviewItemBody: "Size, seller aur price confirm karke payment choose karo.",
       paymentMethodTitle: "Payment method",
-      paymentMethodBody: "Available options me se ek choose karo. Sarthi recommendation side note hai, final choice aapki hai.",
+      paymentMethodBody: "Pay Online ya COD choose karo. Mode force nahi hota.",
       sarthiDecision: "Sarthi decision",
       sarthiRecommendation: "Sarthi recommendation",
+      checkoutAdvice: "Checkout advice",
       payOnlineTitle: "Pay online yahan safe lag raha hai",
       codTitle: "Is order ke liye COD safer hai",
       payOnlineBody: "Trust, price aur return risk checks pass hue. Online pay par reward mil sakta hai.",
       codBody: "Kuch proof weak hai, isliye Sarthi abhi COD suggest karta hai.",
       youGet: "Aapko mil sakta hai",
+      onlineBenefit: "Online benefit",
+      notUnlocked: "Not unlocked",
+      codCharge: "COD charge",
+      whyThisRecommendation: "Why this recommendation",
+      buyerBenefit: "Buyer benefit",
+      marketplaceBenefit: "Marketplace benefit",
+      choiceControl: "Payment choice",
+      paymentImpactFallback: "Pay online push tabhi dikhta hai jab buyer trust checks pass hote hain.",
       safestNow: "Abhi safest",
       points: "Sarthi points",
       codStillOpen: "COD bhi available hai",
@@ -642,6 +1272,19 @@ function checkoutPageCopy(language: LanguageCode) {
       notEligible: "not eligible",
       whatSarthiChecked: "Sarthi ne kya check kiya",
       paymentConfidence: "Payment confidence checks",
+      paymentCoachLabel: "Interactive payment guide",
+      sarthiRecommends: "Sarthi recommends",
+      scoreLabel: "score",
+      yourChoice: "Your choice",
+      benefitLabel: "Benefit",
+      riskLabel: "Risk",
+      nextStepLabel: "Next step",
+      tapCheck: "Tap a check",
+      checksPassed: "checks passed",
+      noRushSignal: "Price proof signal",
+      clear: "Clear",
+      risks: "risks",
+      fullCheckoutProof: "Full checkout proof",
       viewTrustDetails: "Trust, price aur protection details",
       trustScore: "Trust score",
       priceProof: "Price proof",
@@ -662,6 +1305,7 @@ function checkoutPageCopy(language: LanguageCode) {
       benefit: "Benefit",
       onlineSafe: "Online pay safe",
       codSafer: "COD safer",
+      noForcedPayment: "No forced payment mode",
       lockingProtection: "Protection lock ho raha hai...",
       protectionMissing: "Protection lock ke bina order disabled hai.",
       orderPlacedTitle: "Order placed safely",
@@ -683,14 +1327,23 @@ function checkoutPageCopy(language: LanguageCode) {
       reviewItemTitle: "Review item",
       reviewItemBody: "Size, seller aur price confirm karke payment choose karo.",
       paymentMethodTitle: "Payment method",
-      paymentMethodBody: "Available options me se ek choose karo. Sarthi recommendation side note hai, final choice aapki hai.",
+      paymentMethodBody: "Pay Online ya COD choose karo. Mode force nahi hota.",
       sarthiDecision: "Sarthi decision",
       sarthiRecommendation: "Sarthi recommendation",
+      checkoutAdvice: "Checkout advice",
       payOnlineTitle: "Pay online yahan safe lag raha hai",
       codTitle: "Is order ke liye COD safer hai",
       payOnlineBody: "Trust, price aur return risk checks pass hue. Online pay par reward mil sakta hai.",
       codBody: "Kuch proof weak hai, isliye Sarthi abhi COD suggest karta hai.",
       youGet: "You can get",
+      onlineBenefit: "Online benefit",
+      notUnlocked: "Not unlocked",
+      codCharge: "COD charge",
+      whyThisRecommendation: "Why this recommendation",
+      buyerBenefit: "Buyer benefit",
+      marketplaceBenefit: "Marketplace benefit",
+      choiceControl: "Payment choice",
+      paymentImpactFallback: "Pay online push tabhi dikhta hai jab buyer trust checks pass hote hain.",
       safestNow: "Safest now",
       points: "Sarthi points",
       codStillOpen: "COD bhi available hai",
@@ -705,6 +1358,19 @@ function checkoutPageCopy(language: LanguageCode) {
       notEligible: "not eligible",
       whatSarthiChecked: "What Sarthi checked",
       paymentConfidence: "Payment confidence checks",
+      paymentCoachLabel: "Interactive payment guide",
+      sarthiRecommends: "Sarthi recommends",
+      scoreLabel: "score",
+      yourChoice: "Your choice",
+      benefitLabel: "Benefit",
+      riskLabel: "Risk",
+      nextStepLabel: "Next step",
+      tapCheck: "Tap a check",
+      checksPassed: "checks passed",
+      noRushSignal: "Price proof signal",
+      clear: "Clear",
+      risks: "risks",
+      fullCheckoutProof: "Full checkout proof",
       viewTrustDetails: "Trust, price aur protection details",
       trustScore: "Trust score",
       priceProof: "Price proof",
@@ -725,6 +1391,7 @@ function checkoutPageCopy(language: LanguageCode) {
       benefit: "Benefit",
       onlineSafe: "Online pay safe",
       codSafer: "COD safer",
+      noForcedPayment: "No forced payment mode",
       lockingProtection: "Protection lock ho raha hai...",
       protectionMissing: "Protection lock ke bina order disabled hai.",
       orderPlacedTitle: "Order placed safely",
@@ -745,14 +1412,23 @@ function checkoutPageCopy(language: LanguageCode) {
     reviewItemTitle: "Review item",
     reviewItemBody: "Confirm the seller, size, price, and protection before payment.",
     paymentMethodTitle: "Payment method",
-    paymentMethodBody: "Choose how you want to pay. Sarthi's recommendation is shown as a helper, not a separate step.",
+    paymentMethodBody: "Choose Pay online or COD. No forced mode.",
     sarthiDecision: "Sarthi decision",
     sarthiRecommendation: "Sarthi recommendation",
+    checkoutAdvice: "Checkout advice",
     payOnlineTitle: "Pay online looks safe here",
     codTitle: "COD is safer for this order",
     payOnlineBody: "Trust, price, and return-risk checks passed. Online pay can unlock rewards.",
     codBody: "Some proof is still weak, so Sarthi recommends COD for now.",
     youGet: "You can get",
+    onlineBenefit: "Online benefit",
+    notUnlocked: "Not unlocked",
+    codCharge: "COD charge",
+    whyThisRecommendation: "Why this recommendation",
+    buyerBenefit: "Buyer benefit",
+    marketplaceBenefit: "Marketplace benefit",
+    choiceControl: "Payment choice",
+    paymentImpactFallback: "Pay online is shown only when buyer trust checks pass first.",
     safestNow: "Safest now",
     points: "Sarthi points",
     codStillOpen: "COD is still available",
@@ -767,6 +1443,19 @@ function checkoutPageCopy(language: LanguageCode) {
     notEligible: "not eligible",
     whatSarthiChecked: "What Sarthi checked",
     paymentConfidence: "Payment confidence checks",
+    paymentCoachLabel: "Interactive payment guide",
+    sarthiRecommends: "Sarthi recommends",
+    scoreLabel: "score",
+    yourChoice: "Your choice",
+    benefitLabel: "Benefit",
+    riskLabel: "Risk",
+    nextStepLabel: "Next step",
+    tapCheck: "Tap a check",
+    checksPassed: "checks passed",
+    noRushSignal: "Price proof signal",
+    clear: "Clear",
+    risks: "risks",
+    fullCheckoutProof: "Full checkout proof",
     viewTrustDetails: "Trust, price, and protection details",
     trustScore: "Trust score",
     priceProof: "Price proof",
@@ -787,10 +1476,17 @@ function checkoutPageCopy(language: LanguageCode) {
     benefit: "Benefit",
     onlineSafe: "Online pay safe",
     codSafer: "COD safer",
+    noForcedPayment: "No forced payment mode",
     lockingProtection: "Locking protection...",
     protectionMissing: "Order is disabled until protection is locked.",
     orderPlacedTitle: "Order placed safely",
     prepaidOrderBody: "Pay online selected. Rewards update after delivery.",
     codOrderBody: "COD selected. Sarthi kept trust first."
   };
+}
+
+function labelize(value: string | null | undefined) {
+  return String(value ?? "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

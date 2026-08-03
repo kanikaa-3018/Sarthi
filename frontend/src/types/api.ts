@@ -24,7 +24,43 @@ export type Product = {
   taxonomy_attributes?: Array<{ field_name: string; display_name: string; value: string }>;
   seller_snapshot?: Record<string, number | string | boolean>;
   fulfillment?: Record<string, number | string | boolean>;
+  media_evidence?: ProductMediaEvidence;
+  quality_signals?: ProductQualitySignals;
   buyer_trust?: ProductFeedTrust;
+};
+
+export type ProductMediaEvidence = {
+  image_count: number;
+  angle_labels: string[];
+  verification_status: "verified_gallery" | "limited_gallery" | string;
+  source: string;
+  issues: string[];
+  warnings?: string[];
+  quality_score?: number;
+  clarity_score?: number;
+  gallery_readiness?: "complete" | "needs_more_media" | string;
+  human_model_required?: boolean;
+  required_assets?: Array<{
+    key: string;
+    label: string;
+    status: "present" | "linked" | "missing" | "not_required" | string;
+    required: boolean;
+    detail: string;
+  }>;
+  missing_angles?: string[];
+  reviewer_photo_count?: number;
+  buyer_copy?: string;
+  checked_at: string;
+};
+
+export type ProductQualitySignals = {
+  size_chart_available: boolean;
+  measurement_tolerance_cm: number | null;
+  fabric_proof_status: "available" | "requested" | "catalog_only" | string;
+  color_proof_status: "available" | "daylight_check_needed" | string;
+  return_window_days: number;
+  cod_available: boolean;
+  proof_priority: string[];
 };
 
 export type ProductFeedTrust = {
@@ -101,12 +137,25 @@ export type RankingResult = {
       uncertainty_penalty: number;
       fair_start_boost?: number;
     };
+    fair_start_policy?: {
+      verification_gate: "passed" | "pending" | "restricted" | string;
+      eligible: boolean;
+      limited_evidence: boolean;
+      proof_first_ranking: boolean;
+      boost: number;
+      score_cap: number;
+      delivered_orders_90d: number;
+      kept_rate: number | null;
+      confidence_growth: string;
+      buyer_label: string;
+    };
     score_breakdown?: {
       formula: string;
       confidence_source?: AiAnswerProvider;
       prompt_version?: string;
       score: number;
       score_percent: number;
+      raw_adjusted_score?: number;
       adjusted_score: number;
       adjusted_score_percent: number;
       weight_sum: number;
@@ -121,6 +170,7 @@ export type RankingResult = {
       adjustments: {
         uncertainty_penalty: number;
         fair_start_boost: number;
+        score_cap?: number;
       };
       scoring_context: {
         item_category: string;
@@ -193,6 +243,22 @@ export type KnowledgeGraphEdge = {
   fact_ids: string[];
 };
 
+export type KnowledgeGraphEvidencePath = {
+  path_id: "product_score_path" | "buyer_fit_path" | "offer_timer_path" | string;
+  title: string;
+  audience: "buyer" | "admin" | string;
+  summary: string;
+  status: string;
+  node_ids: string[];
+  edge_ids: string[];
+  fact_ids: string[];
+  steps: Array<{
+    label: string;
+    node_id: string;
+    detail: string;
+  }>;
+};
+
 export type SellerGraphContext = {
   product: Product;
   seller: {
@@ -259,6 +325,7 @@ export type ClusterKnowledgeGraph = {
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   seller_context: SellerGraphContext[];
+  evidence_paths?: KnowledgeGraphEvidencePath[];
   fact_ids: string[];
   chat_suggestions: string[];
 };
@@ -269,8 +336,11 @@ export type KnowledgeGraphAnswer = {
   summary: string;
   reasons: string[];
   caution?: string | null;
+  unsupported?: boolean;
+  support_reason?: string;
   matched_node_ids: string[];
   highlighted_edge_ids: string[];
+  matched_path_ids?: string[];
   fact_ids: string[];
   follow_up_questions: string[];
 };
@@ -279,6 +349,7 @@ export type KnowledgeGraphChatResponse = {
   trace_id: string;
   answer: KnowledgeGraphAnswer;
   graph_path: GraphPath;
+  evidence_paths?: KnowledgeGraphEvidencePath[];
   agent?: {
     provider: AiAnswerProvider;
   };
@@ -373,6 +444,8 @@ export type ProductDetailResponse = {
     fact_ids: string[];
   }>;
   trust_state: ProductTrustState;
+  truth_card: SkuTruthCard;
+  fit_confidence_layer: FitConfidenceLayer;
   keep_confidence: KeepConfidenceResponse;
   graph_paths: GraphPath[];
   privacy: PrivacySummary;
@@ -397,6 +470,127 @@ export type EvidenceGap = {
   recommended_proof_type: ProofCoverageItem["recommended_proof_type"];
   coverage?: ProofCoverageItem;
   fact_ids?: string[];
+};
+
+export type TruthCardTone = "positive" | "watch" | "risk" | "low" | "medium" | "high" | string;
+
+export type SkuTruthCardFact = {
+  key: string;
+  label: string;
+  value?: string | number | null;
+  detail: string;
+  action?: string;
+  severity?: "high" | "medium" | "low" | string;
+  tone?: TruthCardTone;
+  fact_ids: string[];
+};
+
+export type SkuTruthCard = {
+  title: string;
+  status: ProductTrustState["status"];
+  confidence: ProductTrustState["confidence"];
+  can_recommend: boolean;
+  headline: string;
+  guidance: string;
+  verified: SkuTruthCardFact[];
+  missing: SkuTruthCardFact[];
+  changed_recently: SkuTruthCardFact[];
+  score_reason: {
+    band: ProductTrustState["confidence"];
+    headline: string;
+    summary: string;
+    positive: string[];
+    caution: string[];
+    fact_ids: string[];
+  };
+  pending_seller_proof: Array<{
+    request_id: string;
+    attribute: ProofAttribute;
+    label: string;
+    status: ProofRequest["status"];
+    demand: number;
+    detail: string;
+    fact_ids: string[];
+  }>;
+  unsafe_claims: Array<{
+    claim: string;
+    reason: string;
+    action: string;
+    severity: "high" | "medium" | "low" | string;
+    fact_ids: string[];
+  }>;
+  primary_action: string;
+  privacy_note: string;
+};
+
+export type FitConfidenceLayer = {
+  selected_size: string;
+  recommended_size: string;
+  fit_subscore: {
+    label: "Runs small" | "True to size" | "Runs loose" | string;
+    score: number;
+    tone: "positive" | "watch" | "risk" | string;
+    summary: string;
+    fact_ids: string[];
+  };
+  size_risk: {
+    level: "low" | "watch" | "risk" | string;
+    title: string;
+    summary: string;
+    selected_size: string;
+    safer_size: string;
+    selected_return_rate: number;
+    safer_return_rate: number | null;
+    fact_ids: string[];
+  };
+  reviewer_fit_summary: {
+    title: string;
+    summary: string;
+    matched_profile_size: string;
+    credible_fit_reviews: number;
+    total_fit_reviews: number;
+    selected_keep_rate: number;
+    safer_keep_rate: number | null;
+    fact_ids: string[];
+  };
+  seller_measurement_proof: {
+    status: "verified" | "submitted" | "missing" | string;
+    label: string;
+    summary: string;
+    proof_type: ProofCoverageItem["recommended_proof_type"] | string;
+    pending_request_id: string | null;
+    fact_ids: string[];
+  };
+  family_profiles: Array<{
+    profile_id: string;
+    label: string;
+    relationship: string;
+    active: boolean;
+    recommended_size: string;
+    recommended_variant_id: string;
+    privacy_scope: string;
+    summary: string;
+  }>;
+  claim_warning: {
+    unsafe: boolean;
+    claim: string;
+    reason: string;
+    action: string;
+    fact_ids: string[];
+  };
+  size_options: Array<{
+    variant_id: string;
+    size: string;
+    delivered_orders: number;
+    kept_orders: number;
+    returns: number;
+    keep_rate: number;
+    return_rate: number;
+    tight_fit_return_rate: number;
+    loose_fit_return_rate: number;
+    fact_ids: string[];
+  }>;
+  privacy_note: string;
 };
 
 export type ProofRequest = {
@@ -435,6 +629,8 @@ export type SkuTruthPassport = {
   open_proof_requests: ProofRequest[];
   conflicts: ProductDetailResponse["conflicts"];
   trust_state: ProductTrustState;
+  truth_card: SkuTruthCard;
+  fit_confidence_layer: FitConfidenceLayer;
   fact_ids: string[];
 };
 
@@ -472,6 +668,55 @@ export type RegretDecisionResponse = {
   missing_proof: EvidenceGap | null;
   proof_request: ProofRequest | null;
   graph_paths: GraphPath[];
+  fact_ids: string[];
+};
+
+export type TrustRunStep = {
+  key: string;
+  label: string;
+  status: "done" | "watch" | "blocked" | string;
+  value: string;
+  summary: string;
+  tools: string[];
+  fact_ids: string[];
+};
+
+export type TrustRunResponse = {
+  run_id: string;
+  trace_id: string;
+  workflow_version: string;
+  buyer_id: string;
+  created_at: string;
+  input_product: Product;
+  recommended_product: Product;
+  recommended_variant: Variant;
+  summary: {
+    headline: string;
+    body: string;
+    confidence: "low" | "medium" | "high" | "blocked";
+    score_percent: number;
+    fact_count: number;
+    seller_count: number;
+    next_step: string;
+  };
+  steps: TrustRunStep[];
+  comparison: CompareResponse;
+  decision: RegretDecisionResponse;
+  sku_truth_passport: SkuTruthPassport;
+  checkout_confidence: CartConfidenceResponse;
+  wishlist: WishlistIntentResponse | null;
+  seller_signal: ProofRequest | null;
+  agent: {
+    mode: string;
+    tools_used: string[];
+    deterministic_fallback: boolean;
+  };
+  privacy: {
+    buyer_profile_shared_with_seller: boolean;
+    seller_receives: string;
+    private_fit_scope: string;
+  };
+  graph_path: GraphPath;
   fact_ids: string[];
 };
 
@@ -572,7 +817,7 @@ export type SystemReadiness = {
   implemented_controls: string[];
   production_connectors: Array<{
     name: string;
-    prototype_source: string;
+    current_source: string;
     production_source: string;
     status: "adapter_required" | "provider_required" | "connected";
   }>;
@@ -712,6 +957,7 @@ export type OfferCheck = {
     captured_at: string;
     fact_id: string;
   } | null;
+  dark_pattern_shield: DarkPatternShield;
   checks: Array<{
     key: "price_history" | "campaign_timer" | "inventory_pressure";
     label: string;
@@ -933,6 +1179,37 @@ export type BuyerProofLedgerItem = {
     confidence: "low" | "medium" | "high";
     reason: string;
   };
+  proof_loop: {
+    title: string;
+    current_step: "waiting_seller" | "admin_review" | "approved" | "needs_more_proof" | string;
+    closed_loop: boolean;
+    aggregate_demand: {
+      buyer_count: number;
+      label: string;
+      buyer_question: string;
+    };
+    seller_task: {
+      label: string;
+      status: "waiting" | "submitted" | string;
+      proof_type: ProofCoverageItem["recommended_proof_type"] | string;
+    };
+    admin_review: {
+      status: "not_submitted" | "submitted" | "verified" | "rejected" | string;
+      reviewed_at: string | null;
+      notes: string | null;
+    };
+    score_update: {
+      before_score: number;
+      after_score: number;
+      lift_points: number;
+      applied: boolean;
+    };
+    buyer_notification: {
+      ready: boolean;
+      message: string;
+    };
+    timeline: Array<{ label: string; done: boolean; at: string | null }>;
+  };
   timeline: Array<{ label: string; done: boolean; at: string | null }>;
 };
 
@@ -960,8 +1237,56 @@ export type PaymentAssistOffer = {
 export type PaymentAssistCheck = {
   key: string;
   label: string;
-  status: "passed" | "watch";
+  status: "passed" | "watch" | "blocked";
   detail: string;
+};
+
+export type PaymentAssistQuickFact = {
+  key: string;
+  label: string;
+  value: string;
+  status: "positive" | "neutral" | "warning" | "blocked" | string;
+  detail: string;
+};
+
+export type PaymentAssistChoice = {
+  mode: "prepaid" | "cod";
+  label: string;
+  recommended: boolean;
+  enabled: boolean;
+  confidence_score: number;
+  headline: string;
+  one_line: string;
+  primary_benefit: string;
+  buyer_outcome: string;
+  marketplace_outcome: string;
+  risk_label: string;
+  cta: string;
+  quick_facts?: PaymentAssistQuickFact[];
+  checks: PaymentAssistCheck[];
+  next_step: string;
+};
+
+export type CheckoutConfidenceDecision = {
+  mode: "prepaid_confident" | "cod_cautious" | string;
+  recommended_mode: "prepaid" | "cod";
+  confidence: "low" | "medium" | "high" | string;
+  headline: string;
+  payment_reason: string;
+  prepaid_reason: string;
+  cod_reason: string;
+  buyer_next_step: string;
+  address_prompt: string;
+  refund_expectation: {
+    locked_before_payment: boolean;
+    message: string;
+  };
+  payment_choice: {
+    forced: boolean;
+    message: string;
+  };
+  safeguards: PaymentAssistCheck[];
+  factors: PaymentAssistCheck[];
 };
 
 export type PaymentAssist = {
@@ -973,9 +1298,23 @@ export type PaymentAssist = {
   total_prepaid_benefit_rupees: number;
   reward_points: number;
   reward_value_rupees: number;
+  payment_economics?: {
+    online_savings_rupees: number;
+    instant_discount_rupees: number;
+    reward_points: number;
+    reward_value_rupees: number;
+    cod_extra_charge_rupees: number;
+    cod_available: boolean;
+    buyer_benefit_copy: string;
+    company_benefit_copy: string;
+    cod_caution_copy: string;
+  };
+  payment_choices?: PaymentAssistChoice[];
   best_offer: PaymentAssistOffer | null;
   offers: PaymentAssistOffer[];
   safety_checks: PaymentAssistCheck[];
+  dark_pattern_shield: DarkPatternShield;
+  checkout_confidence: CheckoutConfidenceDecision;
   buyer_next_step: string;
   agent_actions: Array<{
     label: string;
@@ -1032,11 +1371,13 @@ export type CartConfidenceResponse = {
 };
 
 export type ExpectationContractItem = {
-  dimension: "fit" | "fabric" | "color" | "dispatch" | "offer" | "packaging" | "delivery" | "unknown";
+  dimension: "fit" | "fabric" | "color" | "dispatch" | "offer" | "packaging" | "delivery" | "return" | "unknown";
   claim: string;
   confidence: "unknown" | "weak" | "medium" | "strong" | "low" | "high";
   buyer_action: string;
   fact_ids: string[];
+  source?: string;
+  status?: "locked" | "watch" | "proof_pending" | string;
 };
 
 export type ExpectationContract = {
@@ -1056,6 +1397,41 @@ export type ExpectationContract = {
       raw_private_memory_exposed: boolean;
     };
   };
+  locked_expectations?: {
+    expected_size: string | null;
+    recommended_size: string | null;
+    expected_fabric: string | null;
+    expected_color: string | null;
+    delivery_promise: string | null;
+    return_eligibility: {
+      enabled: boolean;
+      window_days: number;
+      buyer_copy: string;
+    };
+    offer_price_proof: {
+      status: string;
+      latest_price: number | null;
+      reference_price: number | null;
+      price_delta: number | null;
+      buyer_copy: string;
+    };
+  };
+  score_state?: {
+    locked_score_percent?: number;
+    outcome_score_percent?: number;
+    last_outcome_delta_points?: number;
+    last_outcome_status?: string;
+    evidence_strength?: string;
+    delivered_orders_90d?: number;
+    update_rule?: string;
+    last_updated_at?: string;
+  };
+  post_delivery_loop?: {
+    buyer_action: string;
+    kept_effect: string;
+    return_effect: string;
+    seller_visibility: string;
+  };
   created_at: string;
   completed_at: string | null;
   outcome_order_id: string | null;
@@ -1071,6 +1447,7 @@ export type ExpectationContract = {
   buying_for_someone_else?: boolean;
   fit_memory_excluded?: boolean;
   wearer_label?: string | null;
+  seller_root_cause_task_id?: string | null;
   fact_id: string;
 };
 
@@ -1126,6 +1503,29 @@ export type OutcomeResponse = {
     };
   };
   expectation_contract: ExpectationContract | null;
+  score_update?: {
+    before_score_percent: number;
+    after_score_percent: number;
+    delta_points: number;
+    direction: "improved" | "reduced" | "stable" | string;
+    reason: string;
+    buyer_copy: string;
+  } | null;
+  seller_root_cause_task?: {
+    task_id: string;
+    product_id: string;
+    product_title?: string;
+    variant_id: string;
+    dimension: string;
+    attribute: string;
+    buyer_count: number;
+    priority: "high" | "medium" | "low" | string;
+    title: string;
+    rationale: string;
+    seller_action: string;
+    recommended_proof_type: string;
+    buyer_notification_preview: string;
+  } | null;
   graph_sync: {
     available: boolean;
     reason?: string;
@@ -1151,6 +1551,23 @@ export type PrivacySummary = {
   memory_record_count: number;
   used: string[];
   not_used: string[];
+  controls?: Array<{
+    key: string;
+    label: string;
+    enabled: boolean;
+    action: string;
+    detail: string;
+  }>;
+  data_use_panel?: Array<{
+    key: string;
+    label: string;
+    status: string;
+    used_for: string;
+    retention: string;
+  }>;
+  seller_visibility?: string[];
+  admin_visibility?: string[];
+  ai_minimization?: string[];
 };
 
 export type ReviewEvidencePassage = {
@@ -1159,6 +1576,15 @@ export type ReviewEvidencePassage = {
   fact_id: string;
   credibility_weight?: number;
   credibility_flags?: string[];
+  verified_purchase?: boolean;
+  down_weight_reasons?: ReviewDownWeightReason[];
+};
+
+export type ReviewDownWeightReason = {
+  key: string;
+  label: string;
+  detail: string;
+  severity: "low" | "medium" | "high";
 };
 
 export type ReviewCredibilitySummary = {
@@ -1166,10 +1592,86 @@ export type ReviewCredibilitySummary = {
   credible_review_count: number;
   raw_average: number | null;
   weighted_average: number | null;
+  rating_gap?: number | null;
   average_weight: number;
   low_weight_review_count: number;
   reliability: "unknown" | "weak" | "mixed" | "strong";
   flags: Array<{ flag: string; count: number }>;
+  rating_comparison?: {
+    raw_rating: number | null;
+    trusted_rating: number | null;
+    gap: number | null;
+    headline: string;
+    summary: string;
+  };
+  review_spike?: {
+    status: "unknown" | "normal" | "watch" | string;
+    recent_review_count: number;
+    window_days: number;
+    share_recent: number;
+    message: string;
+    fact_ids: string[];
+  };
+  downweighted_reviews?: Array<{
+    review_id: string;
+    attribute: string;
+    rating: number;
+    text: string;
+    trusted_weight: number;
+    verified_purchase: boolean;
+    reviewer_context: {
+      age_bucket: "new" | "recent" | "established" | string;
+      return_risk: "normal" | "watch" | "high" | string;
+    };
+    down_weight_reasons: ReviewDownWeightReason[];
+    explanation: string;
+    created_at: string | null;
+    fact_id: string;
+  }>;
+  visible_review_checks?: Array<{
+    key: string;
+    label: string;
+    value: string;
+    status: "good" | "watch" | string;
+    detail: string;
+  }>;
+  trust_answer?: string;
+  fact_ids: string[];
+};
+
+export type DarkPatternCheck = {
+  key:
+    | "repeating_countdown_timer"
+    | "fake_scarcity"
+    | "sudden_price_hike_before_discount"
+    | "drip_pricing"
+    | "basket_sneaking"
+    | "forced_prepaid"
+    | "misleading_only_today_offer"
+    | "hidden_return_conditions"
+    | string;
+  label: string;
+  status: "clear" | "watch" | "blocked";
+  severity: "none" | "low" | "medium" | "high" | string;
+  buyer_copy: string;
+  evidence: string;
+  decision_effect: string;
+  fact_ids: string[];
+  product_id?: string;
+  variant_id?: string;
+  product_title?: string;
+};
+
+export type DarkPatternShield = {
+  shield_version: string;
+  status: "clear" | "watch" | "blocked";
+  headline: string;
+  plain_copy: string;
+  buyer_guidance?: string;
+  risk_count: number;
+  blocked_count: number;
+  watch_count: number;
+  checks: DarkPatternCheck[];
   fact_ids: string[];
 };
 
@@ -1199,6 +1701,64 @@ export type BuyerDashboardResponse = {
     mode: "normal_prepaid_eligibility" | "balanced_checkout_guidance" | "extra_trust_steps";
     prepaid_nudge_allowed: boolean;
     message: string;
+  };
+  products_checked?: Array<{
+    product_id: string;
+    variant_id: string | null;
+    title: string;
+    seller_name: string;
+    image_url: string;
+    last_activity_at: string;
+    last_action: string;
+    status: string;
+    score_delta_points?: number;
+    reasons: string[];
+    signals: string[];
+  }>;
+  proof_activity?: {
+    requested_count: number;
+    waiting_seller_count: number;
+    seller_responded_count: number;
+    admin_review_count: number;
+    approved_count: number;
+    needs_more_proof_count: number;
+    seller_responses: Array<{
+      request_id: string;
+      product_id: string;
+      title: string;
+      attribute: string;
+      status: string;
+      status_label: string;
+      buyer_summary: string;
+      updated_at: string;
+    }>;
+  };
+  score_improvements?: Array<{
+    request_id: string;
+    product_id: string;
+    title: string;
+    attribute: string;
+    status: string;
+    before_score: number;
+    after_score: number;
+    lift_points: number;
+    applied: boolean;
+    message: string;
+    updated_at: string;
+  }>;
+  source_freshness?: {
+    overall_status: SourceHealth["overall_status"] | "unknown";
+    blocking: boolean;
+    confidence_rule: string;
+    categories: Array<{
+      key: string;
+      label: string;
+      status: DataSourceStatus["effective_status"] | "unknown";
+      fresh: boolean;
+      hours_since_sync: number | null;
+      last_synced_at: string | null;
+      detail: string;
+    }>;
   };
   privacy: PrivacySummary;
   recent_memory: FitMemory[];
@@ -1430,9 +1990,23 @@ export type SellerEvidenceCoachTask = {
   buyer_demand: number;
   first_seen_at: string;
   last_seen_at: string;
+  age_hours?: number;
+  response_sla_hours?: number;
+  sla_state?: "ok" | "due_today" | "breached";
+  trust_lift_points?: number;
+  buyer_impact?: string;
   fact_ids: string[];
   rejected_proof_id?: string | null;
   rejection_note?: string | null;
+  root_cause_task_id?: string;
+  proof_loop?: {
+    title: string;
+    aggregate_demand: string;
+    seller_action: string;
+    admin_gate: string;
+    buyer_notification_preview: string;
+    steps: Array<{ key: string; label: string; done: boolean }>;
+  };
 };
 
 export type SellerEvidenceCoachResponse = {
@@ -1461,7 +2035,50 @@ export type SellerEvidenceCoachResponse = {
     submitted_at: string;
     reviewed_at: string | null;
     review_notes: string | null;
+    proof_loop?: {
+      title: string;
+      aggregate_demand: string;
+      seller_action: string;
+      admin_gate: string;
+      buyer_notification_preview: string;
+      steps: Array<{ key: string; label: string; done: boolean }>;
+    };
   }>;
+  proof_agent: {
+    mode: "agentic_proof_triage_v1" | string;
+    provider: AiAnswerProvider;
+    headline: string;
+    summary: string;
+    selected_task_key: string | null;
+    selected_product_id: string | null;
+    selected_attribute: ProofAttribute | string | null;
+    recommended_action: string;
+    reasoning: string[];
+    playbook: Array<{
+      label: string;
+      detail: string;
+      tool: string;
+      status: "done" | "next" | "blocked";
+    }>;
+    tools: Array<{
+      key: string;
+      label: string;
+      status: "done" | "next" | "blocked";
+      detail: string;
+    }>;
+    metrics: {
+      waiting_buyers: number;
+      urgent_tasks: number;
+      breached_tasks: number;
+      open_trust_lift: number;
+      visible_trust_lift: number;
+      submitted_count: number;
+      approved_count: number;
+      rejected_count: number;
+      resolved_requests: number;
+    };
+    guardrail: string;
+  };
   tasks: SellerEvidenceCoachTask[];
   privacy_guard: {
     safe_for_seller: boolean;
@@ -1614,7 +2231,64 @@ export type AdminProofAsset = {
   reviewed_at: string | null;
   review_notes: string | null;
   open_request_count: number;
+  buyer_doubt_examples?: string[];
   fact_id: string;
+};
+
+export type AdminProofQualityPrescreen = {
+  score: number;
+  decision: "approve" | "ask_revision" | "reject";
+  headline: string;
+  summary: string;
+  reviewer_instruction: string;
+  human_final: true;
+  buyer_doubt: string;
+  claim_checked: string;
+  trust_lift_ready: boolean;
+  detected_issues: string[];
+  visual_match: {
+    score: number;
+    tone: "pass" | "warn" | "fail";
+    label: string;
+    summary: string;
+    detail?: string;
+    reference_image_url?: string | null;
+    requires_human_check?: boolean;
+  };
+  checks: Array<{
+    key: "relevance" | "clarity" | "measurement_readability" | "claim_match" | "human_decision";
+    label: string;
+    status: "pass" | "warn" | "fail";
+    detail: string;
+  }>;
+};
+
+export type AdminTriageBucket =
+  | "fast_review"
+  | "manual_review"
+  | "senior_review"
+  | "seller_fix"
+  | "reuse_standard"
+  | "stored_only";
+
+export type AdminTriageView = {
+  headline: string;
+  summary: string;
+  stored_count: number;
+  reviewer_queue_count: number;
+  filtered_count: number;
+  pipeline: Array<{
+    key: string;
+    label: string;
+    count: number;
+    detail: string;
+  }>;
+  buckets: Array<{
+    key: AdminTriageBucket;
+    label: string;
+    count: number;
+    detail: string;
+  }>;
 };
 
 export type AdminAuditEvent = {
@@ -1644,8 +2318,36 @@ export type AdminPrescreenSuggestion = {
   learn: string;
   evidence: Array<{ label: string; value: string; source_id: string }>;
   checks: Array<{ label: string; status: "pass" | "warn" | "fail"; detail: string }>;
+  proof_quality?: AdminProofQualityPrescreen;
+  triage_bucket?: AdminTriageBucket;
+  triage_label?: string;
+  triage_reason?: string;
   fact_ids: string[];
   agent_provider: AiAnswerProvider;
+};
+
+export type AdminStoredEvidenceItem = {
+  id: string;
+  item_type: AdminPrescreenSuggestion["item_type"];
+  seller_id: string;
+  seller_name: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  submitted_at: string | null;
+  triage_bucket: AdminTriageBucket;
+  triage_label: string;
+  triage_reason: string;
+  review_visibility: "reviewer_queue" | "auto_reviewed" | "ai_bypassed" | "completed";
+  suggested_action: AdminPrescreenSuggestion["suggested_action"];
+  risk_score: number;
+  risk_level: AdminPrescreenSuggestion["risk_level"];
+  confidence: AdminPrescreenSuggestion["confidence"];
+  agent_provider: AiAnswerProvider;
+  asset_url: string | null;
+  product_image_url: string | null;
+  reference: string | null;
+  open_request_count: number;
 };
 
 export type AdminQueueItem = {
@@ -1671,6 +2373,76 @@ export type AdminQueueItem = {
   primary_action: string;
   evidence: Array<{ label: string; value: string; source_id: string }>;
   agent_provider: AiAnswerProvider;
+  triage_bucket: AdminTriageBucket;
+  triage_label?: string;
+  triage_reason?: string;
+  reviewer_visible?: boolean;
+  case_file?: AdminReviewCaseFile | null;
+};
+
+export type AdminReviewSignal = {
+  label: string;
+  detail: string;
+  severity: "low" | "medium" | "high";
+  fact_ids: string[];
+};
+
+export type AdminReviewCaseFile = {
+  case_id: string;
+  title: string;
+  item_type: AdminQueueItem["item_type"];
+  trigger: string;
+  primary_question: string;
+  stage: string;
+  recommendation: {
+    action: string;
+    confidence: "low" | "medium" | "high";
+    why: string;
+  };
+  evidence_path: Array<{
+    label: string;
+    detail: string;
+    status: "pass" | "warn" | "fail";
+    source_type: string;
+    fact_ids: string[];
+  }>;
+  evidence_agrees: AdminReviewSignal[];
+  evidence_conflicts: AdminReviewSignal[];
+  evidence_missing: AdminReviewSignal[];
+  score_simulation: {
+    current_score: number;
+    next_if_approved: number;
+    next_if_rejected: number;
+    buyer_label_after_approval: string;
+    remaining_blockers: string[];
+  };
+  seller_tasks: Array<{
+    task_id: string;
+    title: string;
+    detail: string;
+    priority: "low" | "medium" | "high" | string;
+    owner: "seller" | "admin" | string;
+    reason: string;
+  }>;
+  tool_chain: Array<{
+    key: string;
+    label: string;
+    status: "pass" | "warn" | "fail";
+    detail: string;
+  }>;
+  human_guardrails: string[];
+  audit_timeline: Array<{
+    label: string;
+    detail: string;
+    status: "done" | "current" | "next" | string;
+    timestamp: string | null;
+  }>;
+  marketplace_impact?: Array<{
+    actor: string;
+    label: string;
+    value: string;
+    detail: string;
+  }>;
 };
 
 export type AdminSellerDossier = {
@@ -1706,10 +2478,42 @@ export type AdminReviewQueue = {
     suggested_actions: number;
     buyer_requests_waiting: number;
     trust_lift_pending: number;
+    auto_reviewed_count?: number;
+    fast_review_count?: number;
+    reusable_standard_count?: number;
+    stored_evidence_count?: number;
     source_status: SourceHealth["overall_status"];
     source_blocking: boolean;
   };
   source_health: SourceHealth;
+  trust_ops: {
+    headline: string;
+    summary: string;
+    case_count: number;
+    contradiction_count: number;
+    seller_task_count: number;
+    fast_clear_count: number;
+    human_review_count: number;
+    impact_points_waiting: number;
+    lanes: Array<{
+      key: string;
+      label: string;
+      count: number;
+      detail: string;
+    }>;
+    top_cases: Array<{
+      queue_item_id: string;
+      seller_id: string;
+      seller_name: string;
+      title: string;
+      trigger: string;
+      risk_score: number;
+      conflicts: number;
+      trust_impact_points: number;
+    }>;
+    guardrails: string[];
+    seller_scope: string;
+  };
   automation_plan: {
     headline: string;
     summary: string;
@@ -1727,4 +2531,6 @@ export type AdminReviewQueue = {
   listing_drafts: Array<AdminListingDraft & { prescreen: AdminPrescreenSuggestion }>;
   proof_assets: Array<AdminProofAsset & { prescreen: AdminPrescreenSuggestion }>;
   audit_events: AdminAuditEvent[];
+  triage?: AdminTriageView;
+  stored_evidence?: AdminStoredEvidenceItem[];
 };

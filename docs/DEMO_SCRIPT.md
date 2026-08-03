@@ -1,4 +1,4 @@
-# Demo Script
+# Presentation Script
 
 ## Seven-Minute Flow
 
@@ -22,9 +22,9 @@ Show:
 - product photos, rating, delivery, seller, and trust state;
 - Sarthi entry point on eligible listings.
 
-### 1:20 - Confusion Resolver
+### 1:20 - Trust Run And Confusion Resolver
 
-Open a product cluster and run comparison.
+Wishlist or open a product, then run the Trust Run comparison.
 
 Show:
 
@@ -71,7 +71,7 @@ Show:
 - detected compare, fit, and fabric intent;
 - grounded answer;
 - tools/fact IDs in audit;
-- Gemini or deterministic fallback provider state if visible.
+- Bedrock, Gemini, or deterministic fallback provider state if visible.
 
 ### 3:50 - Checkout Confidence
 

@@ -68,7 +68,7 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     mapBody: "A simple 3-step view of the proof check.",
     nextStep: "Next safe step",
     nextStepReady: "Use this proof with the product photo, size suggestion and checkout offer check.",
-    nextStepCaution: "Choose the recommended size or ask seller for clearer proof. Do not rush payment.",
+    nextStepCaution: "Choose the recommended size or ask seller for clearer proof before payment.",
     reviewerDetails: "Reviewer details",
     factIds: "Fact IDs",
     graphRoutes: "Graph routes",
@@ -100,7 +100,7 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     mapBody: "Proof check ka simple 3-step view.",
     nextStep: "Safe next step",
     nextStepReady: "Product photo, size suggestion aur checkout offer check ke saath ye proof use karo.",
-    nextStepCaution: "Recommended size choose karo ya seller se clearer proof maango. Payment rush mat karo.",
+    nextStepCaution: "Recommended size choose karo ya seller se clearer proof maango before payment.",
     reviewerDetails: "Reviewer details",
     factIds: "Fact IDs",
     graphRoutes: "Graph routes",
@@ -132,7 +132,7 @@ const PROOF_COPY: Record<LanguageCode, ProofCopy> = {
     mapBody: "Proof check ka simple 3-step view.",
     nextStep: "Safe next step",
     nextStepReady: "Product photo, size suggestion aur checkout offer check ke saath ye proof use karo.",
-    nextStepCaution: "Recommended size choose karo ya seller se clearer proof maango. Payment rush mat karo.",
+    nextStepCaution: "Recommended size choose karo ya seller se clearer proof maango before payment.",
     reviewerDetails: "Reviewer details",
     factIds: "Fact IDs",
     graphRoutes: "Graph routes",
@@ -363,7 +363,7 @@ function ProofMap({ trace, insight, copy }: { trace: AuditTrace; insight: ProofI
           <div>
             <span>Start</span>
             <strong>{copy.questionNode}</strong>
-            <p>{trace.intent.join(", ") || "Purchase confidence"}</p>
+            <p>{formatIntent(trace.intent) || "Purchase confidence"}</p>
           </div>
         </article>
         <div className="proof-graph-evidence-column">
@@ -459,4 +459,17 @@ function labelize(value: string) {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatIntent(intent: string[]) {
+  const mappings: Record<string, string> = {
+    regret_firewall: "Return risk guard",
+    similar_listing_resolution: "Similar seller deals",
+    sku_passport: "Sku trust check",
+    checkout_confidence: "Checkout payment safety",
+    keep_confidence: "Fit & quality confidence"
+  };
+  return intent
+    .map((t) => mappings[t] || labelize(t))
+    .join(", ");
 }

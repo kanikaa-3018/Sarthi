@@ -54,15 +54,6 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
       ) : (
         <>
           <section className="seller-market-position" aria-labelledby="seller-market-position-title">
-            <div className="seller-market-product">
-              <SellerProductImage src={selected.product.image_url} title={selected.product.title} size="market" />
-              <div><span>Your listing</span><h3>{selected.product.title}</h3><p>{selected.seller.name}</p></div>
-            </div>
-            <div className="seller-market-position-copy">
-              <p className="seller-kicker">Current position</p>
-              <h3 id="seller-market-position-title">{comparison.position}</h3>
-              <p>{comparison.reason}</p>
-            </div>
             <div className="seller-market-recommendation seller-market-next" aria-labelledby="seller-market-recommendation-title">
               <div>
                 <p className="seller-kicker">Best next improvement</p>
@@ -71,6 +62,15 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
                 <small>{comparison.recommendation.meta}</small>
               </div>
               <button type="button" className="seller-button seller-button-primary" onClick={() => onAction(comparison.recommendation)}>{comparison.recommendation.actionLabel}<ArrowRight size={16} aria-hidden="true" /></button>
+            </div>
+            <div className="seller-market-product">
+              <SellerProductImage src={selected.product.image_url} title={selected.product.title} size="market" />
+              <div><span>Your listing</span><h3>{selected.product.title}</h3><p>{selected.seller.name}</p></div>
+            </div>
+            <div className="seller-market-position-copy">
+              <p className="seller-kicker">Current position</p>
+              <h3 id="seller-market-position-title">{comparison.position}</h3>
+              <p>{comparison.reason}</p>
             </div>
           </section>
 

@@ -10,10 +10,12 @@ import { neo4jHealth } from "../services/neo4jGraph.js";
 import { vectorSearchHealth } from "../services/vectorSearch.js";
 
 export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
+  const dataMode = mongoDataMode();
+  const dataSourceLabel = dataMode === "mongodb_atlas" ? "MongoDB Atlas evidence store" : "MongoDB local evidence store";
   app.get("/health", async () => ({
     ok: true,
     backend: "node",
-    database: "mongodb_atlas",
+    database: dataMode,
     db: env.mongoDbName
   }));
 
@@ -26,8 +28,10 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
     const ai = aiRuntimeStatus();
     return {
       app_env: env.nodeEnv,
-      data_mode: "mongodb_atlas",
-      user_disclosure: "This build uses MongoDB Atlas-ready evidence documents and seeded demo records until official connectors are attached.",
+      data_mode: dataMode,
+      user_disclosure: dataMode === "mongodb_atlas"
+        ? "This build uses MongoDB Atlas-backed evidence documents and seeded evaluation records until official connectors are attached."
+        : "This build uses local MongoDB evidence documents and seeded evaluation records until official connectors are attached.",
       source_health: health,
       runtime_integrations: {
         ai,
@@ -38,7 +42,7 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
       },
       implemented_controls: [
         "role separated auth",
-        "MongoDB evidence store",
+        dataSourceLabel,
         "Neo4j evidence graph projection when configured",
         "Atlas Vector Search semantic retrieval when configured",
         "Bedrock-first grounded answers, confidence scoring, and visual checks with Gemini fallback",
@@ -52,11 +56,11 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
         "audit traces"
       ],
       production_connectors: [
-        { name: "Catalog", prototype_source: "MongoDB seed", production_source: "Catalog service", status: "adapter_required" },
-        { name: "Orders and returns", prototype_source: "MongoDB seed", production_source: "Order/returns service", status: "adapter_required" },
-        { name: "Buyer review risk", prototype_source: "MongoDB seed", production_source: "UGC/user risk service", status: "adapter_required" },
-        { name: "Seller verification", prototype_source: "MongoDB seed", production_source: "KYC/GST registry", status: "adapter_required" },
-        { name: "Payment offers", prototype_source: "MongoDB seed", production_source: "Checkout/payment offers service", status: "adapter_required" }
+        { name: "Catalog", current_source: dataSourceLabel, production_source: "Catalog service", status: "adapter_required" },
+        { name: "Orders and returns", current_source: dataSourceLabel, production_source: "Order/returns service", status: "adapter_required" },
+        { name: "Buyer review risk", current_source: dataSourceLabel, production_source: "UGC/user risk service", status: "adapter_required" },
+        { name: "Seller verification", current_source: dataSourceLabel, production_source: "KYC/GST registry", status: "adapter_required" },
+        { name: "Payment offers", current_source: dataSourceLabel, production_source: "Checkout/payment offers service", status: "adapter_required" }
       ],
       production_blockers: ["official connectors", "managed auth/OTP", "secure object storage", "reviewer operations"],
       can_compete_without_blockers: false
@@ -81,4 +85,8 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
     return { account_role: account.role, health: await sourceHealth(db) };
   });
 
+}
+
+function mongoDataMode() {
+  return env.mongoUri.startsWith("mongodb+srv://") ? "mongodb_atlas" : "mongodb_local";
 }

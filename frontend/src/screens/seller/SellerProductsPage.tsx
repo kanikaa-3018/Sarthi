@@ -1,21 +1,23 @@
-import { Search } from "lucide-react";
+import { ArrowRight, Bot, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { SellerCopy } from "./sellerCopy";
-import type { SellerProductRow } from "./sellerModel";
+import type { SellerAutomationSummary, SellerProductRow } from "./sellerModel";
 import { SellerProductImage } from "./SellerProductImage";
 
 type ProductFilter = "all" | SellerProductRow["state"];
 
 type SellerProductsPageProps = {
   rows: SellerProductRow[];
+  automation?: SellerAutomationSummary | null;
   copy: SellerCopy;
   onAction: (row: SellerProductRow) => void;
   onCompare: (row: SellerProductRow) => void;
 };
 
-export function SellerProductsPage({ rows, copy, onAction, onCompare }: SellerProductsPageProps) {
+export function SellerProductsPage({ rows, automation, copy, onAction, onCompare }: SellerProductsPageProps) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ProductFilter>("all");
+  const claimRisks = automation?.claimRisks.slice(0, 2) ?? [];
   const visibleRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return rows.filter((row) => {
@@ -53,6 +55,62 @@ export function SellerProductsPage({ rows, copy, onAction, onCompare }: SellerPr
           ))}
         </div>
       </div>
+
+      {automation && (automation.listingSuggestions.length || claimRisks.length) ? (
+        <section className="seller-listing-agent-strip" aria-labelledby="seller-listing-agent-heading">
+          <div>
+            <span><Bot size={16} aria-hidden="true" /> Listing agent</span>
+            <h3 id="seller-listing-agent-heading">{claimRisks.length ? "Proof-backed promises" : "Seller-approved fixes"}</h3>
+            <p>{claimRisks.length ? "Replace risky product claims with evidence the seller can actually submit." : automation.rootCause ? `${automation.rootCause.title}: ${automation.rootCause.reason}` : "Review the product promises that can reduce buyer doubt."}</p>
+          </div>
+          {claimRisks.length ? (
+            <div className="seller-claim-risk-list">
+              {claimRisks.map((risk) => {
+                const row = rows.find((item) => item.listing.product.product_id === risk.productId);
+                return (
+                  <article key={risk.productId} className={`seller-claim-risk-card tone-${risk.tone}`}>
+                    <div>
+                      <span>{risk.issue}</span>
+                      <strong>{risk.title}</strong>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Risky claim</dt>
+                        <dd>{risk.riskyClaim}</dd>
+                      </div>
+                      <div>
+                        <dt>Safer promise</dt>
+                        <dd>{risk.saferClaim}</dd>
+                      </div>
+                    </dl>
+                    <small>Evidence: {risk.evidenceNeeded}</small>
+                    <button type="button" className="seller-button seller-button-text" disabled={!row} onClick={() => row && onAction(row)}>
+                      {risk.action}
+                      <ArrowRight size={14} aria-hidden="true" />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="seller-listing-agent-items">
+              {automation.listingSuggestions.slice(0, 3).map((suggestion) => {
+                const row = rows.find((item) => item.listing.product.product_id === suggestion.productId);
+                return (
+                  <article key={suggestion.productId} className={`tone-${suggestion.tone}`}>
+                    <strong>{suggestion.title}</strong>
+                    <p>{suggestion.reason}</p>
+                    <button type="button" className="seller-button seller-button-text" disabled={!row} onClick={() => row && onAction(row)}>
+                      {suggestion.action}
+                      <ArrowRight size={14} aria-hidden="true" />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {visibleRows.length ? (
         <div className="seller-product-table-wrap">

@@ -4,7 +4,7 @@ import { generateGroundedAgentAnswer } from "./agent.js";
 import { expectationContract } from "./contracts.js";
 import { id } from "./crypto.js";
 import { computeCartConfidence } from "./decisionEngine.js";
-import { createTrace, graphPath, productForVariant, productWithSeller, skuPassport } from "./domain.js";
+import { createTrace, graphPath, productForVariant, productWithSeller, skuPassport, sourceHealth, variantEvidence } from "./domain.js";
 import { label, withoutId } from "./format.js";
 import { nowIso } from "./time.js";
 
@@ -12,12 +12,17 @@ export async function buyerDashboard(db: Db, buyerId: string) {
   const c = collections(db);
   const buyer = await c.buyers.findOne({ buyer_id: buyerId });
   const profile = await refreshBuyerReviewProfile(db, buyerId);
-  const [outcomes, proofRequests, contracts, latestMemory, expectationCount] = await Promise.all([
+  const [outcomes, proofRequests, contracts, latestMemory, expectationCount, proofLedger, wishlist, orderLedger, health, privacy] = await Promise.all([
     c.outcomes.find({ buyer_id: buyerId }).sort({ created_at: -1 }).toArray(),
     c.proofRequests.countDocuments({ buyer_id: buyerId }),
     c.expectationContracts.find({ buyer_id: buyerId }).sort({ created_at: -1 }).limit(5).toArray(),
     c.fitMemory.find({ buyer_id: buyerId }).sort({ updated_at: -1 }).limit(3).toArray(),
-    c.expectationContracts.countDocuments({ buyer_id: buyerId })
+    c.expectationContracts.countDocuments({ buyer_id: buyerId }),
+    buyerProofLedger(db, buyerId),
+    buyerWishlist(db, buyerId),
+    buyerOrders(db, buyerId),
+    sourceHealth(db),
+    privacySummary(db, buyerId)
   ]);
   const kept = outcomes.filter((outcome: any) => outcome.status === "delivered_kept").length;
   const returned = outcomes.filter((outcome: any) => outcome.status === "returned").length;
@@ -58,7 +63,11 @@ export async function buyerDashboard(db: Db, buyerId: string) {
           ? "Prepaid can be shown with clear savings, but Sarthi should avoid pressure copy."
           : "Avoid strong prepaid nudges until cleaner order history and product evidence exist."
     },
-    privacy: await privacySummary(db, buyerId),
+    products_checked: dashboardCheckedProducts(wishlist, orderLedger, proofLedger),
+    proof_activity: dashboardProofActivity(proofLedger),
+    score_improvements: dashboardScoreImprovements(proofLedger),
+    source_freshness: dashboardSourceFreshness(health),
+    privacy,
     recent_memory: latestMemory.map(withoutId),
     recent_expectation_contracts: contracts.map(withoutId),
     guardrails: [
@@ -252,6 +261,7 @@ export async function buyerProofLedger(db: Db, buyerId: string) {
     const status = proofStatus(request, proofAsset);
     const proofQuality = proofQualityAssessment(request, proofAsset);
     const trustImpact = proofTrustImpact(request, proofAsset, status, proofQuality.score);
+    const proofLoop = proofLoopState(request, proofAsset, status, trustImpact);
     return {
       request: {
         request_id: request.request_id,
@@ -286,8 +296,9 @@ export async function buyerProofLedger(db: Db, buyerId: string) {
       next_step: proofNextStep(status),
       proof_quality: proofQuality,
       trust_impact: trustImpact,
+      proof_loop: proofLoop,
       buyer_summary: proofBuyerSummary(status, request, proofAsset, trustImpact.lift_points),
-      timeline: proofTimeline(request, proofAsset)
+      timeline: proofLoop.timeline
     };
   }));
   const cleanItems = items.filter(Boolean);
@@ -360,12 +371,66 @@ export async function privacySummary(db: Db, buyerId: string) {
     c.buyers.findOne({ buyer_id: buyerId }),
     c.fitMemory.countDocuments({ buyer_id: buyerId })
   ]);
+  const fitMemoryEnabled = Boolean(buyer?.fit_memory_enabled);
   return {
     buyer_id: buyerId,
-    fit_memory_enabled: Boolean(buyer?.fit_memory_enabled),
+    fit_memory_enabled: fitMemoryEnabled,
     memory_record_count: count,
-    used: buyer?.fit_memory_enabled ? ["fit memory for size guidance", "aggregate order outcomes"] : ["aggregate order outcomes"],
-    not_used: ["seller cannot access buyer memory", "contacts", "SMS", "raw voice", "payment credentials"]
+    used: fitMemoryEnabled
+      ? ["fit memory for size guidance", "aggregate order outcomes", "proof requests you created", "checkout expectation outcomes"]
+      : ["aggregate order outcomes", "proof requests you created", "checkout expectation outcomes"],
+    not_used: ["seller cannot access buyer memory", "contacts", "SMS", "raw voice", "payment credentials"],
+    controls: [
+      {
+        key: "fit_memory",
+        label: "Fit memory opt-in",
+        enabled: fitMemoryEnabled,
+        action: fitMemoryEnabled ? "Pause fit memory" : "Turn on fit memory",
+        detail: "Used only for size and fit guidance when the buyer allows it."
+      },
+      {
+        key: "delete_fit_memory",
+        label: "Delete fit memory",
+        enabled: count > 0,
+        action: "Delete saved size facts",
+        detail: "Removes buyer-owned fit records and pauses future fit memory use."
+      }
+    ],
+    data_use_panel: [
+      {
+        key: "fit_memory",
+        label: "Fit memory",
+        status: fitMemoryEnabled ? "used_after_consent" : "paused",
+        used_for: "Personal size guidance and family profile recommendations.",
+        retention: "Buyer can delete it from this dashboard."
+      },
+      {
+        key: "proof_requests",
+        label: "Proof requests",
+        status: "aggregate_only",
+        used_for: "Creates seller tasks such as fabric proof or measurement proof.",
+        retention: "Seller sees buyer count and doubt type, not buyer identity."
+      },
+      {
+        key: "order_outcomes",
+        label: "Kept/returned history",
+        status: "scoring_signal",
+        used_for: "Improves SKU confidence, fit risk, and review credibility.",
+        retention: "Used as aggregate product evidence for future decisions."
+      }
+    ],
+    seller_visibility: [
+      "Only aggregate proof demand is shown to sellers.",
+      "Seller does not receive buyer name, fit profile, return history, or payment preference."
+    ],
+    admin_visibility: [
+      "Admin sees only the product, proof asset, claim, and review checklist needed for verification.",
+      "Private buyer fit memory is not part of proof review."
+    ],
+    ai_minimization: [
+      "AI prompts receive product facts, evidence summaries, and the current buyer question.",
+      "Raw payment details, contacts, and private fit memory are not sent unless the buyer opted into fit guidance."
+    ]
   };
 }
 
@@ -508,6 +573,9 @@ export async function recordOrderOutcome(db: Db, body: any) {
   if (!allowedStatuses.has(body.status)) {
     throwBadRequest("Order outcome status is not supported.");
   }
+  const normalizedReturnReason = body.status === "delivered_kept" ? null : normalizeReturnReason(body.return_reason ?? "too_small");
+  const brokenDimension = normalizedReturnReason ? brokenDimensionFromReturnReason(normalizedReturnReason) : null;
+  const beforeEvidence = await variantEvidence(db, body.variant_id);
   let contract: any = null;
   if (body.contract_id) {
     contract = await c.expectationContracts.findOne({
@@ -534,19 +602,6 @@ export async function recordOrderOutcome(db: Db, body: any) {
   const createdAt = nowIso();
   if (body.contract_id && contract) {
     const status = body.status === "returned" || body.status === "exchanged" ? "broken" : "kept";
-    const broken_dimension = body.return_reason?.includes("fabric")
-      ? "fabric"
-      : body.return_reason?.includes("color")
-        ? "color"
-        : body.return_reason?.includes("small") || body.return_reason?.includes("large")
-          ? "fit"
-          : body.return_reason?.includes("delivery")
-            ? "delivery"
-            : body.return_reason?.includes("damaged")
-              ? "packaging"
-              : body.return_reason?.includes("wrong")
-                ? "unknown"
-                : null;
     const contractUpdate = await c.expectationContracts.updateOne(
       {
         contract_id: body.contract_id,
@@ -555,12 +610,12 @@ export async function recordOrderOutcome(db: Db, body: any) {
         status: "active",
         outcome_order_id: null
       },
-      { $set: { status, completed_at: createdAt, outcome_order_id: order_id, broken_dimension, order_status: "feedback_submitted" } }
+      { $set: { status, completed_at: createdAt, outcome_order_id: order_id, broken_dimension: brokenDimension, order_status: "feedback_submitted" } }
     );
     if (!contractUpdate.matchedCount) {
       throwBadRequest("Order proof contract has already been completed.");
     }
-    contract = { ...contract, status, completed_at: createdAt, outcome_order_id: order_id, broken_dimension, order_status: "feedback_submitted" };
+    contract = { ...contract, status, completed_at: createdAt, outcome_order_id: order_id, broken_dimension: brokenDimension, order_status: "feedback_submitted" };
   }
 
   await c.outcomes.insertOne({
@@ -568,7 +623,7 @@ export async function recordOrderOutcome(db: Db, body: any) {
     buyer_id: body.buyer_id,
     variant_id: body.variant_id,
     status: body.status,
-    return_reason: body.return_reason ?? null,
+    return_reason: normalizedReturnReason,
     buying_for_someone_else: Boolean(body.buying_for_someone_else),
     fit_memory_excluded: Boolean(body.buying_for_someone_else),
     contract_id: body.contract_id ?? null,
@@ -586,6 +641,36 @@ export async function recordOrderOutcome(db: Db, body: any) {
   });
 
   const reviewerProfile = await refreshBuyerReviewProfile(db, body.buyer_id);
+  const afterEvidence = await variantEvidence(db, body.variant_id);
+  const scoreUpdate = contract
+    ? expectationScoreUpdate(contract, beforeEvidence, afterEvidence, body.status, brokenDimension)
+    : null;
+  let rootCauseTask: any = null;
+  if (contract && brokenDimension && normalizedReturnReason) {
+    rootCauseTask = await upsertSellerRootCauseTask(db, {
+      contract,
+      order_id,
+      fact_id,
+      variant_id: body.variant_id,
+      return_reason: normalizedReturnReason,
+      broken_dimension: brokenDimension,
+      created_at: createdAt
+    });
+  }
+  if (contract && scoreUpdate) {
+    const scoreState = {
+      ...(contract.score_state ?? {}),
+      outcome_score_percent: scoreUpdate.after_score_percent,
+      last_outcome_delta_points: scoreUpdate.delta_points,
+      last_outcome_status: body.status,
+      last_updated_at: createdAt
+    };
+    await c.expectationContracts.updateOne(
+      { contract_id: contract.contract_id, buyer_id: body.buyer_id },
+      { $set: { score_state: scoreState, seller_root_cause_task_id: rootCauseTask?.task_id ?? null } }
+    );
+    contract = { ...contract, score_state: scoreState, seller_root_cause_task_id: rootCauseTask?.task_id ?? null };
+  }
   let memoryUpdate = { updated: false, reason: "memory disabled" } as any;
   const buyer = await c.buyers.findOne({ buyer_id: body.buyer_id });
   if (body.buying_for_someone_else) {
@@ -620,6 +705,8 @@ export async function recordOrderOutcome(db: Db, body: any) {
       memory_update: memoryUpdate
     },
     expectation_contract: contract ? withoutId(contract) : null,
+    score_update: scoreUpdate,
+    seller_root_cause_task: rootCauseTask ? withoutId(rootCauseTask) : null,
     graph_sync: { available: true, reviewer_credibility_weight: reviewerProfile.credibility_weight },
     memory: (await c.fitMemory.find({ buyer_id: body.buyer_id }).toArray()).map(withoutId)
   };
@@ -742,6 +829,183 @@ async function orderCardForVariant(db: Db, order: any) {
   };
 }
 
+function dashboardCheckedProducts(wishlist: any, orders: any, proofLedger: any) {
+  const records = new Map<string, any>();
+  const put = (record: any) => {
+    if (!record?.product_id) return;
+    const key = `${record.product_id}:${record.variant_id ?? "product"}`;
+    const existing = records.get(key);
+    const existingTime = existing ? new Date(existing.last_activity_at ?? 0).getTime() : 0;
+    const nextTime = new Date(record.last_activity_at ?? 0).getTime();
+    records.set(key, {
+      ...(existing ?? {}),
+      ...record,
+      reasons: [...new Set([...(existing?.reasons ?? []), ...(record.reasons ?? [])])],
+      signals: [...new Set([...(existing?.signals ?? []), ...(record.signals ?? [])])]
+    });
+    if (existing && existingTime > nextTime) {
+      records.set(key, {
+        ...records.get(key),
+        last_activity_at: existing.last_activity_at,
+        last_action: existing.last_action
+      });
+    }
+  };
+
+  for (const item of wishlist?.items ?? []) {
+    put({
+      product_id: item.product?.product_id,
+      variant_id: item.variant?.variant_id ?? item.intent?.selected_variant_id ?? null,
+      title: item.product?.title,
+      seller_name: item.product?.seller_name,
+      image_url: item.product?.image_url,
+      last_activity_at: item.intent?.updated_at ?? item.intent?.created_at,
+      last_action: "Wishlisted for proof-aware comparison",
+      status: item.radar?.event_type ? label(item.radar.event_type) : "Watching",
+      reasons: ["Saved listing", item.intent?.create_seller_signal ? "Seller proof demand created" : "Compared quietly"].filter(Boolean),
+      signals: [item.radar?.message ?? "Sarthi can re-check this listing when proof changes"].filter(Boolean)
+    });
+  }
+
+  for (const order of orders?.orders ?? []) {
+    put({
+      product_id: order.product?.product_id,
+      variant_id: order.variant_id,
+      title: order.product?.title,
+      seller_name: order.product?.seller_name,
+      image_url: order.product?.image_url,
+      last_activity_at: order.created_at,
+      last_action: order.status === "delivered_kept"
+        ? "Kept outcome added to fit memory"
+        : order.status === "returned"
+          ? "Return reason linked to SKU confidence"
+          : "Checkout expectation tracked",
+      status: label(order.status),
+      reasons: [
+        `Size ${order.variant?.size ?? "selected"}`,
+        order.return_reason ? `Reason: ${label(order.return_reason)}` : null,
+        order.fit_memory_excluded ? "Excluded from personal fit memory" : null
+      ].filter(Boolean),
+      signals: [order.payment_mode ? `${label(order.payment_mode)} checkout` : "Expectation contract available"].filter(Boolean)
+    });
+  }
+
+  for (const item of proofLedger?.items ?? []) {
+    put({
+      product_id: item.product?.product_id ?? item.request?.product_id,
+      variant_id: item.variant?.variant_id ?? item.request?.variant_id ?? null,
+      title: item.product?.title,
+      seller_name: item.product?.seller_name,
+      image_url: item.product?.image_url,
+      last_activity_at: item.request?.updated_at ?? item.request?.created_at,
+      last_action: item.status === "approved" ? "Seller proof verified" : item.status_label,
+      status: item.status_label,
+      score_delta_points: item.trust_impact?.lift_points ?? 0,
+      reasons: [
+        `${label(item.request?.attribute ?? "proof")} proof`,
+        item.proof_loop?.aggregate_demand?.label
+      ].filter(Boolean),
+      signals: [item.buyer_summary].filter(Boolean)
+    });
+  }
+
+  return [...records.values()]
+    .sort((left, right) => new Date(right.last_activity_at ?? 0).getTime() - new Date(left.last_activity_at ?? 0).getTime())
+    .slice(0, 8);
+}
+
+function dashboardProofActivity(proofLedger: any) {
+  const items = proofLedger?.items ?? [];
+  return {
+    requested_count: proofLedger?.count ?? items.length,
+    waiting_seller_count: proofLedger?.summary?.waiting_seller ?? 0,
+    seller_responded_count: items.filter((item: any) => ["admin_review", "approved", "needs_more_proof"].includes(item.status)).length,
+    admin_review_count: proofLedger?.summary?.admin_review ?? 0,
+    approved_count: proofLedger?.summary?.approved ?? 0,
+    needs_more_proof_count: proofLedger?.summary?.needs_more_proof ?? 0,
+    seller_responses: items
+      .filter((item: any) => ["admin_review", "approved", "needs_more_proof"].includes(item.status))
+      .slice(0, 4)
+      .map((item: any) => ({
+        request_id: item.request.request_id,
+        product_id: item.product.product_id,
+        title: item.product.title,
+        attribute: item.request.attribute,
+        status: item.status,
+        status_label: item.status_label,
+        buyer_summary: item.buyer_summary,
+        updated_at: item.request.updated_at
+      }))
+  };
+}
+
+function dashboardScoreImprovements(proofLedger: any) {
+  return (proofLedger?.items ?? [])
+    .filter((item: any) => item.proof_loop?.score_update?.lift_points > 0)
+    .map((item: any) => ({
+      request_id: item.request.request_id,
+      product_id: item.product.product_id,
+      title: item.product.title,
+      attribute: item.request.attribute,
+      status: item.status,
+      before_score: item.proof_loop.score_update.before_score,
+      after_score: item.proof_loop.score_update.after_score,
+      lift_points: item.proof_loop.score_update.lift_points,
+      applied: Boolean(item.proof_loop.score_update.applied),
+      message: item.proof_loop.buyer_notification.message,
+      updated_at: item.request.resolved_at ?? item.request.updated_at
+    }))
+    .sort((left: any, right: any) => new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime())
+    .slice(0, 5);
+}
+
+function dashboardSourceFreshness(health: any) {
+  const groups = [
+    { key: "catalog", label: "Catalog fresh", sources: ["catalog"] },
+    { key: "returns", label: "Returns fresh", sources: ["orders", "returns"] },
+    { key: "reviews", label: "Reviews fresh", sources: ["reviews", "buyer_review_profiles"] },
+    { key: "offer", label: "Offer fresh", sources: ["pricing", "campaigns"] },
+    { key: "seller_verification", label: "Seller verification fresh", sources: ["seller_verification"] },
+    { key: "inventory", label: "Inventory fresh", sources: ["inventory"] }
+  ];
+  const sourceMap = new Map((health?.sources ?? []).map((source: any) => [source.source_id, source]));
+  const categories = groups.map((group) => {
+    const matched = group.sources.map((sourceId) => sourceMap.get(sourceId)).filter(Boolean);
+    const status = worstSourceStatus(matched.map((source: any) => source.effective_status));
+    const fresh = matched.length > 0 && matched.every((source: any) => Boolean(source.fresh));
+    const hours = matched.length ? Math.max(...matched.map((source: any) => Number(source.hours_since_sync ?? 0))) : null;
+    const lastSyncedAt = matched
+      .map((source: any) => source.last_synced_at)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+    return {
+      key: group.key,
+      label: group.label,
+      status,
+      fresh,
+      hours_since_sync: hours,
+      last_synced_at: lastSyncedAt,
+      detail: fresh
+        ? "Fresh enough for confidence scoring."
+        : `Sarthi will not give high confidence because ${group.label.replace(" fresh", "").toLowerCase()} data is outdated.`
+    };
+  });
+  return {
+    overall_status: health?.overall_status ?? "unknown",
+    blocking: Boolean(health?.blocking),
+    confidence_rule: health?.blocking
+      ? "High confidence is blocked until stale sources refresh."
+      : "High confidence can use current catalog, return, review, offer, seller, and inventory evidence.",
+    categories
+  };
+}
+
+function worstSourceStatus(statuses: string[]) {
+  const order = ["unavailable", "stale", "degraded", "operational"];
+  return order.find((status) => statuses.includes(status)) ?? "unknown";
+}
+
 async function productForProductId(db: Db, productId: string) {
   return productWithSeller(db, productId);
 }
@@ -749,6 +1013,141 @@ async function productForProductId(db: Db, productId: string) {
 function normalizeReturnReason(value: string) {
   const allowed = new Set(["too_small", "too_large", "color_different", "fabric_different", "damaged", "delivery_late", "wrong_item"]);
   return allowed.has(value) ? value : "too_small";
+}
+
+function brokenDimensionFromReturnReason(reason: string) {
+  if (reason === "fabric_different") return "fabric";
+  if (reason === "color_different") return "color";
+  if (reason === "too_small" || reason === "too_large") return "fit";
+  if (reason === "delivery_late") return "delivery";
+  if (reason === "damaged") return "packaging";
+  if (reason === "wrong_item") return "unknown";
+  return "unknown";
+}
+
+function expectationScoreUpdate(contract: any, beforeEvidence: any, afterEvidence: any, status: string, brokenDimension: string | null) {
+  const beforeScore = Number(contract.score_state?.locked_score_percent ?? scoreFromEvidence(beforeEvidence));
+  const afterScore = scoreFromEvidence(afterEvidence);
+  const delta = afterScore - beforeScore;
+  const kept = status === "delivered_kept";
+  return {
+    before_score_percent: beforeScore,
+    after_score_percent: afterScore,
+    delta_points: delta,
+    direction: delta > 0 ? "improved" : delta < 0 ? "reduced" : "stable",
+    reason: kept
+      ? "Buyer kept the order, so SKU outcome evidence becomes stronger after quality checks."
+      : `${label(brokenDimension ?? "return")} expectation failed, so confidence is adjusted and seller root-cause work is created.`,
+    buyer_copy: kept
+      ? "This kept order will help future buyers trust this SKU."
+      : "This return is linked to the promise that failed, not just counted as a generic return."
+  };
+}
+
+function scoreFromEvidence(evidence: any) {
+  const delivered = Number(evidence?.delivered_orders_90d ?? 0);
+  const returnRate = Math.min(0.6, Math.max(0, Number(evidence?.return_rate ?? 0)));
+  const fitRate = Number(evidence?.fit_as_expected_rate ?? 0);
+  const strengthBonus = evidence?.evidence_strength === "strong" ? 10 : evidence?.evidence_strength === "medium" ? 6 : delivered >= 8 ? 3 : 0;
+  const score = 54 + strengthBonus + Math.round(Math.max(0, fitRate - 0.55) * 22) - Math.round(returnRate * 85);
+  return Math.max(25, Math.min(96, score));
+}
+
+async function upsertSellerRootCauseTask(db: Db, input: {
+  contract: any;
+  order_id: string;
+  fact_id: string;
+  variant_id: string;
+  return_reason: string;
+  broken_dimension: string;
+  created_at: string;
+}) {
+  const c = collections(db);
+  const product = await productForVariant(db, input.variant_id);
+  if (!product?.seller_id || !product.product_id) return null;
+  const attribute = attributeForBrokenDimension(input.broken_dimension, input.return_reason);
+  const query = {
+    seller_id: product.seller_id,
+    product_id: product.product_id,
+    variant_id: input.variant_id,
+    dimension: input.broken_dimension,
+    status: "open"
+  };
+  const existing = await c.sellerRootCauseTasks.findOne(query);
+  const buyerCount = Number(existing?.buyer_count ?? 0) + 1;
+  const taskPatch = {
+    updated_at: input.created_at,
+    last_order_id: input.order_id,
+    last_fact_id: input.fact_id,
+    last_return_reason: input.return_reason,
+    buyer_count: buyerCount,
+    priority: buyerCount >= 3 || ["fabric", "fit", "color"].includes(input.broken_dimension) ? "high" : "medium",
+    title: rootCauseTitle(input.broken_dimension),
+    rationale: rootCauseRationale(input.return_reason, buyerCount),
+    seller_action: sellerRootCauseAction(attribute),
+    recommended_proof_type: recommendationForRootCause(attribute),
+    buyer_notification_preview: `If approved proof fixes this ${label(attribute).toLowerCase()} concern, waiting buyers see confidence improve.`
+  };
+  if (existing) {
+    await c.sellerRootCauseTasks.updateOne(query, { $set: taskPatch });
+    return { ...existing, ...taskPatch };
+  }
+  const task = {
+    task_id: id("root_cause_task"),
+    type: "broken_expectation",
+    seller_id: product.seller_id,
+    product_id: product.product_id,
+    product_title: product.title,
+    product_image_url: product.image_url ?? null,
+    variant_id: input.variant_id,
+    dimension: input.broken_dimension,
+    attribute,
+    status: "open",
+    first_seen_at: input.created_at,
+    contract_id: input.contract.contract_id,
+    fact_ids: [input.fact_id],
+    ...taskPatch
+  };
+  await c.sellerRootCauseTasks.insertOne(task);
+  return task;
+}
+
+function attributeForBrokenDimension(dimension: string, reason: string) {
+  if (dimension === "fit") return "size";
+  if (dimension === "fabric") return "fabric";
+  if (dimension === "color") return "color";
+  if (dimension === "packaging" || reason === "wrong_item") return "packaging";
+  if (dimension === "delivery") return "packaging";
+  return "fabric";
+}
+
+function recommendationForRootCause(attribute: string) {
+  if (attribute === "size") return "measurement_chart";
+  if (attribute === "fabric") return "fabric_closeup";
+  if (attribute === "color") return "daylight_photo";
+  if (attribute === "packaging") return "packaging_photo";
+  return "seller_note";
+}
+
+function rootCauseTitle(dimension: string) {
+  if (dimension === "fit") return "Fix size expectation gap";
+  if (dimension === "fabric") return "Prove actual fabric quality";
+  if (dimension === "color") return "Show real colour proof";
+  if (dimension === "delivery") return "Clarify dispatch and delivery promise";
+  if (dimension === "packaging") return "Show packaging and dispatch proof";
+  return "Resolve buyer expectation gap";
+}
+
+function rootCauseRationale(reason: string, buyerCount: number) {
+  return `${buyerCount} buyer ${buyerCount === 1 ? "outcome" : "outcomes"} reported ${label(reason).toLowerCase()} after checkout expectations were locked.`;
+}
+
+function sellerRootCauseAction(attribute: string) {
+  if (attribute === "size") return "Upload a measurement chart with chest, waist, length, and tolerance.";
+  if (attribute === "fabric") return "Upload a fabric close-up and plain-language material note.";
+  if (attribute === "color") return "Upload a daylight photo without heavy filters.";
+  if (attribute === "packaging") return "Upload product, packaging, and dispatch-label proof.";
+  return "Upload proof that directly answers the buyer expectation gap.";
 }
 
 function throwBadRequest(message: string): never {
@@ -861,9 +1260,66 @@ function proofBuyerSummary(status: string, request: any, proofAsset: any, liftPo
 function proofTimeline(request: any, proofAsset: any) {
   return [
     { label: "Buyer asked", done: true, at: request.created_at },
+    { label: `${request.request_count} buyer demand aggregated`, done: true, at: request.updated_at ?? request.created_at },
     { label: "Seller submitted", done: Boolean(proofAsset), at: proofAsset?.submitted_at ?? proofAsset?.created_at ?? null },
-    { label: "Admin approved", done: proofAsset?.status === "verified" || request.status === "resolved", at: proofAsset?.reviewed_at ?? request.resolved_at ?? null }
+    { label: proofAsset?.status === "rejected" ? "Admin requested better proof" : "Admin verified", done: ["verified", "rejected"].includes(proofAsset?.status) || request.status === "resolved", at: proofAsset?.reviewed_at ?? request.resolved_at ?? null },
+    { label: "Score updated and buyer notified", done: proofAsset?.status === "verified" || request.status === "resolved", at: proofAsset?.reviewed_at ?? request.resolved_at ?? null }
   ];
+}
+
+function proofLoopState(request: any, proofAsset: any, status: string, trustImpact: any) {
+  const attribute = label(request.attribute).toLowerCase();
+  const waiting = Number(request.request_count ?? 1);
+  const notification = status === "approved"
+    ? `Proof added, confidence improved by +${trustImpact.lift_points}.`
+    : status === "admin_review"
+      ? "Seller added proof. Reviewer is checking it before confidence changes."
+      : status === "needs_more_proof"
+        ? "Seller proof needs correction before confidence can improve."
+        : `${waiting} buyer${waiting === 1 ? " is" : "s are"} waiting for ${attribute} proof.`;
+  return {
+    title: "Proof loop",
+    current_step: status,
+    closed_loop: status === "approved",
+    aggregate_demand: {
+      buyer_count: waiting,
+      label: `${waiting} buyer${waiting === 1 ? "" : "s"} waiting for ${attribute} proof`,
+      buyer_question: request.buyer_question ?? `Is ${attribute} trustworthy?`
+    },
+    seller_task: {
+      label: `Upload ${attribute} proof`,
+      status: proofAsset ? "submitted" : "waiting",
+      proof_type: proofAsset?.proof_type ?? proofTypeForAttribute(request.attribute)
+    },
+    admin_review: {
+      status: proofAsset?.status ?? "not_submitted",
+      reviewed_at: proofAsset?.reviewed_at ?? null,
+      notes: proofAsset?.review_notes ?? null
+    },
+    score_update: {
+      before_score: trustImpact.before_score,
+      after_score: trustImpact.expected_after_score,
+      lift_points: trustImpact.lift_points,
+      applied: status === "approved"
+    },
+    buyer_notification: {
+      ready: status === "approved",
+      message: notification
+    },
+    timeline: proofTimeline(request, proofAsset)
+  };
+}
+
+function proofTypeForAttribute(attribute: string) {
+  const map: Record<string, string> = {
+    transparency: "daylight_photo",
+    fabric: "fabric_closeup",
+    color: "daylight_photo",
+    size: "measurement_chart",
+    packaging: "packaging_photo",
+    offer: "seller_note"
+  };
+  return map[attribute] ?? "seller_note";
 }
 
 function sizeAlternative(currentSize: string, reason: string, recommendedSize?: string | null) {

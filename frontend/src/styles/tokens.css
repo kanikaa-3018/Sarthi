@@ -1,0 +1,59 @@
+/* Hallmark - macrostructure: Trust Commerce Shell - tone: utilitarian trust commerce - anchor hue: magenta
+ * pre-emit critique: P4 H4 E4 S5 R4 V4
+ */
+:root {
+  --color-paper: var(--bg-canvas);
+  --color-paper-2: var(--bg-surface-muted);
+  --color-surface: var(--bg-surface);
+  --color-ink: var(--text-primary);
+  --color-ink-2: var(--text-secondary);
+  --color-rule: var(--border-subtle);
+  --color-accent: var(--accent-primary);
+  --color-accent-strong: var(--accent-primary-hover);
+  --color-accent-ink: var(--text-on-accent);
+  --color-focus: var(--focus-ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--error);
+  --color-scrim: color-mix(in srgb, var(--text-primary) 48%, transparent);
+
+  --font-body: var(--font-sans);
+  --font-display-ui: var(--font-display);
+  --font-code: var(--font-mono);
+
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 6px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 40px;
+  --space-5xl: 56px;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+  --text-4xl: 36px;
+  --text-display: 52px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+
+  --rule-hairline: 1px;
+  --radius-card: 8px;
+  --radius-panel: 10px;
+  --radius-dialog: 14px;
+  --radius-input: 8px;
+  --radius-pill: 999px;
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LogOut, Sun, Moon, RefreshCcw, User, Globe } from "lucide-react";
+import { LogOut, Sun, Moon, RefreshCcw, User, Globe, ShoppingCart, Heart, PackageCheck, ClipboardCheck, Store, Cpu, Sparkles, ShieldCheck } from "lucide-react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { clearStoredSession, getBuyerProofs, getMe, getStoredSession, logout, storeSession, resetSeed } from "../api/client";
 import { AuthScreen } from "../screens/AuthScreen";
@@ -33,7 +33,7 @@ const SELLER_NAV_COPY: Record<LanguageCode, { console: string; proofs: string; c
   english: {
     console: "Seller console",
     proofs: "Proof center",
-    coach: "Trust coach"
+    coach: "Market compare"
   },
   hindi: {
     console: "सेलर कंसोल",
@@ -43,7 +43,52 @@ const SELLER_NAV_COPY: Record<LanguageCode, { console: string; proofs: string; c
   hinglish: {
     console: "Seller ka console",
     proofs: "Proof center",
-    coach: "Trust coach"
+    coach: "Market compare"
+  }
+};
+
+const SELLER_WORKSPACE_NAV_COPY: Record<LanguageCode, { today: string; products: string; proofs: string; market: string; add: string }> = {
+  english: {
+    today: "Today",
+    products: "Products",
+    proofs: "Proof center",
+    market: "Rating plan",
+    add: "Add product"
+  },
+  hindi: {
+    today: "आज",
+    products: "प्रोडक्ट",
+    proofs: "प्रूफ सेंटर",
+    market: "रेटिंग प्लान",
+    add: "प्रोडक्ट जोड़ें"
+  },
+  hinglish: {
+    today: "Aaj",
+    products: "Products",
+    proofs: "Proof center",
+    market: "Rating plan",
+    add: "Product jodo"
+  }
+};
+
+const ADMIN_NAV_COPY: Record<LanguageCode, { review: string; aiQueue: string; risk: string; saved: string }> = {
+  english: {
+    review: "Review",
+    aiQueue: "AI Queue",
+    risk: "Risk",
+    saved: "Saved"
+  },
+  hindi: {
+    review: "रिव्यू",
+    aiQueue: "AI कतार",
+    risk: "रिस्क",
+    saved: "सेव्ड"
+  },
+  hinglish: {
+    review: "Review",
+    aiQueue: "AI queue",
+    risk: "Risk",
+    saved: "Saved"
   }
 };
 
@@ -222,6 +267,8 @@ export function App() {
   const isSellerRoute = location.pathname.startsWith("/seller");
   const isAuthRoute = location.pathname === "/login";
   const sellerNavCopy = SELLER_NAV_COPY[language] ?? SELLER_NAV_COPY.english;
+  const sellerWorkspaceNavCopy = SELLER_WORKSPACE_NAV_COPY[language] ?? SELLER_WORKSPACE_NAV_COPY.english;
+  const adminNavCopy = ADMIN_NAV_COPY[language] ?? ADMIN_NAV_COPY.english;
   const sellerNavActive = (path: string) => {
     const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
     return path === "/seller"
@@ -236,8 +283,13 @@ export function App() {
   };
   const isReviewDeskActive = () => {
     const p = location.pathname;
-    return p === "/admin" || p.startsWith("/admin/uploads") || p.startsWith("/admin/drafts") || p.startsWith("/admin/audit");
+    return p === "/admin" || p.startsWith("/admin/sellers") || p.startsWith("/admin/uploads") || p.startsWith("/admin/drafts") || p.startsWith("/admin/audit");
   };
+  const buyerShopActive = location.pathname === "/shop" ||
+    location.pathname.startsWith("/shop/product") ||
+    location.pathname.startsWith("/shop/checkout");
+  const buyerSavedActive = location.pathname.startsWith("/shop/wishlist") ||
+    location.pathname.startsWith("/shop/saved");
 
   return (
     <div className={`web-app-container${role === "buyer" ? " buyer-app-route" : ""}${isCheckoutRoute ? " checkout-app-route" : ""}${isAdminRoute ? " admin-app-route" : ""}${isSellerRoute ? " seller-app-route" : ""}${isAuthRoute ? " auth-app-route" : ""}`}>
@@ -294,10 +346,10 @@ export function App() {
                       type="button"
                       className={`proof-nav-item ${location.pathname.startsWith("/shop/proofs") ? "active" : ""}`}
                       onClick={() => navigate("/shop/proofs")}
-                      aria-label={buyerProofNav ? `Proof, ${buyerProofNav.label}` : "Proof"}
-                      title={buyerProofNav ? `Proof: ${buyerProofNav.label}` : "Proof"}
+                      aria-label={buyerProofNav ? `${t(language, "proof")}, ${buyerProofNav.label}` : t(language, "proof")}
+                      title={buyerProofNav ? `${t(language, "proof")}: ${buyerProofNav.label}` : t(language, "proof")}
                     >
-                      <span className="proof-nav-label">Proof</span>
+                      <span className="proof-nav-label">{t(language, "proof")}</span>
                       {buyerProofNav?.badgeLabel && (
                         <em className={`nav-proof-badge ${buyerProofNav.needsAttention ? "attention" : "ready"}`}>
                           {buyerProofNav.badgeLabel}
@@ -310,21 +362,38 @@ export function App() {
                   <>
                     <button
                       type="button"
-                      className={sellerNavActive("/seller") ? "active" : ""}
+                      className={
+                        sellerNavActive("/seller") &&
+                        !sellerNavActive("/seller/products") &&
+                        !sellerNavActive("/seller/proofs") &&
+                        !sellerNavActive("/seller/market")
+                          ? "active"
+                          : ""
+                      }
                       onClick={() => navigate("/seller")}
                     >
-                      <span>{sellerNavCopy.console}</span>
+                      <span>{sellerWorkspaceNavCopy.today}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={sellerNavActive("/seller/products") ? "active" : ""}
+                      onClick={() => navigate("/seller/products")}
+                    >
+                      <span>{sellerWorkspaceNavCopy.products}</span>
+                      <em>3</em>
                     </button>
                     <button
                       type="button"
                       className={`seller-proof-nav-item ${sellerNavActive("/seller/proofs") ? "active" : ""}`}
                       onClick={() => navigate("/seller/proofs")}
                     >
-                      <span>{sellerNavCopy.proofs}</span>
+                      <span>{sellerWorkspaceNavCopy.proofs}</span>
+                      <em>5</em>
                     </button>
                     <button
                       type="button"
                       className={
+                        sellerNavActive("/seller/market") ||
                         sellerNavActive("/seller/trust-coach") ||
                         sellerNavActive("/seller/copilot") ||
                         sellerNavActive("/seller/autopilot") ||
@@ -333,9 +402,17 @@ export function App() {
                           ? "active"
                           : ""
                       }
-                      onClick={() => navigate("/seller/trust-coach")}
+                      onClick={() => navigate("/seller/market")}
                     >
-                      <span>{sellerNavCopy.coach}</span>
+                      <span>{sellerWorkspaceNavCopy.market}</span>
+                      <em>+18</em>
+                    </button>
+                    <button
+                      type="button"
+                      className={`seller-add-nav ${sellerNavActive("/seller/new") ? "active" : ""}`}
+                      onClick={() => navigate("/seller/new")}
+                    >
+                      <span>{sellerWorkspaceNavCopy.add}</span>
                     </button>
                   </>
                 )}
@@ -346,28 +423,28 @@ export function App() {
                       className={`admin-nav-item ${isReviewDeskActive() ? "active" : ""}`}
                       onClick={() => navigate("/admin")}
                     >
-                      <span>Review Desk</span>
+                      <span>{adminNavCopy.review}</span>
                     </button>
                     <button
                       type="button"
                       className={`admin-nav-item agent ${location.pathname.startsWith("/admin/agent") ? "active" : ""}`}
                       onClick={() => navigate("/admin/agent")}
                     >
-                      <span>AI Triage</span>
+                      <span>{adminNavCopy.aiQueue}</span>
                     </button>
                     <button
                       type="button"
                       className={`admin-nav-item ${location.pathname.startsWith("/admin/policy") ? "active" : ""}`}
                       onClick={() => navigate("/admin/policy")}
                     >
-                      <span>Risk & Policy</span>
+                      <span>{adminNavCopy.risk}</span>
                     </button>
                     <button
                       type="button"
                       className={`admin-nav-item ${location.pathname.startsWith("/admin/impact") ? "active" : ""}`}
                       onClick={() => navigate("/admin/impact")}
                     >
-                      <span>Work Saved</span>
+                      <span>{adminNavCopy.saved}</span>
                     </button>
                   </>
                 )}
@@ -506,12 +583,142 @@ export function App() {
           />
           <Route
             path="/admin/*"
-            element={role === "admin" ? <AdminReviewPanel /> : <RoleRedirect session={session} />}
+            element={role === "admin" ? <AdminReviewPanel language={language} /> : <RoleRedirect session={session} />}
           />
           <Route path="/" element={<RoleRedirect session={session} />} />
           <Route path="*" element={<RoleRedirect session={session} />} />
         </Routes>
       </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      {session && (
+        <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+          {role === "buyer" && (
+            <>
+              <button
+                type="button"
+                className={buyerShopActive ? "active" : ""}
+                onClick={() => navigate("/shop")}
+              >
+                <ShoppingCart size={18} />
+                <span>{t(language, "shop")}</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/trust") ? "active" : ""}
+                onClick={() => navigate("/trust")}
+              >
+                <ShieldCheck size={18} />
+                <span>{t(language, "trust")}</span>
+              </button>
+              <button
+                type="button"
+                className={buyerSavedActive ? "active" : ""}
+                onClick={() => navigate("/shop/wishlist")}
+              >
+                <Heart size={18} />
+                <span>{t(language, "saved")}</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/shop/orders") ? "active" : ""}
+                onClick={() => navigate("/shop/orders")}
+              >
+                <PackageCheck size={18} />
+                <span>{t(language, "orders")}</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-proof-nav-item ${location.pathname.startsWith("/shop/proofs") ? "active" : ""}`}
+                onClick={() => navigate("/shop/proofs")}
+              >
+                <div className="mobile-proof-icon-wrapper">
+                  <ClipboardCheck size={18} />
+                  {buyerProofNav?.badgeLabel && (
+                    <span className={`mobile-nav-proof-badge ${buyerProofNav.needsAttention ? "attention" : "ready"}`}>
+                      {buyerProofNav.badgeLabel}
+                    </span>
+                  )}
+                </div>
+                <span>{t(language, "proof")}</span>
+              </button>
+            </>
+          )}
+          {role === "seller" && (
+            <>
+              <button
+                type="button"
+                className={sellerNavActive("/seller") && !sellerNavActive("/seller/proofs") && !sellerNavActive("/seller/market") ? "active" : ""}
+                onClick={() => navigate("/seller")}
+              >
+                <Store size={18} />
+                <span>{sellerNavCopy.console}</span>
+              </button>
+              <button
+                type="button"
+                className={sellerNavActive("/seller/proofs") ? "active" : ""}
+                onClick={() => navigate("/seller/proofs")}
+              >
+                <ClipboardCheck size={18} />
+                <span>{sellerNavCopy.proofs}</span>
+              </button>
+              <button
+                type="button"
+                className={
+                  sellerNavActive("/seller/market") ||
+                  sellerNavActive("/seller/trust-coach") ||
+                  sellerNavActive("/seller/copilot") ||
+                  sellerNavActive("/seller/autopilot") ||
+                  sellerNavActive("/seller/listing-lab") ||
+                  sellerNavActive("/seller/rating-forecast")
+                    ? "active"
+                    : ""
+                }
+                onClick={() => navigate("/seller/market")}
+              >
+                <Globe size={18} />
+                <span>{sellerNavCopy.coach}</span>
+              </button>
+            </>
+          )}
+          {role === "admin" && (
+            <>
+              <button
+                type="button"
+                className={isReviewDeskActive() ? "active" : ""}
+                onClick={() => navigate("/admin")}
+              >
+                <ClipboardCheck size={18} />
+                <span>{adminNavCopy.review}</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/admin/agent") ? "active" : ""}
+                onClick={() => navigate("/admin/agent")}
+              >
+                <Cpu size={18} />
+                <span>{adminNavCopy.aiQueue}</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/admin/policy") ? "active" : ""}
+                onClick={() => navigate("/admin/policy")}
+              >
+                <ShieldCheck size={18} />
+                <span>{adminNavCopy.risk}</span>
+              </button>
+              <button
+                type="button"
+                className={location.pathname.startsWith("/admin/impact") ? "active" : ""}
+                onClick={() => navigate("/admin/impact")}
+              >
+                <Sparkles size={18} />
+                <span>{adminNavCopy.saved}</span>
+              </button>
+            </>
+          )}
+        </nav>
+      )}
     </div>
   );
 }

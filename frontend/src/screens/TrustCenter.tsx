@@ -2,11 +2,15 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
+  Bell,
   CheckCircle2,
+  ChevronRight,
   CircleAlert,
+  Clock3,
   CreditCard,
   Database,
   EyeOff,
+  FileCheck2,
   Gauge,
   Heart,
   Lock,
@@ -93,11 +97,11 @@ export function TrustCenter({ buyerId, language }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [payload, dashboardPayload, ordersPayload, readinessPayload] = await Promise.all([
+      const readinessRequest = getSystemReadiness().catch(() => null);
+      const [payload, dashboardPayload, ordersPayload] = await Promise.all([
         getMemory(buyerId),
         getBuyerDashboard(buyerId),
-        getBuyerOrders(buyerId),
-        getSystemReadiness()
+        getBuyerOrders(buyerId)
       ]);
       const nextPreferredFit = normalizePreferredFit(
         dashboardPayload.profile.preferred_fit ?? payload.memory[0]?.preferred_fit ?? "comfort"
@@ -105,7 +109,7 @@ export function TrustCenter({ buyerId, language }: Props) {
       setData(payload);
       setDashboard(dashboardPayload);
       setOrders(ordersPayload);
-      setReadiness(readinessPayload);
+      readinessRequest.then((readinessPayload) => setReadiness(readinessPayload));
       setPreferredFit(nextPreferredFit);
       setFitQuiz((current) => ({ ...current, preferred_fit: nextPreferredFit }));
     } catch (err) {
@@ -221,6 +225,7 @@ export function TrustCenter({ buyerId, language }: Props) {
       (privacy?.memory_record_count ?? 0) < 2 ||
       dashboard.review_credibility.risk_band === "new_user")
   );
+  const isInitialLoad = loading && !data && !dashboard;
 
   return (
     <main className="trust-center-shell trust-center-v5">
@@ -236,7 +241,7 @@ export function TrustCenter({ buyerId, language }: Props) {
             </span>
             <span>
               <PackageCheck size={13} />
-              {dashboard ? `${dashboard.activity.total_outcomes} orders learnt` : "Orders loading"}
+              {dashboard ? `${dashboard.activity.total_outcomes} orders learnt` : "Order history private"}
             </span>
           </div>
         </div>
@@ -256,7 +261,8 @@ export function TrustCenter({ buyerId, language }: Props) {
             </button>
           </div>
           <button className="trust-refresh-button" onClick={load} disabled={busy} title="Refresh trust center" aria-label="Refresh trust center">
-            <RefreshCcw size={15} className={busy ? "spin-icon" : ""} />
+            <RefreshCcw size={15} className={busy && !isInitialLoad ? "spin-icon" : ""} />
+            <span>{busy && !isInitialLoad ? "Refreshing" : "Refresh"}</span>
           </button>
         </div>
       </section>
@@ -271,6 +277,13 @@ export function TrustCenter({ buyerId, language }: Props) {
       {data && privacy && dashboard ? (
         <>
           <TrustSnapshotBar dashboard={dashboard} privacy={privacy} />
+
+          <PersonalTrustDashboard
+            dashboard={dashboard}
+            onOpenProduct={(productId, variantId) =>
+              navigate(`/shop/product/${encodeURIComponent(productId)}${variantId ? `?variant=${encodeURIComponent(variantId)}` : ""}`)
+            }
+          />
 
           <section className="trust-controls-group" aria-label="Fit and privacy controls">
             <header>
@@ -371,7 +384,9 @@ export function TrustCenter({ buyerId, language }: Props) {
                 items={privacy.not_used}
                 tone="neutral"
               />
+              <PrivacyPurposePanel privacy={privacy} />
               <ReviewFairnessCard dashboard={dashboard} />
+              {dashboard.source_freshness && <SourceFreshnessCard freshness={dashboard.source_freshness} />}
               {readiness && <SystemReadinessCard readiness={readiness} guardrails={dashboard.guardrails} />}
             </aside>
           </section>
@@ -423,6 +438,119 @@ function TrustSnapshotBar({
         <CreditCard size={15} />
         <span>Before payment</span>
         <strong>{paymentLabel}</strong>
+      </div>
+    </section>
+  );
+}
+
+function PersonalTrustDashboard({
+  dashboard,
+  onOpenProduct
+}: {
+  dashboard: BuyerDashboardResponse;
+  onOpenProduct: (productId: string, variantId: string | null) => void;
+}) {
+  const checked = dashboard.products_checked ?? [];
+  const proof = dashboard.proof_activity;
+  const improvements = dashboard.score_improvements ?? [];
+  const sellerResponses = proof?.seller_responses ?? [];
+
+  return (
+    <section className="trust-card personal-trust-dashboard" aria-label="Personal trust dashboard">
+      <div className="trust-card-header">
+        <div>
+          <span className="eyebrow">Your activity</span>
+          <h3>What Sarthi is tracking for you</h3>
+          <p>Private buyer history stays here. Sellers see only aggregate demand, not who asked.</p>
+        </div>
+      </div>
+
+      <div className="personal-trust-metrics" aria-label="Personal trust counts">
+        <div>
+          <ShoppingBag size={15} />
+          <span>Products checked</span>
+          <strong>{checked.length}</strong>
+        </div>
+        <div>
+          <FileCheck2 size={15} />
+          <span>Proofs requested</span>
+          <strong>{proof?.requested_count ?? dashboard.activity.proof_requests_created}</strong>
+        </div>
+        <div>
+          <Bell size={15} />
+          <span>Seller responded</span>
+          <strong>{proof?.seller_responded_count ?? sellerResponses.length}</strong>
+        </div>
+        <div>
+          <Gauge size={15} />
+          <span>Score improved</span>
+          <strong>{improvements.filter((item) => item.applied).length}</strong>
+        </div>
+      </div>
+
+      <div className="personal-trust-panels">
+        <div className="personal-trust-panel">
+          <div className="personal-panel-head">
+            <span>Recently checked</span>
+            <small>{checked.length ? "Wishlist, proof, checkout and return signals" : "No checked product yet"}</small>
+          </div>
+          <div className="checked-product-list">
+            {checked.slice(0, 4).map((item) => (
+              <article key={`${item.product_id}-${item.variant_id ?? "product"}`} className="checked-product-row">
+                <img
+                  src={item.image_url}
+                  alt=""
+                  aria-hidden="true"
+                  onError={(event) => { event.currentTarget.src = "/product-blue.svg"; }}
+                />
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.last_action}</span>
+                  <small>{item.reasons.slice(0, 2).join(" | ")}</small>
+                </div>
+                <button type="button" onClick={() => onOpenProduct(item.product_id, item.variant_id)}>
+                  <ChevronRight size={16} />
+                </button>
+              </article>
+            ))}
+            {!checked.length && (
+              <p className="trust-empty-copy">Products you view, wishlist, or check out will appear here with the exact proof status.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="personal-trust-panel proof-loop-summary">
+          <div className="personal-panel-head">
+            <span>Proof loop</span>
+            <small>{sellerResponses.length ? "Seller responses and score impact" : "Waiting for seller proof"}</small>
+          </div>
+          <div className="proof-loop-mini-list">
+            {sellerResponses.slice(0, 3).map((item) => (
+              <article key={item.request_id} className={`proof-loop-mini-row ${item.status}`}>
+                <span>
+                  {item.status === "approved" ? <CheckCircle2 size={14} /> : item.status === "admin_review" ? <Clock3 size={14} /> : <AlertTriangle size={14} />}
+                </span>
+                <div>
+                  <strong>{labelize(item.attribute)} proof: {item.status_label}</strong>
+                  <small>{item.buyer_summary}</small>
+                </div>
+              </article>
+            ))}
+            {!sellerResponses.length && (
+              <p className="trust-empty-copy">When sellers respond to your aggregate proof request, this card shows the next review step.</p>
+            )}
+          </div>
+
+          {improvements.length > 0 && (
+            <div className="score-improvement-strip">
+              {improvements.slice(0, 2).map((item) => (
+                <span key={item.request_id} className={item.applied ? "applied" : "pending"}>
+                  +{item.lift_points} {labelize(item.attribute)} {item.applied ? "applied" : "pending"}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -624,6 +752,12 @@ function ProofChecklist({
       text: dashboard.checkout_guidance.prepaid_nudge_allowed
         ? copy.checkPaymentSafe
         : copy.checkPaymentCareful
+    },
+    {
+      status: dashboard.source_freshness?.blocking ? "warn" : "pass",
+      text: dashboard.source_freshness?.blocking
+        ? dashboard.source_freshness.confidence_rule
+        : "Catalog, return, review, offer, seller, and inventory sources are fresh enough for confidence."
     }
   ] as const;
 
@@ -849,6 +983,36 @@ function PrivacyDataCard({
   );
 }
 
+function PrivacyPurposePanel({ privacy }: { privacy: PrivacySummary }) {
+  const dataUse = privacy.data_use_panel ?? [];
+  const sellerRule = privacy.seller_visibility?.[0] ?? "Seller sees only aggregate demand.";
+  const adminRule = privacy.admin_visibility?.[0] ?? "Admin sees only required proof review data.";
+  const aiRule = privacy.ai_minimization?.[0] ?? "AI receives only evidence needed for the current answer.";
+
+  return (
+    <section className="trust-card privacy-purpose-panel" aria-label="What data is used">
+      <div className="trust-icon-badge">
+        <Lock size={18} />
+      </div>
+      <span className="eyebrow">What data is used?</span>
+      <div className="privacy-use-list">
+        {dataUse.map((item) => (
+          <div key={item.key} className="privacy-use-row">
+            <strong>{item.label}</strong>
+            <span>{item.used_for}</span>
+            <small>{labelize(item.status)} | {item.retention}</small>
+          </div>
+        ))}
+      </div>
+      <div className="privacy-boundary-list">
+        <span><ShieldCheck size={13} /> {sellerRule}</span>
+        <span><ShieldCheck size={13} /> {adminRule}</span>
+        <span><ShieldCheck size={13} /> {aiRule}</span>
+      </div>
+    </section>
+  );
+}
+
 function ReviewFairnessCard({ dashboard }: { dashboard: BuyerDashboardResponse }) {
   return (
     <section className="trust-card trust-data-card review-fairness-card">
@@ -866,6 +1030,39 @@ function ReviewFairnessCard({ dashboard }: { dashboard: BuyerDashboardResponse }
           </span>
         ))}
       </div>
+    </section>
+  );
+}
+
+function SourceFreshnessCard({
+  freshness
+}: {
+  freshness: NonNullable<BuyerDashboardResponse["source_freshness"]>;
+}) {
+  return (
+    <section className={`trust-card source-freshness-card ${freshness.blocking ? "blocking" : "fresh"}`} aria-label="Source freshness">
+      <div className="trust-icon-badge">
+        <Database size={18} />
+      </div>
+      <span className="eyebrow">Source health</span>
+      <h3>{freshness.blocking ? "Confidence paused" : "Data is current"}</h3>
+      <p>{freshness.confidence_rule}</p>
+      <div className="source-freshness-list">
+        {freshness.categories.map((source) => (
+          <div key={source.key} className={`source-freshness-row ${source.fresh ? "fresh" : "stale"}`}>
+            <span>{source.fresh ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}</span>
+            <div>
+              <strong>{source.label}</strong>
+              <small>{source.fresh ? "Fresh" : labelize(source.status)}{source.hours_since_sync !== null ? ` | ${source.hours_since_sync}h old` : ""}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+      {freshness.blocking && (
+        <div className="source-freshness-warning">
+          Sarthi will not give high confidence while important evidence is stale.
+        </div>
+      )}
     </section>
   );
 }

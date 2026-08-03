@@ -11,21 +11,15 @@ import {
   wishlistRadar
 } from "../services/decisionEngine.js";
 import {
-  avoidableIssue,
   computeKeepConfidence,
-  conflicts,
   createTrace,
   facts,
-  feedTrustSummary,
-  fitPrediction,
+  feedTrustSummaries,
   graphPath,
   productWithSeller,
   publicProduct,
-  reviewEvidence,
   sourceHealth,
   skuPassport,
-  trustState,
-  variantEvidence,
   variantsForProduct
 } from "../services/domain.js";
 import { buyerDashboard, buyerOrders, buyerProofLedger, buyerWishlist, correctOrderOutcome, markCheckoutOrderDelivered, privacySummary } from "../services/buyerOperations.js";
@@ -36,7 +30,7 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     const account = await requireRole(db, request, reply, "buyer");
     const query: any = request.query;
     assertBuyer(account, query.buyer_id);
-    const limit = Number(query.limit ?? 48);
+    const limit = Number(query.limit ?? 96);
     const offset = Number(query.offset ?? 0);
     const filter: any = {};
     if (query.category && query.category !== "All") filter.category = query.category;
@@ -44,7 +38,7 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     const c = collections(db);
     const [total, products, sellers, health] = await Promise.all([
       c.products.countDocuments(filter),
-      c.products.find(filter).skip(offset).limit(limit).toArray(),
+      c.products.find(filter).sort({ feed_rank: 1, product_id: 1 }).skip(offset).limit(limit).toArray(),
       c.sellers.find({}).toArray(),
       sourceHealth(db)
     ]);
@@ -54,12 +48,13 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
       seller_name: sellerMap.get(product.seller_id)?.name,
       median_dispatch_hours: sellerMap.get(product.seller_id)?.median_dispatch_hours
     }));
+    const trustSummaries = await feedTrustSummaries(db, publicProducts, { health });
     return {
       buyer_id: query.buyer_id,
-      products: await Promise.all(publicProducts.map(async (product: any) => ({
+      products: publicProducts.map((product: any) => ({
         ...product,
-        buyer_trust: await feedTrustSummary(db, product, { health })
-      }))),
+        buyer_trust: trustSummaries.get(product.product_id)
+      })),
       total,
       limit,
       offset,
@@ -71,12 +66,16 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     const account = await requireRole(db, request, reply, "buyer");
     const buyerId = (request.query as any).buyer_id;
     assertBuyer(account, buyerId);
-    const product = await productWithSeller(db, (request.params as any).product_id);
+    const productId = (request.params as any).product_id;
+    const product = await productWithSeller(db, productId);
     if (!product) return reply.code(404).send({ detail: "Product not found" });
     const variants = await variantsForProduct(db, product.product_id);
-    const selected = variants.find((variant: any) => variant.size === "XL") ?? variants[0];
-    const evidence = await variantEvidence(db, selected.variant_id);
-    const fit = await fitPrediction(db, buyerId, selected.variant_id);
+    const requestedVariantId = (request.query as any).variant_id;
+    const selected = variants.find((variant: any) => variant.variant_id === requestedVariantId)
+      ?? variants.find((variant: any) => variant.size === "XL")
+      ?? variants[0];
+    if (!selected) return reply.code(404).send({ detail: "Variant not found" });
+    const passport = await skuPassport(db, buyerId, product.product_id, selected.variant_id);
     const keepConfidence = await computeKeepConfidence(db, buyerId, selected.variant_id);
     const keepTrace = await createTrace(db, {
       buyer_id: buyerId,
@@ -87,18 +86,20 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
       fact_ids: keepConfidence.fact_ids,
       graph_paths: [keepConfidence.graph_path]
     });
-    const tracePath = graphPath(selected.variant_id, evidence.fact_ids);
+    const tracePath = graphPath(selected.variant_id, passport.outcome_evidence.fact_ids);
     return {
       buyer_id: buyerId,
-      product,
+      product: passport.product,
       variants,
-      selected_variant: selected,
-      fit,
-      evidence,
-      avoidable_issue: await avoidableIssue(db, selected.variant_id),
-      review_evidence: await reviewEvidence(db, product.product_id),
-      conflicts: await conflicts(db, product, selected.variant_id),
-      trust_state: await trustState(db, product, evidence),
+      selected_variant: passport.variant,
+      fit: passport.fit,
+      evidence: passport.outcome_evidence,
+      avoidable_issue: passport.avoidable_issue,
+      review_evidence: passport.review_evidence,
+      conflicts: passport.conflicts,
+      trust_state: passport.trust_state,
+      truth_card: passport.truth_card,
+      fit_confidence_layer: passport.fit_confidence_layer,
       keep_confidence: { trace_id: keepTrace.trace_id, ...keepConfidence },
       graph_paths: [tracePath],
       privacy: await privacySummary(db, buyerId)

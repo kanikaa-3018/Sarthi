@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileSearch, MessageCircle, ShieldCheck, Store, TrendingDown } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileSearch, MessageCircle, ShieldCheck, Store, TrendingDown, X } from "lucide-react";
 import type {
   ClusterKnowledgeGraph,
   CompareResponse,
@@ -78,9 +78,14 @@ export function SarthiSavedWorkspacePanel({
   onRetryGraph: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [graphDrawerOpen, setGraphDrawerOpen] = useState(false);
+  const [inspectedProductId, setInspectedProductId] = useState<string | null>(null);
   useEffect(() => {
     if (openProofDetails) setDetailsOpen(true);
   }, [openProofDetails, savedProduct.product_id]);
+  useEffect(() => {
+    setInspectedProductId(null);
+  }, [savedProduct.product_id]);
 
   const resolvedMatchIds = (
     knowledgeGraph?.summary.similarity?.candidates ??
@@ -104,13 +109,34 @@ export function SarthiSavedWorkspacePanel({
   const recommendedProduct = winnerProduct ?? radarPick?.product ?? savedProduct;
   const recommendedSeller = recommendedProduct.seller_name;
   const recommendedVariantId = winnerCandidate?.variant_id ?? wishlistRadar?.recommended_variant_id ?? radarPick?.variant?.variant_id ?? null;
-  const graphContext = winnerProduct
-    ? knowledgeGraph?.seller_context.find((item) => item.product.product_id === winnerProduct.product_id)
-    : null;
-  const returnSignal = graphContext
-    ? returnSignalLabel(graphContext.evidence.delivered_orders_90d, graphContext.evidence.return_rate)
+  const sellerOptions = uniqueProducts([recommendedProduct, savedProduct, ...similarProducts]);
+  const inspectedProduct = sellerOptions.find((product) => product.product_id === inspectedProductId) ?? recommendedProduct;
+  const inspectedCandidate = result ? candidateForProduct(result, inspectedProduct) : null;
+  const inspectedRadarCandidate = wishlistRadar?.candidates.find((candidate) => candidate.product.product_id === inspectedProduct.product_id) ?? null;
+  const inspectedVariantId = inspectedCandidate?.variant_id ?? inspectedRadarCandidate?.variant?.variant_id ?? null;
+  const inspectedScore = inspectedCandidate
+    ? trustScorePercent(inspectedCandidate)
+    : inspectedRadarCandidate
+      ? Math.floor(inspectedRadarCandidate.score * 100)
+      : null;
+  const inspectedContext = knowledgeGraph?.seller_context.find((item) => item.product.product_id === inspectedProduct.product_id) ?? null;
+  const returnSignal = inspectedContext
+    ? returnSignalLabel(inspectedContext.evidence.delivered_orders_90d, inspectedContext.evidence.return_rate)
+    : regretDecision
+      ? returnSignalLabel(
+          regretDecision.sku_truth_passport.outcome_evidence.delivered_orders_90d,
+          regretDecision.sku_truth_passport.outcome_evidence.return_rate
+        )
     : null;
   const sourceCount = knowledgeGraph?.summary.fact_count ?? result?.ranking.fact_ids.length ?? 0;
+  const inspectedFactCount = inspectedRadarCandidate?.fact_ids.length ?? sourceCount;
+  const inspectedProofCount = inspectedContext?.proof_coverage
+    ? Object.values(inspectedContext.proof_coverage).filter((item) => item.sufficient).length
+    : inspectedFactCount > 0
+      ? Math.min(3, inspectedFactCount)
+      : 0;
+  const inspectedIsRecommended = inspectedProduct.product_id === recommendedProduct.product_id;
+  const inspectedIsSaved = inspectedProduct.product_id === savedProduct.product_id;
   const entryCopy = savedEntryCopy(language);
   const decisionTitle = wishlistRadar?.status === "better_option_found"
     ? entryCopy.betterSeller
@@ -124,12 +150,26 @@ export function SarthiSavedWorkspacePanel({
   const decisionBody = radarPick
     ? entryCopy.recommendReason.replace("{seller}", recommendedSeller)
     : `${t(language, "sellerChecked")}, ${t(language, "returnsChecked")}, ${t(language, "proof")}.`;
+  const inspectedDecisionTitle = inspectedIsRecommended
+    ? entryCopy.chooseSeller.replace("{seller}", inspectedProduct.seller_name)
+    : inspectedIsSaved && recommendedProduct.product_id !== savedProduct.product_id
+      ? entryCopy.savedSellerNeedsCheck
+      : entryCopy.inspectSeller.replace("{seller}", inspectedProduct.seller_name);
+  const inspectedDecisionBody = inspectedIsRecommended
+    ? decisionBody
+    : inspectedScore !== null
+      ? entryCopy.inspectReason
+          .replace("{seller}", inspectedProduct.seller_name)
+          .replace("{score}", String(inspectedScore))
+      : entryCopy.inspectPending.replace("{seller}", inspectedProduct.seller_name);
   const proofChecklist = [
     {
-      tone: winnerProduct ? "safe" : "watch",
-      label: winnerProduct ? t(language, "sellerChecked") : t(language, "checkingEllipsis"),
-      detail: winnerCandidate
-        ? `${winnerProduct?.seller_name ?? t(language, "seller")} ${t(language, "sellerTrust").toLowerCase()}: ${Math.floor((winnerCandidate.factors?.seller_trust ?? 0) * 100)}%.`
+      tone: inspectedCandidate || inspectedRadarCandidate ? "safe" : "watch",
+      label: inspectedCandidate || inspectedRadarCandidate ? t(language, "sellerChecked") : t(language, "checkingEllipsis"),
+      detail: inspectedCandidate
+        ? `${inspectedProduct.seller_name} ${t(language, "sellerTrust").toLowerCase()}: ${Math.floor((inspectedCandidate.factors?.seller_trust ?? 0) * 100)}%.`
+        : inspectedRadarCandidate
+          ? `${inspectedProduct.seller_name} ${entryCopy.checked}.`
         : `${t(language, "sellerChecked")}, ${t(language, "returnsChecked")}, ${t(language, "proof")}.`
     },
     {
@@ -138,8 +178,8 @@ export function SarthiSavedWorkspacePanel({
       detail: returnSignal ? returnSignal : `${t(language, "recentOrders")} ${t(language, "checkingEllipsis").toLowerCase()}`
     },
     {
-      tone: sourceCount > 0 ? "safe" : "watch",
-      label: `${sourceCount} ${t(language, "facts")} ${t(language, "checked")}`,
+      tone: inspectedFactCount > 0 ? "safe" : "watch",
+      label: `${inspectedFactCount} ${t(language, "facts")} ${t(language, "checked")}`,
       detail: `${t(language, "reviews")}, ${t(language, "price")}, ${t(language, "returnsChecked")}, ${t(language, "size")}.`
     },
     {
@@ -152,7 +192,7 @@ export function SarthiSavedWorkspacePanel({
     {
       icon: <Store size={17} />,
       label: t(language, "sellerChecked"),
-      detail: `${recommendedSeller} ${score === null ? t(language, "checkingEllipsis").toLowerCase() : entryCopy.checked}`
+      detail: `${inspectedProduct.seller_name} ${inspectedScore === null ? t(language, "checkingEllipsis").toLowerCase() : entryCopy.checked}`
     },
     {
       icon: <TrendingDown size={17} />,
@@ -162,9 +202,14 @@ export function SarthiSavedWorkspacePanel({
     {
       icon: <FileSearch size={17} />,
       label: t(language, "proof"),
-      detail: sourceCount > 0 ? `${sourceCount} ${t(language, "facts")} ${t(language, "checked")}` : t(language, "checkingProof")
+      detail: inspectedProofCount > 0 ? `${inspectedProofCount} ${t(language, "facts")} ${t(language, "checked")}` : t(language, "checkingProof")
     }
   ];
+
+  function openProofFromGraph(traceId: string) {
+    setGraphDrawerOpen(false);
+    window.setTimeout(() => onOpenProof(traceId), 0);
+  }
 
   return (
     <div className="sarthi-saved-workspace buyer-shop-shell buyer-simple-entry">
@@ -197,32 +242,72 @@ export function SarthiSavedWorkspacePanel({
         </div>
       </header>
 
-      <nav className="buyer-check-steps" aria-label="Trust check steps">
-        <span className="complete"><b>1.</b> Saved item</span>
-        <span className={sourceCount > 0 ? "complete" : "active"}><b>2.</b> Evidence checked</span>
-        <span className={result ? "active" : ""}><b>3.</b> Choose safely</span>
-      </nav>
+      <section className="buyer-seller-lane" aria-label="Same item seller options">
+        <div className="buyer-seller-lane-head">
+          <span className="eyebrow">{entryCopy.sameItemOptions}</span>
+          <strong>
+            {sellerOptions.length > 1
+              ? entryCopy.tapSeller
+              : entryCopy.singleSeller}
+          </strong>
+          <small>
+            {sellerOptions.length > 1
+              ? `${sellerOptions.length} ${t(language, "similarSellers")} ${entryCopy.mappedByEvidence}`
+              : entryCopy.onlySellerCheck}
+          </small>
+        </div>
+        <div className={`buyer-seller-options ${sellerOptions.length === 1 ? "single" : ""}`}>
+          {sellerOptions.map((product) => {
+            const optionScore = scoreForProduct(product, result, wishlistRadar);
+            const isActive = product.product_id === inspectedProduct.product_id;
+            const isRecommended = product.product_id === recommendedProduct.product_id;
+            const isSaved = product.product_id === savedProduct.product_id;
+            return (
+              <button
+                type="button"
+                key={product.product_id}
+                className={`buyer-seller-option ${isActive ? "active" : ""} ${isRecommended ? "recommended" : ""}`}
+                onClick={() => setInspectedProductId(product.product_id)}
+                aria-pressed={isActive}
+              >
+                <img
+                  src={productImageSource(product)}
+                  alt={product.title}
+                  onError={(event) => { event.currentTarget.src = fallbackProductImage(product.color_family); }}
+                />
+                <span>
+                  <b>{product.seller_name}</b>
+                  <small>{isRecommended ? entryCopy.recommendedSeller : isSaved ? entryCopy.savedSeller : entryCopy.otherSeller}</small>
+                </span>
+                <em className={optionScore === null ? "unknown" : scoreTone(optionScore)}>
+                  {optionScore ?? "--"}
+                </em>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <main className="buyer-simple-main">
         <section className="buyer-simple-decision-card">
           <div className="buyer-simple-decision-copy">
             <span className="eyebrow">{t(language, "nextStep")}</span>
-            <h2>{entryCopy.chooseSeller.replace("{seller}", recommendedSeller)}</h2>
-            <p>{decisionBody}</p>
+            <h2>{inspectedDecisionTitle}</h2>
+            <p>{inspectedDecisionBody}</p>
           </div>
 
           <div className="buyer-simple-seller">
             <img
-              src={productImageSource(recommendedProduct)}
-              alt={recommendedProduct.title}
-              onError={(event) => { event.currentTarget.src = fallbackProductImage(recommendedProduct.color_family); }}
+              src={productImageSource(inspectedProduct)}
+              alt={inspectedProduct.title}
+              onError={(event) => { event.currentTarget.src = fallbackProductImage(inspectedProduct.color_family); }}
             />
             <div>
-              <span>{entryCopy.recommendedSeller}</span>
-              <strong>{recommendedSeller}</strong>
-              <small>Rs {recommendedProduct.base_price} - {recommendedProduct.delivery_text}</small>
+              <span>{inspectedIsRecommended ? entryCopy.recommendedSeller : inspectedIsSaved ? entryCopy.savedSeller : entryCopy.inspectingSeller}</span>
+              <strong>{inspectedProduct.seller_name}</strong>
+              <small>Rs {inspectedProduct.base_price} - {inspectedProduct.delivery_text}</small>
             </div>
-            <CheckCircle2 size={19} />
+            {inspectedIsRecommended ? <CheckCircle2 size={19} /> : <ShieldCheck size={19} />}
           </div>
 
           <div className="buyer-simple-checks compact" aria-label={t(language, "agentChecks")}>
@@ -241,13 +326,17 @@ export function SarthiSavedWorkspacePanel({
             <button
               type="button"
               className="primary"
-              onClick={() => onOpenProduct(recommendedProduct, recommendedVariantId)}
-              disabled={!recommendedProduct}
+              onClick={() => onOpenProduct(inspectedProduct, inspectedVariantId ?? recommendedVariantId)}
+              disabled={!inspectedProduct}
             >
-              {entryCopy.continueWithPick}
+              {inspectedIsRecommended ? entryCopy.continueWithPick : entryCopy.viewSeller}
             </button>
             <button type="button" onClick={() => result && onOpenResult(result)} disabled={!result}>
               {result ? entryCopy.compareSellers : t(language, "checkingEllipsis")}
+            </button>
+            <button type="button" onClick={() => setGraphDrawerOpen(true)} disabled={!knowledgeGraph && graphLoading}>
+              <FileSearch size={15} aria-hidden="true" />
+              {!knowledgeGraph && graphLoading ? "Graph loading" : "Graph chat"}
             </button>
             <button type="button" onClick={() => setDetailsOpen((open) => !open)}>
               {detailsOpen ? entryCopy.hideDetails : entryCopy.showDetails}
@@ -261,7 +350,7 @@ export function SarthiSavedWorkspacePanel({
           aria-label="Ask from verified facts"
           onSubmit={(event) => {
             event.preventDefault();
-            onAskDecision(decisionQuestion || entryCopy.defaultQuestion, savedProduct);
+            onAskDecision(decisionQuestion || entryCopy.defaultQuestion, inspectedProduct);
           }}
         >
           <MessageCircle size={18} />
@@ -285,6 +374,8 @@ export function SarthiSavedWorkspacePanel({
             decision={regretDecision}
             loading={decisionLoading}
             language={language}
+            requestLoading={decisionLoading}
+            onRequestProof={(question, product) => onAskDecision(question, product)}
             onOpenProof={onOpenProof}
             onOpenProduct={onOpenProduct}
           />
@@ -301,59 +392,68 @@ export function SarthiSavedWorkspacePanel({
               language={language}
               onOpenProof={onOpenProof}
             />
-            <section className="workspace-proof-simple compact" aria-label={t(language, "agentChecks")}>
+            <section className="workspace-proof-simple compact saved-evidence-receipt" aria-label={t(language, "agentChecks")}>
               <div className="workspace-proof-simple-head">
                 <div>
-                  <span className="eyebrow">{t(language, "agentChecks")}</span>
+                  <span>{t(language, "agentChecks")}</span>
                   <h3>{knowledgeGraph ? t(language, "proofAvailable") : t(language, "checkingProof")}</h3>
+                  <p>
+                    {knowledgeGraph
+                      ? "Only seller proof, returns, reviews, and product records are used."
+                      : "Sarthi is still reading verified evidence for this item."}
+                  </p>
                 </div>
                 <span>{sourceCount} {t(language, "facts")}</span>
               </div>
-              <div className="workspace-proof-plain-list">
+              <ul className="workspace-proof-plain-list">
                 {proofChecklist.slice(0, 3).map((item) => (
-                  <span key={item.label} className={item.tone}>
+                  <li key={item.label} className={item.tone}>
                     {item.tone === "safe" ? <ShieldCheck size={14} /> : <AlertTriangle size={14} />}
-                    {item.label}
-                  </span>
+                    <div>
+                      <strong>{item.label}</strong>
+                      <small>{item.detail}</small>
+                    </div>
+                  </li>
                 ))}
-              </div>
-              <button type="button" onClick={() => wishlistRadar && onOpenProof(wishlistRadar.trace_id)} disabled={!wishlistRadar}>
-                {t(language, "seeProof")}
-              </button>
+              </ul>
             </section>
-            <details className="buyer-graph-details">
-              <summary>
-                <span className="buyer-graph-summary-icon">
-                  <FileSearch size={16} />
-                </span>
-                <span>
-                  <strong>{entryCopy.evidenceGraph}</strong>
-                  <small>{entryCopy.graphSubtitle}</small>
-                </span>
-                <em>
-                  {knowledgeGraph
-                    ? `${knowledgeGraph.summary.fact_count} ${t(language, "facts")}`
-                    : graphLoading
-                      ? t(language, "checkingProof")
-                      : entryCopy.graphUnavailable}
-                </em>
-              </summary>
-              <KnowledgeGraphExplorer
-                graph={knowledgeGraph}
-                answer={graphAnswer}
-                query={graphQuery}
-                loading={graphLoading}
-                asking={graphAsking}
-                error={graphError}
-                onQueryChange={onQueryChange}
-                onAsk={onAskGraph}
-                onOpenProof={onOpenProof}
-                onRetry={onRetryGraph}
-              />
-            </details>
           </section>
         )}
       </main>
+
+      {graphDrawerOpen && (
+        <div className="bottom-sheet-overlay evidence-graph-drawer-overlay" onClick={() => setGraphDrawerOpen(false)}>
+          <section
+            className="bottom-sheet-content evidence-graph-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="evidence-graph-drawer-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bottom-sheet-header">
+              <div>
+                <span className="eyebrow">{entryCopy.evidenceGraph}</span>
+                <h3 className="sheet-title" id="evidence-graph-drawer-title">Proof links</h3>
+              </div>
+              <button className="bottom-sheet-close" type="button" onClick={() => setGraphDrawerOpen(false)} aria-label="Close evidence graph">
+                <X size={16} />
+              </button>
+            </div>
+            <KnowledgeGraphExplorer
+              graph={knowledgeGraph}
+              answer={graphAnswer}
+              query={graphQuery}
+              loading={graphLoading}
+              asking={graphAsking}
+              error={graphError}
+              onQueryChange={onQueryChange}
+              onAsk={onAskGraph}
+              onOpenProof={openProofFromGraph}
+              onRetry={onRetryGraph}
+            />
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -362,12 +462,16 @@ function DecisionAnswerPanel({
   decision,
   loading,
   language,
+  requestLoading,
+  onRequestProof,
   onOpenProof,
   onOpenProduct
 }: {
   decision: RegretDecisionResponse | null;
   loading: boolean;
   language: LanguageCode;
+  requestLoading: boolean;
+  onRequestProof: (question: string, product: Product) => void;
   onOpenProof: (traceId: string) => void;
   onOpenProduct: (product: Product, variantId?: string | null) => void;
 }) {
@@ -400,21 +504,47 @@ function DecisionAnswerPanel({
   const passport = decision.sku_truth_passport;
   const proofGap = decision.missing_proof;
   const proofRequest = decision.proof_request;
+  const proofAttribute = sentenceCase(labelize(proofRequest?.attribute ?? proofGap?.attribute ?? "proof"));
+  const requestQuestion = proofGap
+    ? `Please ask the seller for ${labelize(proofGap.attribute)} proof for this product.`
+    : "Please ask the seller for proof for this product.";
+  const answerTitle = proofRequest
+    ? "Proof request sent"
+    : proofGap
+      ? `${proofAttribute} proof is missing`
+      : decision.decision.label;
+  const answerSummary = proofRequest
+    ? `${proofAttribute} proof is now in the seller queue. Confidence improves only after seller upload and reviewer approval.`
+    : proofGap
+      ? "Sarthi will not treat this claim as fully trusted until the seller uploads proof and it is reviewed."
+      : decision.decision.summary;
   const reasons = [
-    passport.truth_summary.buyer_guidance,
     `${passport.outcome_evidence.delivered_orders_90d} ${t(language, "recentOrders").toLowerCase()}, ${Math.round(passport.outcome_evidence.return_rate * 100)}% ${t(language, "returnRisk").toLowerCase()}.`,
     `Fit: ${passport.fit.recommended_size} (${passport.fit.confidence}).`,
-    proofGap ? `${labelize(proofGap.attribute)} proof: ${proofGap.summary}` : "No major proof gap is blocking this answer."
-  ].filter(Boolean).slice(0, 3);
+    proofGap && !proofRequest ? proofGap.summary : null
+  ].filter(Boolean).slice(0, 2);
   const tone = decision.decision.confidence === "high" ? "safe" : decision.decision.confidence === "blocked" ? "blocked" : "watch";
+  const proofSteps = proofRequest
+    ? [
+        { label: "Buyer ask saved", done: true },
+        { label: "Seller upload", done: proofRequest.status === "submitted" || proofRequest.status === "resolved" },
+        { label: "Reviewer check", done: proofRequest.status === "resolved" },
+        { label: "Buyer notified", done: proofRequest.status === "resolved" }
+      ]
+    : [
+        { label: "Proof gap found", done: Boolean(proofGap) },
+        { label: "Buyer asks", done: false },
+        { label: "Seller uploads", done: false },
+        { label: "Reviewer checks", done: false }
+      ];
 
   return (
     <section className={`buyer-decision-answer ${tone}`} aria-live="polite">
       <div className="buyer-decision-answer-head">
         <div>
           <span className="eyebrow">Verified answer</span>
-          <h3>{decision.decision.label}</h3>
-          <p>{decision.decision.summary}</p>
+          <h3>{answerTitle}</h3>
+          <p>{answerSummary}</p>
         </div>
         <div className="buyer-decision-score">
           <strong>{score ?? "--"}</strong>
@@ -422,33 +552,40 @@ function DecisionAnswerPanel({
         </div>
       </div>
 
-      <div className="buyer-decision-proof-status">
-        {proofRequest ? (
-          <>
-            <FileSearch size={16} />
+      {(proofRequest || proofGap) ? (
+        <div className={`buyer-proof-request-card ${proofRequest ? "sent" : "needed"}`}>
+          <div className="buyer-proof-request-main">
+            {proofRequest ? <ShieldCheck size={18} /> : <AlertTriangle size={18} />}
             <div>
-              <strong>{labelize(proofRequest.attribute)} proof requested</strong>
-              <span>{labelize(proofRequest.status)} / {proofRequest.request_count} buyer {proofRequest.request_count === 1 ? "ask" : "asks"}</span>
+              <strong>{proofRequest ? `${proofAttribute} proof request is live` : "Ask once, seller gets one clear task"}</strong>
+              <span>
+                {proofRequest
+                  ? `${proofRequest.request_count} buyer${proofRequest.request_count === 1 ? "" : "s"} waiting. Status: ${labelize(proofRequest.status)}.`
+                  : `${proofAttribute} proof is the missing evidence for this answer.`}
+              </span>
             </div>
-          </>
-        ) : proofGap ? (
-          <>
-            <AlertTriangle size={16} />
-            <div>
-              <strong>{labelize(proofGap.attribute)} proof is still weak</strong>
-              <span>{proofGap.title}</span>
-            </div>
-          </>
-        ) : (
-          <>
-            <ShieldCheck size={16} />
-            <div>
-              <strong>Proof is usable for this answer</strong>
-              <span>{passport.fact_ids.length} facts checked before recommending.</span>
-            </div>
-          </>
-        )}
-      </div>
+          </div>
+          <ol className="buyer-proof-request-steps" aria-label="Proof request progress">
+            {proofSteps.map((step) => (
+              <li key={step.label} className={step.done ? "done" : ""}>
+                <span />
+                {step.label}
+              </li>
+            ))}
+          </ol>
+          <p className="buyer-proof-request-note">
+            Seller sees aggregate demand only. Reviewer approval is required before confidence improves.
+          </p>
+        </div>
+      ) : (
+        <div className="buyer-decision-proof-status">
+          <ShieldCheck size={16} />
+          <div>
+            <strong>Proof is usable for this answer</strong>
+            <span>{passport.fact_ids.length} facts checked before recommending.</span>
+          </div>
+        </div>
+      )}
 
       <div className="buyer-decision-reasons">
         {reasons.map((reason) => (
@@ -461,11 +598,19 @@ function DecisionAnswerPanel({
 
       <div className="buyer-decision-actions">
         <button type="button" className="primary" onClick={() => onOpenProduct(decision.selected.product, decision.selected.variant.variant_id)}>
-          {decision.decision.primary_action || "View product"}
+          {proofGap ? "View safer option" : decision.decision.primary_action || "View product"}
         </button>
-        <button type="button" onClick={() => onOpenProof(decision.trace_id)}>
-          {t(language, "seeProof")}
-        </button>
+        {proofGap && !proofRequest && (
+          <button type="button" onClick={() => onRequestProof(requestQuestion, decision.selected.product)} disabled={requestLoading}>
+            {requestLoading && <span className="buyer-inline-spinner" aria-hidden="true" />}
+            {requestLoading ? "Requesting..." : "Request seller proof"}
+          </button>
+        )}
+        {!proofGap && (
+          <button type="button" onClick={() => onOpenProof(decision.trace_id)}>
+            Open proof trail
+          </button>
+        )}
       </div>
     </section>
   );
@@ -530,12 +675,20 @@ function TrustRadarCard({
   const summary = recommended
     ? copy.recommendedSummary.replace("{seller}", recommended.product.seller_name)
     : copy.checkedSummary;
+  const firstAlert = radar.alerts[0] ?? null;
+  const mappedSellerCount = similarity?.distinct_seller_count ?? radar.candidates.length;
+  const factCount = radar.fact_ids.length || recommended?.fact_ids.length || 0;
+  const sellerName = recommended?.product.seller_name ?? copy.savedOption;
+  const returnRisk = recommended ? `${Math.round(recommended.evidence.return_rate * 100)}%` : "--";
+  const sellerVerification = recommended
+    ? `${labelize(recommended.evidence.seller_verification)} ${t(language, "seller").toLowerCase()}`
+    : copy.similarityChecked;
 
   return (
-    <section className={`trust-radar-card ${radar.status}`}>
+    <section className={`trust-radar-card trust-radar-receipt ${radar.status}`}>
       <div className="trust-radar-header">
         <div>
-          <span className="eyebrow">{copy.savedProductRadar}</span>
+          <span className="saved-radar-kicker">{copy.savedProductRadar}</span>
           <h3>{headline}</h3>
           <p>{summary}</p>
         </div>
@@ -545,44 +698,45 @@ function TrustRadarCard({
         </div>
       </div>
 
-      {recommended && (
-        <div className="radar-recommendation-row">
-          <img
-            src={productImageSource(recommended.product)}
-            alt={recommended.product.title}
-            onError={(event) => { event.currentTarget.src = fallbackProductImage(recommended.product.color_family); }}
-          />
-          <div>
-            <span>{recommended.is_saved_product ? copy.savedOption : copy.recommendedOption}</span>
-            <strong>{recommended.product.seller_name}</strong>
-            <small>
-              {Math.round(recommended.evidence.return_rate * 100)}% {t(language, "returnRisk").toLowerCase()} | {labelize(recommended.evidence.seller_verification)} {t(language, "seller").toLowerCase()}
-            </small>
-          </div>
+      <dl className="radar-receipt-facts" aria-label="Trust evidence summary">
+        <div>
+          <dt>{t(language, "seller")}</dt>
+          <dd>{sellerName}</dd>
+        </div>
+        <div>
+          <dt>{t(language, "returnsChecked")}</dt>
+          <dd>{returnRisk}</dd>
+        </div>
+        <div>
+          <dt>{t(language, "similarSellers")}</dt>
+          <dd>{mappedSellerCount}</dd>
+        </div>
+        <div>
+          <dt>{activeFitProfile ? copy.profile : t(language, "proof")}</dt>
+          <dd>{activeFitProfile ? activeFitProfile.label : `${factCount} ${t(language, "facts")}`}</dd>
+        </div>
+      </dl>
+
+      {firstAlert ? (
+        <div className={`radar-evidence-alert ${firstAlert.severity}`}>
+          <AlertTriangle size={14} />
+          <span>{firstAlert.title}</span>
+        </div>
+      ) : (
+        <div className="radar-evidence-alert safe">
+          <ShieldCheck size={14} />
+          <span>{sellerVerification}</span>
         </div>
       )}
 
-      <div className="radar-context-row compact">
-        <span>{activeFitProfile ? `${activeFitProfile.label} ${copy.profile}` : copy.buyerProfile}</span>
-        <span>{similarity ? `${similarity.distinct_seller_count} ${t(language, "similarSellers")}` : copy.similarityChecked}</span>
-        <span>{radar.alerts.length ? `${radar.alerts.length} ${copy.alerts}` : copy.noBlockerAlert}</span>
-      </div>
-
-      {radar.alerts.length > 0 && (
-        <div className="radar-alert-list compact">
-          <AlertTriangle size={13} />
-          <span>{radar.alerts[0].title}</span>
-        </div>
-      )}
-
-      <div className="radar-action-row">
+      <div className="radar-action-row radar-next-row">
         <div>
           <span>{t(language, "nextStep")}</span>
           <strong>{radar.next_best_action.label}</strong>
           <small>{radar.next_best_action.reason}</small>
         </div>
         <button type="button" onClick={() => onOpenProof(radar.trace_id)}>
-          {t(language, "seeProof")}
+          Open trail
         </button>
       </div>
     </section>
@@ -604,10 +758,23 @@ type SavedEntryCopyKey =
   | "chooseSeller"
   | "checked"
   | "recommendedSeller"
+  | "savedSeller"
+  | "otherSeller"
+  | "inspectingSeller"
   | "continueWithPick"
+  | "viewSeller"
   | "compareSellers"
   | "showDetails"
   | "hideDetails"
+  | "sameItemOptions"
+  | "tapSeller"
+  | "singleSeller"
+  | "mappedByEvidence"
+  | "onlySellerCheck"
+  | "savedSellerNeedsCheck"
+  | "inspectSeller"
+  | "inspectReason"
+  | "inspectPending"
   | "questionPlaceholder"
   | "defaultQuestion"
   | "evidenceGraph"
@@ -625,10 +792,23 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     chooseSeller: "Choose {seller}",
     checked: "checked",
     recommendedSeller: "Sarthi pick",
+    savedSeller: "Saved seller",
+    otherSeller: "Other seller",
+    inspectingSeller: "Inspecting seller",
     continueWithPick: "Continue with pick",
+    viewSeller: "View this seller",
     compareSellers: "Compare sellers",
     showDetails: "Show proof details",
     hideDetails: "Hide details",
+    sameItemOptions: "Same item options",
+    tapSeller: "Tap a seller to inspect proof",
+    singleSeller: "Only one seller found",
+    mappedByEvidence: "mapped by catalog and proof evidence.",
+    onlySellerCheck: "No comparable seller is available yet. Sarthi will focus on proof and returns.",
+    savedSellerNeedsCheck: "Saved seller needs one check",
+    inspectSeller: "Inspect {seller}",
+    inspectReason: "{seller} is scoring {score}/100. Check proof before you continue.",
+    inspectPending: "{seller} is still being checked. Wait for proof and return signals before buying.",
     questionPlaceholder: "Ask: should I buy this?",
     defaultQuestion: "Should I buy this?",
     evidenceGraph: "Evidence graph",
@@ -645,10 +825,23 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     chooseSeller: "{seller} choose karo",
     checked: "checked",
     recommendedSeller: "Sarthi pick",
+    savedSeller: "Saved seller",
+    otherSeller: "Other seller",
+    inspectingSeller: "Seller inspect ho raha hai",
     continueWithPick: "Pick continue karo",
+    viewSeller: "Is seller ko dekho",
     compareSellers: "Sellers compare karo",
     showDetails: "Proof details dekho",
     hideDetails: "Details hide karo",
+    sameItemOptions: "Same item options",
+    tapSeller: "Seller tap karke proof dekho",
+    singleSeller: "Sirf ek seller mila",
+    mappedByEvidence: "catalog aur proof evidence se mapped.",
+    onlySellerCheck: "Abhi comparable seller nahi hai. Sarthi proof aur returns check karega.",
+    savedSellerNeedsCheck: "Saved seller ko ek check chahiye",
+    inspectSeller: "{seller} inspect karo",
+    inspectReason: "{seller} ka score {score}/100 hai. Continue se pehle proof check karo.",
+    inspectPending: "{seller} abhi check ho raha hai. Buy se pehle proof aur return signals ka wait karo.",
     questionPlaceholder: "Poochho: buy karna safe hai?",
     defaultQuestion: "Kya mujhe ye buy karna chahiye?",
     evidenceGraph: "Evidence graph",
@@ -665,10 +858,23 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     chooseSeller: "Choose {seller}",
     checked: "checked",
     recommendedSeller: "Sarthi pick",
+    savedSeller: "Saved seller",
+    otherSeller: "Other seller",
+    inspectingSeller: "Inspecting seller",
     continueWithPick: "Continue with pick",
+    viewSeller: "View this seller",
     compareSellers: "Compare sellers",
     showDetails: "Proof details dekho",
     hideDetails: "Hide details",
+    sameItemOptions: "Same item options",
+    tapSeller: "Tap seller to inspect proof",
+    singleSeller: "Only one seller found",
+    mappedByEvidence: "catalog aur proof evidence se mapped.",
+    onlySellerCheck: "Comparable seller nahi mila. Sarthi proof aur returns pe focus karega.",
+    savedSellerNeedsCheck: "Saved seller needs one check",
+    inspectSeller: "Inspect {seller}",
+    inspectReason: "{seller} score {score}/100 hai. Continue se pehle proof check karo.",
+    inspectPending: "{seller} check ho raha hai. Buy se pehle proof aur returns ka wait karo.",
     questionPlaceholder: "Ask: buy karna safe hai?",
     defaultQuestion: "Should I buy this?",
     evidenceGraph: "Evidence graph",
@@ -811,6 +1017,34 @@ function productImageSource(product: Pick<Product, "image_url" | "color_family">
   return source;
 }
 
+function uniqueProducts(products: Product[]) {
+  const seen = new Set<string>();
+  return products.filter((product) => {
+    if (seen.has(product.product_id)) return false;
+    seen.add(product.product_id);
+    return true;
+  });
+}
+
+function scoreForProduct(product: Product, result: CompareResponse | null, radar: WishlistRadarEvent | null) {
+  const compareCandidate = result ? candidateForProduct(result, product) : null;
+  if (compareCandidate) return trustScorePercent(compareCandidate);
+  const radarCandidate = radar?.candidates.find((candidate) => candidate.product.product_id === product.product_id) ?? null;
+  return radarCandidate ? Math.floor(radarCandidate.score * 100) : null;
+}
+
+function scoreTone(score: number) {
+  if (score >= 72) return "safe";
+  if (score >= 58) return "watch";
+  return "danger";
+}
+
 function labelize(value: string) {
   return value.replace(/_/g, " ");
+}
+
+function sentenceCase(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
 }

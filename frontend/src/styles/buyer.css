@@ -319,10 +319,12 @@
   font-size: 13px;
   font-weight: 800;
   gap: 10px;
-  max-width: min(360px, calc(100vw - 32px));
+  left: 16px;
+  margin-left: auto;
+  max-width: 360px;
   padding: 11px 12px;
   position: fixed;
-  right: 24px;
+  right: 16px;
   z-index: 100;
 }
 
@@ -1267,6 +1269,17 @@
   color: var(--text-secondary);
   font-size: 10.5px;
   margin-top: 2px;
+}
+
+.seller-row-main small {
+  color: var(--accent-primary-hover);
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .seller-row-score {
@@ -2889,6 +2902,46 @@
 }
 
 .outcome-loop-list p {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin: 5px 0 0;
+}
+
+.outcome-impact-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+}
+
+.outcome-impact-card div {
+  background: var(--bg-surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 9px;
+}
+
+.outcome-impact-card span {
+  color: var(--text-muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.outcome-impact-card strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 13px;
+  line-height: 1.3;
+  margin-top: 3px;
+}
+
+.outcome-impact-card p {
   color: var(--text-secondary);
   font-size: 11.5px;
   line-height: 1.45;
@@ -9138,7 +9191,7 @@
 
 @media (max-width: 640px) {
   .bottom-sheet-content.audit-sheet-content {
-    max-width: calc(100vw - 18px) !important;
+    max-width: calc(100% - 18px) !important;
     padding: 14px !important;
   }
 
@@ -9852,4 +9905,949 @@
     width: 100%;
   }
 }
+
+/* Catalog Filter & Sort Bar */
+.marketplace-filter-sort-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-subtle, #e5e7eb);
+  flex-wrap: wrap;
+}
+
+.filter-group,
+.sort-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label,
+.sort-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary, #64748b);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.price-filter-input {
+  width: 120px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: 8px;
+  background: var(--bg-surface, #ffffff);
+  font-size: 12px;
+  color: var(--text-primary, #0f172a);
+  outline: none;
+  transition: all 0.15s ease-in-out;
+}
+
+.price-filter-input:focus {
+  border-color: var(--accent-primary, #4f46e5);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.sort-select {
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: 8px;
+  background: var(--bg-surface, #ffffff) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 8px center;
+  appearance: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #0f172a);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease-in-out;
+}
+
+.sort-select:focus {
+  border-color: var(--accent-primary, #4f46e5);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+/* Proof Pending Badge on Card */
+.product-proof-pending-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  z-index: 2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Address Form */
+.checkout-address-form {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 640px;
+  margin: 16px auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.address-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 600px) {
+  .address-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.address-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.address-field span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+}
+
+.address-field input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary, #0f172a);
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.address-field input.error {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.field-error {
+  font-size: 11px;
+  color: #ef4444;
+  font-weight: 500;
+}
+
+/* OTP & UPI Flow Shells */
+.checkout-otp-shell {
+  max-width: 480px;
+  margin: 32px auto;
+  padding: 0 16px;
+}
+
+.checkout-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.checkout-otp-card {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 16px;
+  padding: 32px 24px;
+  text-align: center;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.checkout-otp-card h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary, #0f172a);
+}
+
+.checkout-otp-card p {
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+  margin: 0;
+}
+
+.checkout-otp-display {
+  background: var(--bg-surface-muted, #f8fafc);
+  border: 1px dashed var(--border-subtle, #cbd5e1);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.otp-code {
+  font-family: monospace;
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: #16a34a;
+  margin: 0 4px;
+}
+
+.checkout-otp-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+}
+
+.checkout-otp-input {
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: 8px;
+  font-size: 16px;
+  letter-spacing: 2px;
+  text-align: center;
+  outline: none;
+}
+
+.checkout-otp-input:focus {
+  border-color: var(--accent-primary, #4f46e5);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.checkout-upi-processing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+
+.upi-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spinUpi 0.8s linear infinite;
+}
+
+@keyframes spinUpi {
+  to { transform: rotate(360deg); }
+}
+
+/* Order Success Screen */
+.checkout-success-shell {
+  max-width: 560px;
+  margin: 40px auto;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 20px;
+  padding: 36px 28px;
+  text-align: center;
+  box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.08);
+}
+
+.checkout-success-icon-ring {
+  width: 72px;
+  height: 72px;
+  background: #f0fdf4;
+  border: 2px solid #bbf7d0;
+  color: #16a34a;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+
+.checkout-success-shell h1 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary, #0f172a);
+  margin: 0 0 6px;
+}
+
+.checkout-success-sub {
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+  margin-bottom: 24px;
+}
+
+.checkout-success-invoice {
+  background: var(--bg-surface-muted, #f8fafc);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  margin-bottom: 28px;
+}
+
+.checkout-invoice-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.checkout-invoice-row span {
+  color: var(--text-secondary, #64748b);
+}
+
+.checkout-invoice-row strong {
+  color: var(--text-primary, #0f172a);
+  font-weight: 600;
+  text-align: right;
+}
+
+.checkout-success-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.checkout-success-actions button {
+  flex: 1;
+  max-width: 200px;
+}
+
+/* Trust Score Badge & Keep Confidence Card Enhancements */
+.keep-confidence-card {
+  border-radius: 16px !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06) !important;
+  border: 1.5px solid var(--border-subtle, #e2e8f0) !important;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.keep-confidence-card.safe {
+  border-color: #bbf7d0 !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%) !important;
+}
+
+.keep-confidence-card.watch {
+  border-color: #fde68a !important;
+  background: linear-gradient(135deg, #ffffff 0%, #fffbeb 100%) !important;
+}
+
+.keep-confidence-card.danger {
+  border-color: #fca5a5 !important;
+  background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%) !important;
+}
+
+.keep-score-meter {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: baseline !important;
+  justify-content: center !important;
+  padding: 8px 14px !important;
+  border-radius: 12px !important;
+  font-family: inherit !important;
+  border: 2px solid currentColor !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+  min-width: 68px;
+}
+
+.keep-score-meter.safe,
+.keep-confidence-card.safe .keep-score-meter {
+  color: #15803d !important;
+  border-color: #22c55e !important;
+  background: #f0fdf4 !important;
+}
+
+.keep-score-meter.watch,
+.keep-confidence-card.watch .keep-score-meter {
+  color: #b45309 !important;
+  border-color: #f59e0b !important;
+  background: #fffbeb !important;
+}
+
+.keep-score-meter.danger,
+.keep-confidence-card.danger .keep-score-meter {
+  color: #b91c1c !important;
+  border-color: #ef4444 !important;
+  background: #fef2f2 !important;
+}
+
+.keep-score-meter .score-val,
+.keep-score-meter span {
+  font-size: 22px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.keep-score-meter .score-max,
+.keep-score-meter small {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  opacity: 0.75 !important;
+  margin-left: 2px !important;
+}
+
+/* Chatbot / Samvaad Card (Left Column) */
+.detail-gallery-container .samvaad-card {
+  margin-top: 16px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.samvaad-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.samvaad-card-header svg {
+  color: #6366f1;
+}
+
+.samvaad-card-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.samvaad-suggestion-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.samvaad-suggestion-list button {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.samvaad-suggestion-list button:hover {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #ffffff;
+}
+
+.samvaad-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 4px 6px 4px 14px;
+}
+
+.samvaad-input-row input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  outline: none;
+  color: #0f172a;
+}
+
+.samvaad-input-row button {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #6366f1;
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.samvaad-input-row button:hover {
+  background: #4f46e5;
+}
+
+/* AI Answer Response Card */
+.samvaad-response-card {
+  margin-top: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.response-conclusion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.response-conclusion span {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6366f1;
+}
+
+.response-conclusion strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.response-conclusion p {
+  font-size: 13px;
+  color: #475569;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.response-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #ffffff;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+}
+
+.reason-bullet {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.reason-bullet svg {
+  color: #16a34a;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.response-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.response-actions .btn-action-primary {
+  flex: 1;
+  height: 38px;
+  background: #6366f1;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.response-actions .btn-action-primary:hover {
+  background: #4f46e5;
+}
+
+.response-actions .btn-action-secondary {
+  height: 38px;
+  padding: 0 16px;
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.response-actions .btn-action-secondary:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* ==========================================================================
+   PRODUCT DETAIL UI OVERHAUL (REMOVE HARSH BLACK BLOCKS & ELEGANT STYLING)
+   ========================================================================== */
+
+/* 1. Size Options (Remove harsh black active button) */
+body .product-detail-shell .detail-size-options button {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  min-width: 52px !important;
+  height: 40px !important;
+  transition: all 0.15s ease !important;
+}
+
+body .product-detail-shell .detail-size-options button:hover {
+  border-color: #6366f1 !important;
+  color: #4f46e5 !important;
+  background: #f8fafc !important;
+}
+
+body .product-detail-shell .detail-size-options button.active {
+  background: #7c3aed !important;
+  border-color: #7c3aed !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25) !important;
+  font-weight: 700 !important;
+}
+
+/* 2. Sticky Checkout Action Card (Remove harsh black block) */
+body .product-detail-shell .cod-action-card,
+body .product-detail-shell .detail-decision-container > section.cod-action-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important;
+  padding: 18px 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+}
+
+body .product-detail-shell .cod-action-card span,
+body .product-detail-shell .detail-decision-container > section.cod-action-card span {
+  color: #64748b !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em !important;
+}
+
+body .product-detail-shell .cod-action-card strong,
+body .product-detail-shell .detail-decision-container > section.cod-action-card strong {
+  color: #0f172a !important;
+  font-size: 22px !important;
+  font-weight: 900 !important;
+}
+
+body .product-detail-shell .cod-action-card small,
+body .product-detail-shell .detail-decision-container > section.cod-action-card small {
+  color: #475569 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  margin-top: 4px !important;
+}
+
+body .product-detail-shell .cod-action-card small.checkout-ready-note {
+  color: #16a34a !important;
+  font-weight: 600 !important;
+}
+
+body .product-detail-shell .cod-action-card small.checkout-risk-note {
+  color: #d97706 !important;
+  font-weight: 600 !important;
+}
+
+body .product-detail-shell .cod-action-card .btn-sticky-buy,
+body .product-detail-shell .detail-decision-container > section.cod-action-card .btn-sticky-buy {
+  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%) !important;
+  border: none !important;
+  border-radius: 10px !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  height: 44px !important;
+  padding: 0 20px !important;
+  width: 100% !important;
+  justify-content: center !important;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+body .product-detail-shell .cod-action-card .btn-sticky-buy:hover {
+  background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%) !important;
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.4) !important;
+  transform: translateY(-1px);
+}
+
+/* 3. Floating Bottom Action Button (Remove harsh black See Proof button) */
+body .product-detail-shell .detail-help-actions button,
+body .detail-help-actions button {
+  background: #ffffff !important;
+  border: 1.5px solid #7c3aed !important;
+  color: #7c3aed !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  height: 40px !important;
+  padding: 0 18px !important;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.15) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+body .product-detail-shell .detail-help-actions button:hover,
+body .detail-help-actions button:hover,
+body .product-detail-shell .detail-help-actions button.active,
+body .detail-help-actions button.active {
+  background: #7c3aed !important;
+  border-color: #7c3aed !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.3) !important;
+}
+
+/* 4. Quick Checks Card (.sku-evidence-card) Upgrade */
+.sku-evidence-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  padding: 20px !important;
+  margin-top: 16px !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03) !important;
+}
+
+.sku-evidence-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 12px !important;
+  margin: 14px 0 10px !important;
+}
+
+.sku-evidence-grid > div {
+  background: #f8fafc !important;
+  border: 1px solid #f1f5f9 !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
+.sku-evidence-grid span {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.sku-evidence-grid strong {
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+/* 5. Size Selection Hint */
+.size-selector-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  padding: 18px 20px !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03) !important;
+}
+
+.size-selector-card p {
+  font-size: 12.5px !important;
+  color: #475569 !important;
+  margin-top: 10px !important;
+  line-height: 1.4 !important;
+}
+
+/* ==========================================================================
+   NO-PURPLE PROFESSIONAL UI OVERRIDES FOR PRODUCT DETAIL PANEL
+   ========================================================================== */
+
+/* 1. Detail Product Actions (Compare options / Ask from verified facts) */
+body .product-detail-shell .detail-product-actions button:first-child,
+body .product-detail-shell .detail-product-actions button {
+  background: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15) !important;
+}
+
+body .product-detail-shell .detail-product-actions button:hover {
+  background: #1e293b !important;
+  border-color: #1e293b !important;
+}
+
+body .product-detail-shell .detail-product-actions button:not(:first-child) {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+body .product-detail-shell .detail-product-actions button:not(:first-child):hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
+
+/* 2. Compare Options Launcher Button */
+.seller-compare-launcher .btn-action-primary,
+.seller-compare-launcher button {
+  background: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+}
+
+/* 3. Size Options Pills */
+body .product-detail-shell .detail-size-options button {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  min-width: 52px !important;
+  height: 40px !important;
+  transition: all 0.15s ease !important;
+}
+
+body .product-detail-shell .detail-size-options button:hover {
+  border-color: #0f172a !important;
+  color: #0f172a !important;
+  background: #f8fafc !important;
+}
+
+body .product-detail-shell .detail-size-options button.active {
+  background: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2) !important;
+  font-weight: 700 !important;
+}
+
+/* 4. Sticky Checkout Action Card Button */
+body .product-detail-shell .cod-action-card .btn-sticky-buy,
+body .product-detail-shell .detail-decision-container > section.cod-action-card .btn-sticky-buy {
+  background: #0f172a !important;
+  border: none !important;
+  border-radius: 10px !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  height: 44px !important;
+  padding: 0 20px !important;
+  width: 100% !important;
+  justify-content: center !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+body .product-detail-shell .cod-action-card .btn-sticky-buy:hover {
+  background: #1e293b !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.3) !important;
+  transform: translateY(-1px);
+}
+
+/* 5. Chatbot Send Button & Primary Actions */
+.samvaad-card-header svg {
+  color: #0f172a !important;
+}
+
+.samvaad-input-row button {
+  background: #0f172a !important;
+  color: #ffffff !important;
+}
+
+.samvaad-input-row button:hover {
+  background: #1e293b !important;
+}
+
+.response-actions .btn-action-primary {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.response-actions .btn-action-primary:hover {
+  background: #1e293b !important;
+}
+
+.samvaad-suggestion-list button:hover {
+  background: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+.response-conclusion span {
+  color: #0f172a !important;
+}
+
+/* 6. Floating Bottom Help Action Button */
+body .product-detail-shell .detail-help-actions button,
+body .detail-help-actions button {
+  background: #ffffff !important;
+  border: 1.5px solid #0f172a !important;
+  color: #0f172a !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  height: 40px !important;
+  padding: 0 18px !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+body .product-detail-shell .detail-help-actions button:hover,
+body .detail-help-actions button:hover,
+body .product-detail-shell .detail-help-actions button.active,
+body .detail-help-actions button.active {
+  background: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25) !important;
+}
+
+
+
+
 

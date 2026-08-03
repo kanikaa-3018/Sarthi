@@ -334,6 +334,28 @@ export function OutcomeScreen({
             language={language}
           />
 
+          {(result.score_update || result.seller_root_cause_task) && (
+            <div className="outcome-impact-card">
+              {result.score_update && (
+                <div>
+                  <span>{copy.scoreImpact}</span>
+                  <strong>
+                    {result.score_update.before_score_percent}/100 -&gt; {result.score_update.after_score_percent}/100
+                    {result.score_update.delta_points !== 0 && ` (${result.score_update.delta_points > 0 ? "+" : ""}${result.score_update.delta_points})`}
+                  </strong>
+                  <p>{result.score_update.buyer_copy}</p>
+                </div>
+              )}
+              {result.seller_root_cause_task && (
+                <div>
+                  <span>{copy.sellerTaskCreated}</span>
+                  <strong>{result.seller_root_cause_task.title}</strong>
+                  <p>{copy.rootCauseVisible}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="outcome-confirm-facts">
             <div className="kv-row">
               <span>{copy.outcomeId}</span>
@@ -592,6 +614,9 @@ type OutcomeCopyKey =
   | "afterExchange"
   | "afterReturn"
   | "afterKept"
+  | "scoreImpact"
+  | "sellerTaskCreated"
+  | "rootCauseVisible"
   | "saveOutcomeError"
   | "returnOptionsError";
 
@@ -669,6 +694,9 @@ const OUTCOME_COPY: Record<LanguageCode, Record<OutcomeCopyKey, string>> = {
     afterExchange: "What happens after this exchange",
     afterReturn: "What happens after this return",
     afterKept: "How this improves future checks",
+    scoreImpact: "Trust score impact",
+    sellerTaskCreated: "Seller root-cause task",
+    rootCauseVisible: "Seller receives this as aggregate work only; your identity and private memory stay hidden.",
     saveOutcomeError: "Could not save order outcome.",
     returnOptionsError: "Could not check return options."
   },
@@ -745,6 +773,9 @@ const OUTCOME_COPY: Record<LanguageCode, Record<OutcomeCopyKey, string>> = {
     afterExchange: "Is exchange ke baad kya hoga",
     afterReturn: "Is return ke baad kya hoga",
     afterKept: "Future checks kaise better honge",
+    scoreImpact: "Trust score impact",
+    sellerTaskCreated: "Seller root-cause task",
+    rootCauseVisible: "Seller ko sirf aggregate task milega; aapki identity aur private memory hidden rahegi.",
     saveOutcomeError: "Order feedback save nahi hua.",
     returnOptionsError: "Return options check nahi ho paye."
   },
@@ -821,6 +852,9 @@ const OUTCOME_COPY: Record<LanguageCode, Record<OutcomeCopyKey, string>> = {
     afterExchange: "Exchange ke baad kya hoga",
     afterReturn: "Return ke baad kya hoga",
     afterKept: "Future checks kaise improve honge",
+    scoreImpact: "Trust score impact",
+    sellerTaskCreated: "Seller root-cause task",
+    rootCauseVisible: "Seller ko sirf aggregate task milega; identity aur private memory hidden rahegi.",
     saveOutcomeError: "Order outcome save nahi hua.",
     returnOptionsError: "Return options check nahi hue."
   }
