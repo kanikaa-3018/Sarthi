@@ -52,6 +52,27 @@ export function CheckoutPage({ buyerId, language }: Props) {
   const [ordering, setOrdering] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<BuyerOrderItem | null>(null);
 
+  // --- Address State Machine ---
+  type CheckoutStep = "address" | "payment" | "otp" | "upi" | "success";
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("address");
+  const [address, setAddress] = useState({ name: "", phone: "", flat: "", area: "", city: "", pincode: "" });
+  const [addressErrors, setAddressErrors] = useState<Partial<typeof address>>({});
+
+  // COD OTP state
+  const [generatedOtp] = useState(() => String(Math.floor(100000 + Math.random() * 900000)));
+  const [otpInput, setOtpInput] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+
+  // UPI state
+  const [upiId, setUpiId] = useState("");
+  const [upiProcessing, setUpiProcessing] = useState(false);
+  const [upiError, setUpiError] = useState<string | null>(null);
+
+  // Order invoice
+  const [invoiceNo] = useState(() => `SRTH${Date.now().toString().slice(-8)}`);
+  const [trackingId] = useState(() => `TRK${Date.now().toString().slice(-10)}`);
+  const deliveryDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
   useEffect(() => {
     if (!productId || !variantId) {
       setError(copy.missingCheckout);
@@ -163,45 +184,301 @@ export function CheckoutPage({ buyerId, language }: Props) {
     }
   ];
 
+  function validateAddress() {
+    const errs: Partial<typeof address> = {};
+    if (!address.name.trim()) errs.name = "Name required";
+    if (!/^\d{10}$/.test(address.phone)) errs.phone = "10-digit number required";
+    if (!address.flat.trim()) errs.flat = "House / flat required";
+    if (!address.area.trim()) errs.area = "Area required";
+    if (!address.city.trim()) errs.city = "City required";
+    if (!/^\d{6}$/.test(address.pincode)) errs.pincode = "6-digit pincode";
+    setAddressErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleAddressNext() {
+    if (validateAddress()) setCheckoutStep("payment");
+  }
+
   async function handlePlaceOrder() {
     if (!selectedVariant || !checkout || !contract || ordering) return;
+    if (paymentMode === "cod") {
+      setCheckoutStep("otp");
+      return;
+    }
+    if (paymentMode === "prepaid") {
+      setCheckoutStep("upi");
+      return;
+    }
+  }
+
+  async function handleOtpConfirm() {
+    if (otpInput.trim() !== generatedOtp) {
+      setOtpError("OTP does not match. Please check and retry.");
+      return;
+    }
+    setOtpError(null);
     setOrdering(true);
-    setError(null);
     try {
       const response = await placeCheckoutOrder({
         buyer_id: buyerId,
-        variant_id: selectedVariant.variant_id,
-        contract_id: contract.contract_id,
-        payment_mode: paymentMode,
+        variant_id: selectedVariant!.variant_id,
+        contract_id: contract!.contract_id,
+        payment_mode: "cod",
         buying_for_someone_else: wearerMode !== "self",
         wearer_label: wearerLabelFor(wearerMode, language)
       });
       setPlacedOrder(response.order);
+      setCheckoutStep("success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
+      setOtpError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
     } finally {
       setOrdering(false);
     }
   }
 
-  if (placedOrder) {
+  async function handleUpiConfirm() {
+    if (!upiId.trim() || !upiId.includes("@")) {
+      setUpiError("Enter a valid UPI ID (e.g. name@upi)");
+      return;
+    }
+    setUpiError(null);
+    setUpiProcessing(true);
+    // Simulate UPI processing
+    await new Promise(res => setTimeout(res, 2200));
+    try {
+      const response = await placeCheckoutOrder({
+        buyer_id: buyerId,
+        variant_id: selectedVariant!.variant_id,
+        contract_id: contract!.contract_id,
+        payment_mode: "prepaid",
+        buying_for_someone_else: wearerMode !== "self",
+        wearer_label: wearerLabelFor(wearerMode, language)
+      });
+      setPlacedOrder(response.order);
+      setCheckoutStep("success");
+    } catch (err) {
+      setUpiError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
+    } finally {
+      setUpiProcessing(false);
+    }
+  }
+
+  // ---- Render: Success ----
+  if (checkoutStep === "success" || placedOrder) {
     return (
       <section className="checkout-page-shell">
-        <div className="checkout-success-panel">
-          <span className="checkout-success-icon"><PackageCheck size={30} /></span>
-          <div>
-            <span className="eyebrow">{t(language, "orderPlaced")}</span>
-            <h1>{copy.orderPlacedTitle}</h1>
-            <p>{paymentMode === "prepaid" ? copy.prepaidOrderBody : copy.codOrderBody}</p>
+        <div className="checkout-success-shell">
+          <div className="checkout-success-badge-container">
+            <div className="checkout-success-icon-check">✓</div>
+          </div>
+          <h1>Order placed!</h1>
+          <p className="checkout-success-sub">
+            {paymentMode === "cod" ? "Cash on delivery – pay when you receive." : "Payment confirmed via UPI."}
+          </p>
+          
+          <div className="checkout-success-invoice">
+            {product && (
+              <div className="checkout-success-product-strip">
+                <img
+                  src={checkoutProductImage(product)}
+                  alt=""
+                  onError={(event) => { event.currentTarget.src = fallbackProductImage(product.color_family); }}
+                  className="checkout-success-product-img"
+                />
+                <div className="checkout-success-product-info">
+                  <h4>{product.title.split("-")[0].trim()}</h4>
+                  <p>Size {selectedVariant?.size || "XL"}</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="checkout-success-receipt-divider" />
+
+            <div className="checkout-invoice-row">
+              <span>Invoice No.</span>
+              <strong>{invoiceNo}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Tracking ID</span>
+              <strong>{trackingId}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Estimated Delivery</span>
+              <strong>{deliveryDate}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Amount</span>
+              <strong>Rs {payablePrice || "--"}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Payment</span>
+              <strong>{paymentMode === "cod" ? "Cash on Delivery" : "UPI Prepaid"}</strong>
+            </div>
+            <div className="checkout-invoice-row">
+              <span>Delivery to</span>
+              <strong>{address.name}, {address.flat}, {address.area}, {address.city} – {address.pincode}</strong>
+            </div>
           </div>
           <div className="checkout-success-actions">
             <button type="button" className="checkout-page-primary" onClick={() => navigate("/shop/orders")}>
-              {t(language, "viewMyOrders")}
+              Track Order
             </button>
             <button type="button" className="checkout-page-secondary" onClick={() => navigate("/shop")}>
-              {t(language, "continueShopping")}
+              Continue Shopping
             </button>
           </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ---- Render: COD OTP ----
+  if (checkoutStep === "otp") {
+    return (
+      <section className="checkout-page-shell">
+        <div className="checkout-otp-shell">
+          <button type="button" className="checkout-back-link" onClick={() => setCheckoutStep("payment")}>
+            <ArrowLeft size={16} /> Back
+          </button>
+          <div className="checkout-otp-card">
+            <Banknote size={28} style={{ color: "var(--accent-green, #16a34a)" }} />
+            <h2>Confirm your order with OTP</h2>
+            <p>A one-time password has been sent to <strong>{address.phone}</strong></p>
+            <div className="checkout-otp-display">
+              <span>Your OTP: </span>
+              <strong className="otp-code">{generatedOtp}</strong>
+              <small>(Simulated – shown for demo)</small>
+            </div>
+            <label className="checkout-otp-label">
+              Enter OTP
+              <input
+                type="text"
+                maxLength={6}
+                value={otpInput}
+                onChange={e => setOtpInput(e.target.value.replace(/\D/g, ""))}
+                placeholder="6-digit OTP"
+                className="checkout-otp-input"
+                autoFocus
+              />
+            </label>
+            {otpError && <div className="notice error">{otpError}</div>}
+            <button
+              type="button"
+              className="checkout-page-primary"
+              onClick={() => void handleOtpConfirm()}
+              disabled={ordering || otpInput.length < 6}
+            >
+              {ordering ? "Placing order..." : "Verify & Place Order"}
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ---- Render: UPI ----
+  if (checkoutStep === "upi") {
+    return (
+      <section className="checkout-page-shell">
+        <div className="checkout-otp-shell">
+          <button type="button" className="checkout-back-link" onClick={() => { setCheckoutStep("payment"); setUpiProcessing(false); }}>
+            <ArrowLeft size={16} /> Back
+          </button>
+          <div className="checkout-otp-card">
+            <CreditCard size={28} style={{ color: "var(--accent-blue, #2563eb)" }} />
+            <h2>Pay via UPI</h2>
+            <p>Enter your UPI ID to complete the payment of <strong>Rs {payablePrice}</strong></p>
+            {upiProcessing ? (
+              <div className="checkout-upi-processing">
+                <div className="upi-spinner" />
+                <p>Processing payment...</p>
+                <small>Please wait, do not close this page.</small>
+              </div>
+            ) : (
+              <>
+                <label className="checkout-otp-label">
+                  UPI ID
+                  <input
+                    type="text"
+                    value={upiId}
+                    onChange={e => setUpiId(e.target.value)}
+                    placeholder="e.g. name@upi or phone@paytm"
+                    className="checkout-otp-input"
+                    autoFocus
+                  />
+                </label>
+                {upiError && <div className="notice error">{upiError}</div>}
+                <button
+                  type="button"
+                  className="checkout-page-primary"
+                  onClick={() => void handleUpiConfirm()}
+                  disabled={!upiId.trim()}
+                >
+                  Pay Rs {payablePrice}
+                </button>
+                <small style={{ textAlign: "center", color: "#888", marginTop: "8px" }}>
+                  <LockKeyhole size={12} style={{ verticalAlign: "middle" }} /> Secured payment
+                </small>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ---- Render: Address ----
+  if (checkoutStep === "address") {
+    return (
+      <section className="checkout-page-shell">
+        <header className="checkout-page-header">
+          <button type="button" onClick={() => navigate(product ? `/shop/product/${encodeURIComponent(product.product_id)}` : "/shop")}>
+            <ArrowLeft size={16} />
+            Back
+          </button>
+          <div>
+            <span className="eyebrow">Step 1 of 3</span>
+            <h1>Delivery address</h1>
+          </div>
+        </header>
+        <nav className="checkout-progress" aria-label="Checkout steps">
+          <span className="active"><b>1</b> Address</span>
+          <span><b>2</b> Payment</span>
+          <span><b>3</b> Confirm</span>
+        </nav>
+
+        <div className="checkout-address-form">
+          <div className="address-form-grid">
+            {([
+              { key: "name", label: "Full name", placeholder: "Your name", type: "text" },
+              { key: "phone", label: "Phone number", placeholder: "10-digit mobile", type: "tel" },
+              { key: "flat", label: "House / flat / floor", placeholder: "e.g. 12B, 2nd floor", type: "text" },
+              { key: "area", label: "Area / street", placeholder: "Colony, street name", type: "text" },
+              { key: "city", label: "City", placeholder: "Mumbai, Delhi...", type: "text" },
+              { key: "pincode", label: "Pincode", placeholder: "6-digit pincode", type: "text" }
+            ] as const).map(({ key, label, placeholder, type }) => (
+              <label key={key} className="address-field">
+                <span>{label}</span>
+                <input
+                  type={type}
+                  value={address[key]}
+                  onChange={e => setAddress(prev => ({ ...prev, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  className={addressErrors[key] ? "error" : ""}
+                />
+                {addressErrors[key] && <small className="field-error">{addressErrors[key]}</small>}
+              </label>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="checkout-page-primary"
+            onClick={handleAddressNext}
+            disabled={loading}
+          >
+            Continue to Payment
+          </button>
         </div>
       </section>
     );
@@ -296,7 +573,6 @@ export function CheckoutPage({ buyerId, language }: Props) {
         <span><b>3</b> Place order</span>
       </nav>
       <p className="checkout-continuity-note">
-        <ShieldCheck size={15} />
         Your item, payment choice, and buyer protection stay visible until you place the order.
       </p>
 
@@ -338,8 +614,8 @@ export function CheckoutPage({ buyerId, language }: Props) {
             </div>
 
             <div className="checkout-protection-line">
-              <ShieldCheck size={17} />
               <div>
+                <span className="checkout-protection-badge">Guarantee Active</span>
                 <strong>{contract ? copy.protectionLocked : copy.protectionPending}</strong>
                 <p>{primaryProtection}</p>
               </div>
@@ -419,15 +695,31 @@ export function CheckoutPage({ buyerId, language }: Props) {
                 <strong>{copy.protectionLocked}</strong>
                 <p>{contract.contract.summary}</p>
                 {protectionItems.length > 0 && (
-                  <div className="checkout-contract-mini-grid">
-                    {protectionItems.map((item) => (
-                      <div key={`${item.dimension}-${item.claim}`}>
-                        <span>{labelize(item.dimension)}</span>
-                        <b>{item.claim}</b>
-                        <small>{item.status ? labelize(item.status) : labelize(item.confidence)}</small>
-                      </div>
-                    ))}
-                  </div>
+                  <table className="checkout-protection-table">
+                    <thead>
+                      <tr>
+                        <th>Guarantee</th>
+                        <th>Coverage details</th>
+                        <th>Lock status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {protectionItems.map((item) => {
+                        const statusClass = (item.status || item.confidence || "").toLowerCase();
+                        return (
+                          <tr key={`${item.dimension}-${item.claim}`} className={`status-${statusClass}`}>
+                            <td className="col-guarantee">{labelize(item.dimension)}</td>
+                            <td className="col-claim">{item.claim}</td>
+                            <td className="col-status">
+                              <span className={`status-pill status-pill--${statusClass}`}>
+                                {item.status ? labelize(item.status) : labelize(item.confidence)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
             )}
@@ -473,9 +765,9 @@ export function CheckoutPage({ buyerId, language }: Props) {
               <b>{selectedPaymentBenefit}</b>
             </div>
             <div className="checkout-summary-safety">
-              <span><ShieldCheck size={14} /> {copy.trustChecked}</span>
-              <span><LockKeyhole size={14} /> {contract ? copy.protectionLocked : copy.protectionPending}</span>
-              <span><Gift size={14} /> {checkoutDecision?.payment_choice.message ?? copy.noForcedPayment}</span>
+              <span className="safety-tag safety-tag--trust">{copy.trustChecked}</span>
+              <span className="safety-tag safety-tag--protection">{contract ? copy.protectionLocked : copy.protectionPending}</span>
+              <span className="safety-tag safety-tag--payment">{checkoutDecision?.payment_choice.message ?? copy.noForcedPayment}</span>
             </div>
             <button
               type="button"
@@ -528,176 +820,84 @@ function PaymentCoachPanel({
   copy: CheckoutPageCopy;
   language: LanguageCode;
 }) {
-  const choices = paymentAssist?.payment_choices?.length
-    ? paymentAssist.payment_choices
-    : fallbackPaymentChoices(prepaidRecommended, totalBenefit, rewardPoints, codCharge, copy);
-  const recommendedChoice = choices.find((choice) => choice.recommended) ?? choices[0];
-  const selectedChoice = choices.find((choice) => choice.mode === paymentMode) ?? recommendedChoice;
-  const [activeFactKey, setActiveFactKey] = useState("");
-  const [activeCheckKey, setActiveCheckKey] = useState("");
-
-  useEffect(() => {
-    setActiveFactKey("");
-    setActiveCheckKey("");
-  }, [selectedChoice?.mode]);
-
-  if (!selectedChoice) return null;
-
-  const quickFacts = selectedChoice.quick_facts?.length
-    ? selectedChoice.quick_facts
-    : fallbackPaymentFacts(selectedChoice, totalBenefit, rewardPoints, codCharge, copy);
-  const activeFact = quickFacts.find((fact) => fact.key === activeFactKey) ?? null;
-  const activeCheck = activeCheckKey ? selectedChoice.checks.find((check) => check.key === activeCheckKey) ?? null : null;
-  const payOnlineChoice = choices.find((choice) => choice.mode === "prepaid");
-  const codChoice = choices.find((choice) => choice.mode === "cod");
-  const visibleOffers = paymentAssist?.offers.slice(0, 3) ?? [];
-  const safeCount = selectedChoice.checks.filter((check) => check.status === "passed").length;
+  const saving = totalBenefit > 0 ? totalBenefit : 38;
+  const pts = rewardPoints > 0 ? rewardPoints : 25;
+  const codFee = codCharge > 0 ? codCharge : 0;
 
   return (
-    <div className={`checkout-payment-coach ${selectedChoice.mode}`} aria-label={copy.paymentCoachLabel}>
-      <div className="payment-coach-hero">
-        <div>
-          <span>{copy.sarthiRecommends} {recommendedChoice ? paymentModeLabel(recommendedChoice, language) : ""}</span>
-          <strong>{recommendedChoice?.headline ?? selectedChoice.headline}</strong>
-          <p>{recommendedChoice?.one_line ?? selectedChoice.one_line}</p>
-        </div>
-        <div className="payment-score-dial" aria-label={`${selectedChoice.confidence_score}/100 ${copy.scoreLabel}`}>
-          <b>{selectedChoice.confidence_score}</b>
-          <small>/100</small>
-        </div>
-      </div>
+    <div className="pcp-root" aria-label="Payment method">
 
-      <div className="payment-choice-switch" role="group" aria-label={copy.paymentOptions}>
-        {[payOnlineChoice, codChoice].filter(Boolean).map((choice) => {
-          const current = choice as PaymentAssistChoice;
-          const Icon = current.mode === "prepaid" ? CreditCard : Banknote;
-          const active = current.mode === paymentMode;
-          return (
-            <button
-              key={current.mode}
-              type="button"
-              className={`${active ? "active" : ""} ${current.recommended ? "recommended" : ""}`}
-              disabled={disabled || !current.enabled}
-              onClick={() => onSelect(current.mode)}
-            >
-              <span className="payment-choice-icon"><Icon size={17} /></span>
-              <span>
-                <em>{current.recommended ? copy.recommended : copy.available}</em>
-                <strong>{paymentModeLabel(current, language)}</strong>
-                <small>{current.primary_benefit}</small>
-              </span>
-              <b>{current.confidence_score}</b>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="payment-benefit-rail" aria-label={copy.youGet}>
-        {quickFacts.map((fact) => {
-          const active = fact.key === activeFactKey;
-          return (
-            <button
-              key={fact.key}
-              type="button"
-              className={`${fact.status} ${active ? "active" : ""}`}
-              onClick={() => setActiveFactKey(active ? "" : fact.key)}
-            >
-              <span>{fact.label}</span>
-              <strong>{fact.value}</strong>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className={`payment-action-nudge ${activeFact ? "has-detail" : ""}`}>
-        {activeFact ? (
-          <>
-            <span>{activeFact.label}</span>
-            <strong>{activeFact.value}</strong>
-            <small>{activeFact.detail}</small>
-          </>
-        ) : (
-          <>
-            <span>{selectedChoice.risk_label}</span>
-            <strong>{selectedChoice.cta}</strong>
-            <small>{selectedChoice.next_step}</small>
-          </>
-        )}
-      </div>
-
-      <div className="payment-check-workbench" aria-label={copy.tapCheck}>
-        <div className="payment-check-chips">
-          {selectedChoice.checks.map((check) => (
-            <button
-              key={check.key}
-              type="button"
-              className={`${check.status} ${activeCheck?.key === check.key ? "active" : ""}`}
-              onClick={() => setActiveCheckKey(check.key)}
-            >
-              {check.status === "passed" ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
-              {check.label}
-            </button>
-          ))}
-        </div>
-        {activeCheck ? (
-          <div className={`payment-check-detail ${activeCheck.status}`}>
-            <span>{safeCount}/{selectedChoice.checks.length} {copy.checksPassed}</span>
-            <strong>{activeCheck.label}</strong>
-            <p>{activeCheck.detail}</p>
+      {/* PREPAID CARD (Pay Online) */}
+      <button
+        type="button"
+        className={`pcp-card pcp-card--prepaid ${paymentMode === "prepaid" ? "pcp-card--active" : ""}`}
+        onClick={() => onSelect("prepaid")}
+        disabled={disabled}
+        aria-pressed={paymentMode === "prepaid"}
+      >
+        <div className="pcp-card__indicator" />
+        <div className="pcp-card__body">
+          <div className="pcp-card__label-row">
+            <span className="pcp-card__mode">Pay online (UPI, Card, Netbanking)</span>
+            {prepaidRecommended && <span className="pcp-badge pcp-badge--best">Best choice</span>}
           </div>
-        ) : (
-          <div className="payment-check-summary">
-            <strong>{safeCount}/{selectedChoice.checks.length} {copy.checksPassed}</strong>
-            <span>{copy.tapCheck}</span>
+          
+          <div className="pcp-card__trust-list">
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Instant Refund Guarantee: Refund credited to source within 2 hours of return pickup.</span>
+            </div>
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Multi-Bank Protection: Auto-routes transaction to bypass network lags or bank server failures.</span>
+            </div>
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Save Rs {saving} instantly on this checkout + earn {pts} Sarthi points.</span>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+        <div className="pcp-card__radio" />
+      </button>
 
-      {darkPatternShield && (
-        <div className={`payment-pressure-line ${darkPatternShield.status}`}>
-          <span>{darkPatternShield.status === "clear" ? <ShieldCheck size={15} /> : <AlertTriangle size={15} />}</span>
-          <div>
-            <strong>{darkPatternShield.headline}</strong>
-            <small>{darkPatternShield.risk_count === 0 ? copy.noRushSignal : darkPatternShield.plain_copy}</small>
+      {/* CASH ON DELIVERY CARD */}
+      <button
+        type="button"
+        className={`pcp-card pcp-card--cod ${paymentMode === "cod" ? "pcp-card--active" : ""}`}
+        onClick={() => onSelect("cod")}
+        disabled={disabled}
+        aria-pressed={paymentMode === "cod"}
+      >
+        <div className="pcp-card__indicator" />
+        <div className="pcp-card__body">
+          <div className="pcp-card__label-row">
+            <span className="pcp-card__mode">Cash on delivery (COD)</span>
+            {codFee > 0 && <span className="pcp-badge pcp-badge--warn">+Rs {codFee} handling fee</span>}
           </div>
-          <b>{darkPatternShield.risk_count === 0 ? copy.clear : `${darkPatternShield.risk_count} ${copy.risks}`}</b>
+          
+          <div className="pcp-card__trust-list">
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>Pay only when your item is delivered.</span>
+            </div>
+            <div className="pcp-card__trust-item">
+              <span className="pcp-card__bullet-dot" />
+              <span>UPI/Cash accepted at door. Note: No online discount or reward points applied.</span>
+            </div>
+          </div>
+        </div>
+        <div className="pcp-card__radio" />
+      </button>
+
+      {/* Prepaid switch micro-nudge */}
+      {paymentMode === "cod" && prepaidRecommended && (
+        <div className="pcp-nudge-bar">
+          <span>Switch to Pay online to save Rs {saving} instantly + unlock instant refund promise.</span>
+          <button type="button" className="pcp-nudge-cta" onClick={() => onSelect("prepaid")} disabled={disabled}>
+            Switch to Pay Online
+          </button>
         </div>
       )}
-
-      <details className="payment-coach-details">
-        <summary>{copy.fullCheckoutProof}</summary>
-        <div className="payment-proof-grid">
-          {decisionFacts.map((fact) => (
-            <span key={fact.label}>
-              <b>{fact.value}</b>
-              <small>{fact.label}</small>
-            </span>
-          ))}
-        </div>
-        {checkoutDecision && (
-          <div className="payment-proof-lines">
-            {checkoutDecision.safeguards.map((item) => {
-              const status = item.key === "refund_lock" ? contractLocked ? "passed" : "watch" : item.status;
-              return (
-                <span key={item.key} className={status}>
-                  {status === "passed" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
-                  <b>{item.label}</b>
-                  <small>{item.key === "refund_lock" && contractLocked ? "Refund expectation is locked before payment." : item.detail}</small>
-                </span>
-              );
-            })}
-          </div>
-        )}
-        {visibleOffers.length > 0 && (
-          <div className="payment-offer-mini" aria-label={copy.offersChecked}>
-            {visibleOffers.map((offer) => (
-              <span key={offer.offer_id} className={offer.eligible ? "eligible" : ""}>
-                {offer.label}: {offer.eligible && offer.amount_rupees > 0 ? `Rs ${offer.amount_rupees}` : copy.notEligible}
-              </span>
-            ))}
-          </div>
-        )}
-      </details>
     </div>
   );
 }
@@ -1081,7 +1281,7 @@ function checkoutPageCopy(language: LanguageCode): CheckoutPageCopy {
       nextStepLabel: "Next step",
       tapCheck: "Tap a check",
       checksPassed: "checks passed",
-      noRushSignal: "No rush signal",
+      noRushSignal: "Price proof signal",
       clear: "Clear",
       risks: "risks",
       fullCheckoutProof: "Full checkout proof",
@@ -1167,7 +1367,7 @@ function checkoutPageCopy(language: LanguageCode): CheckoutPageCopy {
       nextStepLabel: "Next step",
       tapCheck: "Tap a check",
       checksPassed: "checks passed",
-      noRushSignal: "No rush signal",
+      noRushSignal: "Price proof signal",
       clear: "Clear",
       risks: "risks",
       fullCheckoutProof: "Full checkout proof",
@@ -1252,7 +1452,7 @@ function checkoutPageCopy(language: LanguageCode): CheckoutPageCopy {
     nextStepLabel: "Next step",
     tapCheck: "Tap a check",
     checksPassed: "checks passed",
-    noRushSignal: "No rush signal",
+    noRushSignal: "Price proof signal",
     clear: "Clear",
     risks: "risks",
     fullCheckoutProof: "Full checkout proof",

@@ -18,7 +18,9 @@ import {
   RotateCcw,
   FileCheck2,
   Gift,
-  ArrowRight
+  ArrowRight,
+  LayoutGrid,
+  List
 } from "lucide-react";
 import {
   askKnowledgeGraph,
@@ -68,6 +70,7 @@ type AutoScanState =
   | { status: "error"; clusterId: string; title: string; message: string };
 
 type BuyerShopStep = "feed" | "detail" | "saved" | "wishlist" | "orders" | "proofs";
+const BUYER_CHECK_TIMEOUT_MS = 22_000;
 
 export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) {
   const navigate = useNavigate();
@@ -116,6 +119,9 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<"default" | "price_asc" | "price_desc" | "rating">("default");
+  const [priceMax, setPriceMax] = useState<number | "">("");
+  const [proofProductIds, setProofProductIds] = useState<Set<string>>(new Set());
 
   const safetyProgressOpen = autoScan.status === "scanning";
 
@@ -173,8 +179,13 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setError(null);
     setStep(shopRouteMode(window.location.pathname));
     
-    Promise.allSettled([getFeed(buyerId), getFitProfiles(buyerId), getBuyerWishlist(buyerId)])
-      .then(([feedOutcome, profileOutcome, wishlistOutcome]) => {
+    Promise.allSettled([
+      getFeed(buyerId),
+      getFitProfiles(buyerId),
+      getBuyerWishlist(buyerId),
+      getBuyerProofs(buyerId)
+    ])
+      .then(([feedOutcome, profileOutcome, wishlistOutcome, proofsOutcome]) => {
         if (feedOutcome.status === "fulfilled") {
           setProducts(feedOutcome.value.products);
         } else {
@@ -185,6 +196,15 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         }
         if (wishlistOutcome.status === "fulfilled") {
           setSavedProductIds(new Set(wishlistOutcome.value.items.map((item) => item.intent.product_id)));
+        }
+        if (proofsOutcome.status === "fulfilled") {
+          const openIds = new Set<string>();
+          proofsOutcome.value.items.forEach((item: any) => {
+            if (item.status !== "approved") {
+              openIds.add(item.product.product_id);
+            }
+          });
+          setProofProductIds(openIds);
         }
       })
       .catch((err: Error) => setError(err.message));
@@ -197,12 +217,22 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
   const visibleProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    return products.filter((product) => {
+    let filtered = products.filter((product) => {
       const categoryMatch = selectedCategory === "All" || labelize(product.category) === selectedCategory;
       const queryMatch = !query || `${product.title} ${product.seller_name} ${product.fabric} ${product.category}`.toLowerCase().includes(query);
-      return categoryMatch && queryMatch;
+      const priceMatch = priceMax === "" || product.base_price <= priceMax;
+      return categoryMatch && queryMatch && priceMatch;
     });
-  }, [products, searchTerm, selectedCategory]);
+
+    if (sortBy === "price_asc") {
+      filtered = [...filtered].sort((a, b) => a.base_price - b.base_price);
+    } else if (sortBy === "price_desc") {
+      filtered = [...filtered].sort((a, b) => b.base_price - a.base_price);
+    } else if (sortBy === "rating") {
+      filtered = [...filtered].sort((a, b) => b.rating - a.rating);
+    }
+    return filtered;
+  }, [products, searchTerm, selectedCategory, sortBy, priceMax]);
 
   const activeClusterId = selectedClusterId || wishlistedProduct?.cluster_id || "";
 
@@ -299,6 +329,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setError(null);
     setWishlistedProduct(product);
     setSelectedClusterId(product.cluster_id);
+    setCompareSheetOpen(true);
     hydratedGraphProductRef.current = product.product_id;
     void loadKnowledgeGraphForProduct(product);
     try {
@@ -311,7 +342,6 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         listingCount: clusterListingCount(products, product.cluster_id),
         result
       });
-      setCompareSheetOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to compare sellers for this product");
     }
@@ -361,53 +391,58 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             if (animationInterval !== null) {
               window.clearInterval(animationInterval);
             }
+            setSafetyCheckingProduct(null);
             resolve();
           }
         }, 400);
       });
     }
 
-    const [allApisResult] = await Promise.all([
-      Promise.allSettled([
-        runRegretFirewall({
-          buyer_id: buyerId,
-          product_id: product.product_id,
-          query: "Is this safe to buy before ordering?",
-          create_missing_proof_request: false
-        }),
-        getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id),
-        createWishlistIntent({
-          buyer_id: buyerId,
-          product_id: product.product_id,
-          profile_id: activeFitProfile?.profile_id,
-          create_seller_signal: true
-        })
-      ]),
-      animationPromise
+    const decisionTask = settleBuyerCheck(withBuyerCheckTimeout("Buying guidance took too long. Try again.", runRegretFirewall({
+      buyer_id: buyerId,
+      product_id: product.product_id,
+      query: "Is this safe to buy before ordering?",
+      create_missing_proof_request: false
+    })));
+    const graphTask = settleBuyerCheck(withBuyerCheckTimeout("Evidence map took too long. Try again.", getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id)));
+    const radarTask = settleBuyerCheck(withBuyerCheckTimeout("Wishlist signal took too long. Try again.", createWishlistIntent({
+      buyer_id: buyerId,
+      product_id: product.product_id,
+      profile_id: activeFitProfile?.profile_id,
+      create_seller_signal: true
+    })));
+
+    void graphTask.then((graphOutcome) => {
+      if (requestId !== decisionRequestRef.current) return;
+      if (graphOutcome.status === "fulfilled") {
+        setKnowledgeGraph(graphOutcome.value);
+        setGraphQuery(graphOutcome.value.chat_suggestions[0] ?? "");
+      } else {
+        setGraphError(graphOutcome.reason instanceof Error ? graphOutcome.reason.message : "Unable to build evidence map");
+      }
+      setGraphLoading(false);
+    });
+
+    void radarTask.then((radarOutcome) => {
+      if (requestId !== decisionRequestRef.current) return;
+      if (radarOutcome.status === "fulfilled") {
+        setWishlistRadar(radarOutcome.value.radar);
+      } else {
+        setRadarError(radarOutcome.reason instanceof Error ? radarOutcome.reason.message : "Unable to prepare wishlist radar");
+      }
+      setRadarLoading(false);
+    });
+
+    const [decisionOutcome] = await Promise.all([
+      decisionTask,
+      animationPromise.then(() => undefined)
     ]);
 
     if (animationInterval !== null) {
       window.clearInterval(animationInterval);
     }
     setSafetyCheckingProduct(null);
-
-    const [decisionOutcome, graphOutcome, radarOutcome] = allApisResult;
-
-    if (graphOutcome.status === "fulfilled") {
-      setKnowledgeGraph(graphOutcome.value);
-      setGraphQuery(graphOutcome.value.chat_suggestions[0] ?? "");
-    } else {
-      setGraphError(graphOutcome.reason instanceof Error ? graphOutcome.reason.message : "Unable to build evidence map");
-    }
-    setGraphLoading(false);
     setDecisionLoading(false);
-    setRadarLoading(false);
-
-    if (radarOutcome.status === "fulfilled") {
-      setWishlistRadar(radarOutcome.value.radar);
-    } else {
-      setRadarError(radarOutcome.reason instanceof Error ? radarOutcome.reason.message : "Unable to prepare wishlist radar");
-    }
 
     if (decisionOutcome.status === "fulfilled") {
       const decision = decisionOutcome.value;
@@ -543,7 +578,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     }
   }
 
-  function handleOpenCheckout(variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant }) {
+  function handleOpenCheckout(variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant & { quantity?: number } }) {
     setSelectedVariantId(variantId);
     navigate(`/shop/checkout/${encodeURIComponent(item.product.product_id)}/${encodeURIComponent(variantId)}`, {
       state: { contract, item }
@@ -579,6 +614,11 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           onSaveProduct={handleSaveToWishlist}
           onOpenSavedItem={(product) => openSavedProofLayer(product)}
           onOpenOrders={() => navigate("/shop/orders")}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          priceMax={priceMax}
+          onPriceMaxChange={setPriceMax}
+          proofProductIds={proofProductIds}
         />
       ) : step === "wishlist" ? (
         <WishlistWorkspace
@@ -1039,6 +1079,12 @@ function OrdersWorkspace({
   const placedCount = orders.filter(isPlacedOrder).length;
   const learntCount = orders.filter(isLearntOrder).length;
   const contractCount = orders.filter((order) => Boolean(order.contract_id)).length;
+  const pendingAnswerLabel = pendingCount === 1
+    ? copy.oneAnswerWaiting
+    : copy.manyAnswersWaiting.replace("{count}", String(pendingCount));
+  const headerBody = pendingCount
+    ? (pendingCount === 1 ? copy.headerOnePendingBody : copy.headerManyPendingBody.replace("{count}", String(pendingCount)))
+    : copy.headerClearBody;
   const selectedFeedbackOrder = feedbackOrderId
     ? orders.find((order) => order.order_id === feedbackOrderId) ?? null
     : null;
@@ -1105,7 +1151,8 @@ function OrdersWorkspace({
         </button>
         <div>
           <span className="eyebrow">{t(language, "myOrders")}</span>
-          <h2>{pendingCount ? `${pendingCount} ${copy.headerNeedsAnswer}` : copy.headerAllClear}</h2>
+          <h2>{copy.headerTitle}</h2>
+          <p>{headerBody}</p>
         </div>
       </div>
 
@@ -1127,7 +1174,7 @@ function OrdersWorkspace({
           <div className="orders-desk-panel" aria-label={copy.learningStatus}>
             <div className="orders-desk-copy">
               <span className="eyebrow">{copy.contractDesk}</span>
-              <h3>{pendingCount ? `${pendingCount} ${copy.pendingTitle}` : copy.clearTitle}</h3>
+              <h3>{pendingCount ? pendingAnswerLabel : copy.clearTitle}</h3>
               <p>{copy.contractDeskBody}</p>
             </div>
             <div className="orders-desk-metrics">
@@ -1154,7 +1201,7 @@ function OrdersWorkspace({
             <button type="button" className={orderFilter === "all" ? "active" : ""} onClick={() => setOrderFilter("all")}>{copy.allOrders} <b>{orders.length}</b></button>
             <button type="button" className={orderFilter === "action" ? "active" : ""} onClick={() => setOrderFilter("action")}>{copy.needsAnswer} <b>{pendingCount}</b></button>
             <button type="button" className={orderFilter === "progress" ? "active" : ""} onClick={() => setOrderFilter("progress")}>{copy.onTheWay} <b>{placedCount}</b></button>
-            <button type="button" className={orderFilter === "complete" ? "active" : ""} onClick={() => setOrderFilter("complete")}>{copy.closed} <b>{learntCount}</b></button>
+            <button type="button" className={orderFilter === "complete" ? "active" : ""} onClick={() => setOrderFilter("complete")}>{copy.answered} <b>{learntCount}</b></button>
           </div>
 
           <div className="orders-card-list">
@@ -1298,10 +1345,14 @@ function ordersLearningCopy(language: LanguageCode) {
   if (language === "hindi" || language === "hinglish") {
     return {
       learningStatus: "Order learning status",
-      headerNeedsAnswer: "orders ka quick answer pending hai",
+      headerTitle: "Order follow-ups",
+      headerOnePendingBody: "Sarthi needs one post-delivery response to update returns, proof aur future seller trust.",
+      headerManyPendingBody: "Sarthi needs {count} post-delivery responses to update returns, proof aur future seller trust.",
+      headerClearBody: "All order answers are closed. Future recommendations can use your latest outcomes.",
       headerAllClear: "Orders are up to date",
       contractDesk: "After-delivery answers",
-      pendingTitle: "orders need kept/returned status",
+      oneAnswerWaiting: "1 delivery answer is waiting",
+      manyAnswersWaiting: "{count} delivery answers are waiting",
       clearTitle: "All order answers are closed",
       contractDeskBody: "Kept ya returned select karte hi Sarthi promise, return help, aur future trust signal update karta hai.",
       awaitingAnswer: "need answer",
@@ -1312,8 +1363,9 @@ function ordersLearningCopy(language: LanguageCode) {
       needsAnswer: "Needs action",
       onTheWay: "On the way",
       closed: "Closed",
+      answered: "Answered",
       feedbackAfterDelivery: "Delivery ke baad return contract close hoga.",
-      openItem: "View",
+      openItem: "Open item",
       resolveNow: "Close contract",
       markDelivered: "Mark delivered",
       updatingDelivery: "Updating",
@@ -1341,10 +1393,14 @@ function ordersLearningCopy(language: LanguageCode) {
   }
   return {
     learningStatus: "Order learning status",
-    headerNeedsAnswer: "orders need a quick answer",
+    headerTitle: "Order follow-ups",
+    headerOnePendingBody: "Sarthi needs one post-delivery response to update returns, proof, and future seller trust.",
+    headerManyPendingBody: "Sarthi needs {count} post-delivery responses to update returns, proof, and future seller trust.",
+    headerClearBody: "All delivery answers are closed. Your latest outcomes can guide future recommendations.",
     headerAllClear: "Orders are up to date",
     contractDesk: "After-delivery answers",
-    pendingTitle: "orders need kept/returned status",
+    oneAnswerWaiting: "1 delivery answer is waiting",
+    manyAnswersWaiting: "{count} delivery answers are waiting",
     clearTitle: "All order answers are closed",
     contractDeskBody: "Each answer checks the promise made before checkout, return options, and future trust evidence.",
     awaitingAnswer: "need answer",
@@ -1355,8 +1411,9 @@ function ordersLearningCopy(language: LanguageCode) {
     needsAnswer: "Needs action",
     onTheWay: "On the way",
     closed: "Closed",
+    answered: "Answered",
     feedbackAfterDelivery: "Delivery pending. The return contract closes after one buyer answer.",
-    openItem: "View",
+    openItem: "Open item",
     resolveNow: "Close contract",
     markDelivered: "Mark delivered",
     updatingDelivery: "Updating",
@@ -1505,6 +1562,7 @@ function ProofsWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [proofFilter, setProofFilter] = useState<"action" | "ready" | "all">("action");
+  const [proofView, setProofView] = useState<"cards" | "table">("cards");
   const [selectedProofItem, setSelectedProofItem] = useState<BuyerProofLedgerItem | null>(null);
   const totalOpen = summary.waiting_seller + summary.admin_review + summary.needs_more_proof;
   const totalLift = items.reduce((sum, item) => sum + item.trust_impact.lift_points, 0);
@@ -1597,119 +1655,203 @@ function ProofsWorkspace({
         </div>
       ) : (
         <>
-          <div className="buyer-filter-bar proof-filter-bar" role="group" aria-label="Filter proof requests">
-            <button type="button" className={proofFilter === "action" ? "active" : ""} onClick={() => setProofFilter("action")}>Needs action <b>{totalOpen}</b></button>
-            <button type="button" className={proofFilter === "ready" ? "active" : ""} onClick={() => setProofFilter("ready")}>Ready to use <b>{summary.approved}</b></button>
-            <button type="button" className={proofFilter === "all" ? "active" : ""} onClick={() => setProofFilter("all")}>All <b>{items.length}</b></button>
+          <div className="proof-workspace-toolbar">
+            <div className="buyer-filter-bar proof-filter-bar" role="group" aria-label="Filter proof requests">
+              <button type="button" className={proofFilter === "action" ? "active" : ""} onClick={() => setProofFilter("action")}>Needs action <b>{totalOpen}</b></button>
+              <button type="button" className={proofFilter === "ready" ? "active" : ""} onClick={() => setProofFilter("ready")}>Ready to use <b>{summary.approved}</b></button>
+              <button type="button" className={proofFilter === "all" ? "active" : ""} onClick={() => setProofFilter("all")}>All <b>{items.length}</b></button>
+            </div>
+            <div className="proof-view-switch" role="group" aria-label={copy.viewMode}>
+              <button
+                type="button"
+                className={proofView === "cards" ? "active" : ""}
+                aria-pressed={proofView === "cards"}
+                onClick={() => setProofView("cards")}
+              >
+                <LayoutGrid size={15} />
+                {copy.viewCards}
+              </button>
+              <button
+                type="button"
+                className={proofView === "table" ? "active" : ""}
+                aria-pressed={proofView === "table"}
+                onClick={() => setProofView("table")}
+              >
+                <List size={15} />
+                {copy.viewTable}
+              </button>
+            </div>
           </div>
-          <div className="proof-ledger-list proof-tracker-list">
-          {filteredItems.map((item) => (
-            <article key={item.request.request_id} className={`proof-ledger-card proof-tracker-card ${item.status}`}>
-              <div className="proof-card-topline">
-                <div className="proof-ledger-product">
-                  <img
-                    src={productImageSource(item.product)}
-                    alt={item.product.title}
-                    onError={(e) => { e.currentTarget.src = fallbackProductImage(item.product.color_family); }}
-                  />
-                  <div>
-                    <span>{item.product.seller_name}</span>
-                    <strong>{item.product.title.split("-")[0].trim()}</strong>
-                    <small>
-                      {proofAttributeLabel(item.request.attribute, language)} {copy.proof} - {item.request.request_count} {copy.buyerAsks}
-                    </small>
+
+          {proofView === "table" && filteredItems.length > 0 ? (
+            <div className="proof-ledger-table-shell">
+              <div className="proof-ledger-table" role="table" aria-label={copy.proofTracker}>
+                <div className="proof-ledger-table-head" role="row">
+                  <span role="columnheader">{copy.product}</span>
+                  <span role="columnheader">{copy.proofDemand}</span>
+                  <span role="columnheader">{copy.status}</span>
+                  <span role="columnheader">{copy.trustImpact}</span>
+                  <span role="columnheader">{copy.evidence}</span>
+                  <span role="columnheader">{copy.action}</span>
+                </div>
+                <div className="proof-ledger-table-body" role="rowgroup">
+                  {filteredItems.map((item) => (
+                    <article key={item.request.request_id} className={`proof-ledger-table-row ${item.status}`} role="row">
+                      <div className="proof-table-product" role="cell">
+                        <img
+                          src={productImageSource(item.product)}
+                          alt={item.product.title}
+                          onError={(e) => { e.currentTarget.src = fallbackProductImage(item.product.color_family); }}
+                        />
+                        <div>
+                          <span>{item.product.seller_name}</span>
+                          <strong>{item.product.title.split("-")[0].trim()}</strong>
+                          <small>Rs {item.product.base_price}</small>
+                        </div>
+                      </div>
+                      <div className="proof-table-demand" role="cell" data-label={copy.proofDemand}>
+                        <span>{proofAttributeLabel(item.request.attribute, language)}</span>
+                        <strong>{item.request.request_count} {copy.buyerAsks}</strong>
+                      </div>
+                      <div className="proof-table-status" role="cell" data-label={copy.status}>
+                        <span className={`proof-decision-pill ${item.status}`}>
+                          {proofLedgerStatusLabel(item.status, language)}
+                        </span>
+                        <small>{proofNextSafeAction(item.status, language)}</small>
+                      </div>
+                      <div className="proof-table-impact" role="cell" data-label={copy.trustImpact}>
+                        <strong>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</strong>
+                        <small>+{item.trust_impact.lift_points} pts</small>
+                      </div>
+                      <div className="proof-table-evidence" role="cell" data-label={copy.evidence}>
+                        <strong>{proofQualityVerdict(item.proof_quality.score, item.status, language)}</strong>
+                        <small>{item.proof_asset ? item.proof_asset.title : copy.assetWaiting}</small>
+                      </div>
+                      <div className="proof-table-actions" role="cell" data-label={copy.action}>
+                        <button type="button" onClick={() => onViewProduct(item.product)}>
+                          {t(language, "viewItem")}
+                        </button>
+                        {item.proof_asset ? (
+                          <button type="button" className="primary" onClick={() => setSelectedProofItem(item)}>
+                            {copy.reviewProof}
+                          </button>
+                        ) : (
+                          <button type="button" className="primary" onClick={() => onOpenProductProof(item.product)}>
+                            {copy.seeProof}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="proof-ledger-list proof-tracker-list">
+            {filteredItems.map((item) => (
+              <article key={item.request.request_id} className={`proof-ledger-card proof-tracker-card ${item.status}`}>
+                <div className="proof-card-topline proof-card-ledger-row">
+                  <div className="proof-ledger-product">
+                    <img
+                      src={productImageSource(item.product)}
+                      alt={item.product.title}
+                      onError={(e) => { e.currentTarget.src = fallbackProductImage(item.product.color_family); }}
+                    />
+                    <div>
+                      <span>{item.product.seller_name}</span>
+                      <strong>{item.product.title.split("-")[0].trim()}</strong>
+                      <small>
+                        {proofAttributeLabel(item.request.attribute, language)} {copy.proof} from {item.request.request_count} {copy.buyerAsks}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="proof-row-decision">
+                    <span className={`proof-decision-pill ${item.status}`}>
+                      {proofLedgerStatusLabel(item.status, language)}
+                    </span>
+                    <strong>{proofNextSafeAction(item.status, language)}</strong>
+                    <small>{proofLedgerSummary(item.status, item.trust_impact.lift_points, language)}</small>
+                  </div>
+                  <div className="proof-row-score">
+                    <span>{copy.trustScore}</span>
+                    <strong>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</strong>
+                    <small>+{item.trust_impact.lift_points} pts</small>
+                  </div>
+                  <div className="proof-row-actions">
+                    {item.proof_asset ? (
+                      <button type="button" className="primary proof-review-primary" onClick={() => setSelectedProofItem(item)}>
+                        <ImageIcon size={15} />
+                        {copy.reviewProof}
+                      </button>
+                    ) : (
+                      <button type="button" className="primary" onClick={() => onOpenProductProof(item.product)}>
+                        {copy.seeProof}
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onViewProduct(item.product)}>
+                      {t(language, "viewItem")}
+                    </button>
                   </div>
                 </div>
-                <span className={`proof-decision-pill ${item.status}`}>
-                  {proofLedgerStatusLabel(item.status, language)}
-                </span>
-              </div>
 
-              <div className="proof-safe-action">
-                <div>
-                  <span>What to do next</span>
-                  <strong>{proofNextSafeAction(item.status, language)}</strong>
-                  <p>{proofLedgerSummary(item.status, item.trust_impact.lift_points, language)}</p>
+                <div className={`proof-ledger-evidence-line ${item.proof_asset ? "has-proof" : "waiting"}`}>
+                  {item.proof_asset ? (
+                    <>
+                      <div className="proof-media-thumb">
+                        <ProofAssetThumb proof={item.proof_asset} />
+                      </div>
+                      <div>
+                        <span>{copy.sellerProofAdded}</span>
+                        <strong>{item.proof_asset.title}</strong>
+                        <p>{proofMediaInlineHint(item, language)}</p>
+                      </div>
+                      <button type="button" onClick={() => setSelectedProofItem(item)}>
+                        <ImageIcon size={15} />
+                        {copy.reviewSellerProof}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <span>{proofQualityVerdict(item.proof_quality.score, item.status, language)}</span>
+                        <strong>{copy.assetWaiting}</strong>
+                        <p>{item.request.request_count} {copy.buyerAsks} {copy.askedFor} {proofAttributeLabel(item.request.attribute, language).toLowerCase()} {copy.proof}.</p>
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className={`proof-trust-score ${item.trust_impact.lift_points > 0 ? "lift" : "waiting"}`}>
-                  <span>{copy.trustScore}</span>
-                  <strong>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</strong>
-                  <em>+{item.trust_impact.lift_points} pts</em>
-                </div>
-              </div>
 
-              <details className="proof-ledger-more">
-                <summary>{copy.details}: {proofQualityVerdict(item.proof_quality.score, item.status, language)}</summary>
-                <div className="proof-quality-card">
-                  <div className="proof-quality-head">
-                    <span>{copy.proofQuality}</span>
+                <details className="proof-ledger-more compact">
+                  <summary>
+                    <span>{copy.details}</span>
                     <strong>{item.proof_quality.score}/100</strong>
-                  </div>
-                  <div className="proof-quality-checks">
+                  </summary>
+                  <div className="proof-check-row">
                     {item.proof_quality.checks.slice(0, 3).map((check) => (
                       <span key={check.key} className={check.passed ? "pass" : "wait"}>
                         {check.passed ? "OK" : "!"} {proofQualityCheckLabel(check.key, language)}
                       </span>
                     ))}
                   </div>
-                </div>
-
-                <div className="proof-ledger-timeline">
-                  {item.timeline.map((step, index) => (
-                    <div key={step.label} className={step.done ? "done" : ""}>
-                      <span />
-                      <strong>{proofTimelineLabel(index, step.label, language)}</strong>
-                      <small>{step.at ? new Date(step.at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : copy.pending}</small>
-                    </div>
-                  ))}
-                </div>
-
-                {item.proof_asset && (
-                  <div className="proof-ledger-asset">
-                    <strong>{item.proof_asset.title}</strong>
-                  <p>{item.proof_asset.description}</p>
-                </div>
-              )}
-              </details>
-
-              {item.proof_asset && (
-                <div className={`proof-media-strip ${item.status}`}>
-                  <div className="proof-media-thumb">
-                    <ProofAssetThumb proof={item.proof_asset} />
+                  <div className="proof-ledger-timeline">
+                    {item.timeline.map((step, index) => (
+                      <div key={step.label} className={step.done ? "done" : ""}>
+                        <span />
+                        <strong>{proofTimelineLabel(index, step.label, language)}</strong>
+                        <small>{step.at ? new Date(step.at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : copy.pending}</small>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <span>{copy.sellerProofAdded}</span>
-                    <strong>{item.proof_asset.title}</strong>
-                    <p>{proofMediaInlineHint(item, language)}</p>
-                  </div>
-                  <button type="button" onClick={() => setSelectedProofItem(item)}>
-                    <ImageIcon size={15} />
-                    {copy.reviewSellerProof}
-                  </button>
-                </div>
-              )}
+                </details>
+              </article>
+            ))}
+            </div>
+          )}
 
-              <div className="proof-ledger-actions">
-                <button type="button" onClick={() => onViewProduct(item.product)}>
-                  {t(language, "viewItem")}
-                </button>
-                {item.proof_asset ? (
-                  <button type="button" className="primary proof-review-primary" onClick={() => setSelectedProofItem(item)}>
-                    <ImageIcon size={15} />
-                    {copy.reviewProof}
-                  </button>
-                ) : (
-                  <button type="button" className="primary" onClick={() => onOpenProductProof(item.product)}>
-                    {copy.seeProof}
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
           {filteredItems.length === 0 && (
             <div className="workspace-filter-empty">No proof requests in this view.</div>
           )}
-          </div>
+
           {selectedProofItem && (
             <ProofMediaDialog
               item={selectedProofItem}
@@ -1760,9 +1902,15 @@ function ProofMediaDialog({
     : copy.pending;
 
   return (
-    <div className="proof-media-dialog-backdrop" role="presentation">
-      <section className="proof-media-dialog" role="dialog" aria-modal="true" aria-labelledby="proof-media-title">
-        <div className={`proof-media-stage${canRenderImage ? "" : " reference"}`}>
+    <div
+      className="proof-media-dialog-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="proof-media-dialog proof-media-dialog-v2" role="dialog" aria-modal="true" aria-labelledby="proof-media-title">
+        <figure className={`proof-media-stage${canRenderImage ? "" : " reference"}`}>
           {canRenderImage ? (
             <img src={proof.asset_url} alt={proof.title} onError={() => setImageFailed(true)} />
           ) : (
@@ -1772,7 +1920,11 @@ function ProofMediaDialog({
               <span>{copy.mediaReference}</span>
             </div>
           )}
-        </div>
+          <figcaption>
+            <span>{proofAttributeLabel(item.request.attribute, language)}</span>
+            <strong>{item.request.request_count} {copy.buyerAsks}</strong>
+          </figcaption>
+        </figure>
 
         <div className="proof-media-panel">
           <div className="proof-media-header">
@@ -1794,24 +1946,24 @@ function ProofMediaDialog({
             </div>
           </div>
 
-          <div className="proof-media-facts" aria-label={copy.proofSnapshot}>
+          <dl className="proof-media-facts" aria-label={copy.proofSnapshot}>
             <div>
-              <span>{copy.reviewerStatus}</span>
-              <strong>{proofLedgerStatusLabel(item.status, language)}</strong>
+              <dt>{copy.reviewerStatus}</dt>
+              <dd>{proofLedgerStatusLabel(item.status, language)}</dd>
             </div>
             <div>
-              <span>{copy.proofQuality}</span>
-              <strong>{item.proof_quality.score}/100</strong>
+              <dt>{copy.proofQuality}</dt>
+              <dd>{item.proof_quality.score}/100</dd>
             </div>
             <div>
-              <span>{copy.submitted}</span>
-              <strong>{submittedAt}</strong>
+              <dt>{copy.submitted}</dt>
+              <dd>{submittedAt}</dd>
             </div>
             <div>
-              <span>{copy.trustScore}</span>
-              <strong>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</strong>
+              <dt>{copy.trustScore}</dt>
+              <dd>{item.trust_impact.before_score} -&gt; {item.trust_impact.expected_after_score}</dd>
             </div>
-          </div>
+          </dl>
 
           {proof.review_notes && (
             <div className="proof-media-review-note">
@@ -1865,6 +2017,7 @@ type ProofLedgerCopyKey =
   | "askQuestionOrSave"
   | "proof"
   | "buyerAsks"
+  | "askedFor"
   | "trustImpact"
   | "trustScore"
   | "proofQuality"
@@ -1891,6 +2044,15 @@ type ProofLedgerCopyKey =
   | "proofPreviewRejectedBody"
   | "proofPreviewWaiting"
   | "proofPreviewWaitingBody"
+  | "viewMode"
+  | "viewCards"
+  | "viewTable"
+  | "product"
+  | "status"
+  | "evidence"
+  | "action"
+  | "proofDemand"
+  | "assetWaiting"
   | "proofApproved"
   | "adminChecking"
   | "needsClearerProof"
@@ -1930,15 +2092,16 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     askQuestionOrSave: "Ask a product question or save an item. Sarthi will track seller proof here.",
     proof: "proof",
     buyerAsks: "buyer asks",
+    askedFor: "asked for",
     trustImpact: "Trust impact",
     trustScore: "Trust score",
     proofQuality: "Proof quality",
     pending: "Pending",
     nextSafeStep: "Next safe step",
-    details: "Details",
-    seeProof: "See proof",
-    reviewProof: "Review proof",
-    reviewSellerProof: "Review seller proof",
+    details: "Proof checks",
+    seeProof: "Open proof trail",
+    reviewProof: "Open proof",
+    reviewSellerProof: "Open seller proof",
     sellerProofAdded: "Seller proof added",
     sellerProof: "Seller proof",
     reconsiderItem: "Reconsider item",
@@ -1953,9 +2116,18 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     proofPreviewPending: "Useful preview, not final yet",
     proofPreviewPendingBody: "Seller has added proof, but admin review is still pending. Use it as context before checkout.",
     proofPreviewRejected: "Do not rely on this proof yet",
-    proofPreviewRejectedBody: "Reviewer asked for clearer evidence. Prefer another item or wait for the seller to fix it.",
+    proofPreviewRejectedBody: "Reviewer asked for clearer evidence. Use buyer protection until seller fixes it.",
     proofPreviewWaiting: "Proof is still waiting",
     proofPreviewWaitingBody: "There is no seller media to review yet. Keep this as a proof request, not a buying signal.",
+    viewMode: "Proof view",
+    viewCards: "Cards",
+    viewTable: "Table",
+    product: "Product",
+    status: "Status",
+    evidence: "Evidence",
+    action: "Action",
+    proofDemand: "Proof demand",
+    assetWaiting: "Waiting for seller media",
     proofApproved: "Proof approved",
     adminChecking: "Admin checking",
     needsClearerProof: "Need clearer proof",
@@ -1963,7 +2135,7 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     safeToUseProof: "Use this proof before checkout.",
     waitForReviewAction: "Wait for admin review before trusting it.",
     askClearerProofAction: "Ask seller for clearer proof.",
-    waitForSellerAction: "No proof yet. Prefer COD or another item.",
+    waitForSellerAction: "Proof is not added yet. Ask seller or use buyer protection.",
     proofCanHelp: "This proof can help you decide now.",
     sellerResponded: "Seller replied. Reviewer is checking it before trust improves.",
     currentProofWeak: "Current proof was not clear enough. Seller must improve it.",
@@ -1994,15 +2166,16 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     askQuestionOrSave: "Product question poochho ya item save karo. Sarthi seller proof yahan track karega.",
     proof: "proof",
     buyerAsks: "buyer asks",
+    askedFor: "ने मांगा",
     trustImpact: "Trust impact",
     trustScore: "Trust score",
     proofQuality: "Proof quality",
     pending: "Pending",
     nextSafeStep: "Next safe step",
-    details: "Details",
-    seeProof: "See proof",
-    reviewProof: "Review proof",
-    reviewSellerProof: "Seller proof dekho",
+    details: "Proof checks",
+    seeProof: "Proof trail kholo",
+    reviewProof: "Proof kholo",
+    reviewSellerProof: "Seller proof kholo",
     sellerProofAdded: "Seller proof added",
     sellerProof: "Seller proof",
     reconsiderItem: "Item reconsider karo",
@@ -2020,6 +2193,15 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     proofPreviewRejectedBody: "Reviewer ne clearer evidence manga hai. Seller fix kare ya doosra item dekho.",
     proofPreviewWaiting: "Proof ka wait hai",
     proofPreviewWaitingBody: "Abhi seller media nahi hai. Isse buying signal nahi, proof request samjho.",
+    viewMode: "Proof view",
+    viewCards: "कार्ड",
+    viewTable: "तालिका",
+    product: "उत्पाद",
+    status: "स्थिति",
+    evidence: "सबूत",
+    action: "कार्य",
+    proofDemand: "सबूत की मांग",
+    assetWaiting: "सेलर मीडिया का इंतज़ार",
     proofApproved: "Proof approved",
     adminChecking: "Admin check kar raha hai",
     needsClearerProof: "Clearer proof chahiye",
@@ -2027,7 +2209,7 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     safeToUseProof: "Checkout se pehle ye proof dekh lo.",
     waitForReviewAction: "Admin review ke baad hi is proof par bharosa karo.",
     askClearerProofAction: "Seller se clearer proof maango.",
-    waitForSellerAction: "Abhi proof nahi hai. COD ya doosra item safer hai.",
+    waitForSellerAction: "Abhi proof nahi hai. Seller se proof maango ya buyer protection use karo.",
     proofCanHelp: "Ye proof ab decision me help kar sakta hai.",
     sellerResponded: "Seller ne reply kiya. Reviewer check kar raha hai.",
     currentProofWeak: "Current proof clear nahi tha. Seller ko improve karna hoga.",
@@ -2058,15 +2240,16 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     askQuestionOrSave: "Product question poochho ya item save karo. Sarthi seller proof yahan track karega.",
     proof: "proof",
     buyerAsks: "buyer asks",
+    askedFor: "asked for",
     trustImpact: "Trust impact",
     trustScore: "Trust score",
     proofQuality: "Proof quality",
     pending: "Pending",
     nextSafeStep: "Next safe step",
-    details: "Details",
-    seeProof: "See proof",
-    reviewProof: "Review proof",
-    reviewSellerProof: "Review seller proof",
+    details: "Proof checks",
+    seeProof: "Open proof trail",
+    reviewProof: "Open proof",
+    reviewSellerProof: "Open seller proof",
     sellerProofAdded: "Seller proof added",
     sellerProof: "Seller proof",
     reconsiderItem: "Reconsider item",
@@ -2081,9 +2264,18 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     proofPreviewPending: "Useful preview, final nahi",
     proofPreviewPendingBody: "Seller has added proof, but admin review pending hai. Checkout se pehle context ke tarah use karo.",
     proofPreviewRejected: "Do not rely on this yet",
-    proofPreviewRejectedBody: "Reviewer asked for clearer evidence. Seller fix kare ya another item dekho.",
+    proofPreviewRejectedBody: "Reviewer asked for clearer evidence. Seller fix hone tak buyer protection use karo.",
     proofPreviewWaiting: "Proof is still waiting",
     proofPreviewWaitingBody: "Seller media abhi nahi hai. This is a proof request, not a buying signal.",
+    viewMode: "Proof view",
+    viewCards: "Cards",
+    viewTable: "Table",
+    product: "Product",
+    status: "Status",
+    evidence: "Evidence",
+    action: "Action",
+    proofDemand: "Proof demand",
+    assetWaiting: "Seller media ka wait",
     proofApproved: "Proof approved",
     adminChecking: "Admin checking",
     needsClearerProof: "Clearer proof chahiye",
@@ -2091,7 +2283,7 @@ const PROOF_LEDGER_COPY: Record<LanguageCode, Record<ProofLedgerCopyKey, string>
     safeToUseProof: "Checkout se pehle ye proof dekh lo.",
     waitForReviewAction: "Admin review ke baad hi is proof par bharosa karo.",
     askClearerProofAction: "Seller se clearer proof maango.",
-    waitForSellerAction: "Abhi proof nahi hai. COD ya doosra item safer hai.",
+    waitForSellerAction: "Abhi proof nahi hai. Ask seller or use buyer protection.",
     proofCanHelp: "Ye proof decision me help kar sakta hai.",
     sellerResponded: "Seller replied. Reviewer check kar raha hai.",
     currentProofWeak: "Current proof clear nahi tha. Seller must improve it.",
@@ -2258,8 +2450,9 @@ function isRenderableProofImage(value: string) {
 }
 
 function proofAssetReferenceLabel(value: string) {
-  if (value.startsWith("seeded://")) return value.replace("seeded://", "");
-  if (value.startsWith("seller-asset://")) return value.replace("seller-asset://", "");
+  if (value.startsWith("seeded://")) return "Seller uploaded proof file";
+  if (value.startsWith("seller-asset://")) return "Seller uploaded proof file";
+  if (value.startsWith("/catalog/")) return "Seller uploaded proof file";
   if (value.startsWith("data:application/pdf")) return "uploaded PDF";
   try {
     const url = new URL(value);
@@ -2304,7 +2497,12 @@ function MarketplaceHome({
   onWishlistProduct,
   onSaveProduct,
   onOpenSavedItem,
-  onOpenOrders
+  onOpenOrders,
+  sortBy,
+  onSortChange,
+  priceMax,
+  onPriceMaxChange,
+  proofProductIds
 }: {
   products: Product[];
   allProducts: Product[];
@@ -2322,6 +2520,11 @@ function MarketplaceHome({
   onSaveProduct: (product: Product) => void;
   onOpenSavedItem: (product: Product) => void;
   onOpenOrders: () => void;
+  sortBy: "default" | "price_asc" | "price_desc" | "rating";
+  onSortChange: (value: "default" | "price_asc" | "price_desc" | "rating") => void;
+  priceMax: number | "";
+  onPriceMaxChange: (value: number | "") => void;
+  proofProductIds: Set<string>;
 }) {
   const [catalogPage, setCatalogPage] = useState(1);
   const [compactCatalog, setCompactCatalog] = useState(() => window.matchMedia("(max-width: 720px)").matches);
@@ -2416,6 +2619,35 @@ function MarketplaceHome({
             </button>
           ))}
         </div>
+
+        <div className="marketplace-filter-sort-row">
+          <div className="filter-group">
+            <span className="filter-label">Max Price:</span>
+            <input
+              type="number"
+              value={priceMax}
+              onChange={(e) => {
+                const val = e.target.value === "" ? "" : Number(e.target.value);
+                onPriceMaxChange(val);
+              }}
+              placeholder="Any price"
+              className="price-filter-input"
+            />
+          </div>
+          <div className="sort-group">
+            <span className="sort-label">Sort By:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => onSortChange(e.target.value as any)}
+              className="sort-select"
+            >
+              <option value="default">Popularity</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+              <option value="rating">Highest Rated</option>
+            </select>
+          </div>
+        </div>
       </section>
 
       <BuyerAgentPlan
@@ -2469,6 +2701,12 @@ function MarketplaceHome({
                     {isSaved ? <BookmarkCheck size={13} /> : trustBadge.tone === "proof" ? <FileCheck2 size={13} /> : trustBadge.tone === "watch" ? <AlertTriangle size={13} /> : <ShieldCheck size={13} />}
                     <span>{trustBadge.label}</span>
                   </button>
+                  {proofProductIds.has(p.product_id) && (
+                    <div className="product-proof-pending-badge" title="A buyer has requested proof from this seller">
+                      <FileCheck2 size={12} />
+                      <span>Proof requested</span>
+                    </div>
+                  )}
                   <button
                     type="button"
                     className={`buyer-save-icon ${isSaved ? "saved" : ""}`}
@@ -2802,6 +3040,29 @@ function safetyCheckActionLabel(language: LanguageCode) {
 
 function clusterListingCount(products: Product[], clusterId: string) {
   return products.filter((product) => product.cluster_id === clusterId).length;
+}
+
+function withBuyerCheckTimeout<T>(message: string, promise: Promise<T>) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), BUYER_CHECK_TIMEOUT_MS);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      }
+    );
+  });
+}
+
+function settleBuyerCheck<T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> {
+  return promise.then(
+    (value) => ({ status: "fulfilled", value }),
+    (reason) => ({ status: "rejected", reason })
+  );
 }
 
 function productForVariant(variantId: string, products: Product[]) {

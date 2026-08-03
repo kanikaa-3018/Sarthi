@@ -371,6 +371,21 @@ export function submitListingDraft(draftId: string) {
   });
 }
 
+export function parseListingWithAi(description: string) {
+  return request<{
+    title: string;
+    category: string;
+    garment_type: string;
+    fabric: string;
+    color_family: string;
+    base_price: number;
+    image_url: string;
+  }>("/seller/me/listing-drafts/ai-parse", {
+    method: "POST",
+    body: JSON.stringify({ description })
+  });
+}
+
 export function getProductDetail(buyerId: string, productId: string, variantId?: string | null) {
   const params = new URLSearchParams({ buyer_id: buyerId });
   if (variantId) params.set("variant_id", variantId);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -48,13 +48,7 @@ export function CompareSheet({
   const fit = comparison.fit;
   const isSimple = experienceMode === "simple";
   const visibleFactors = isSimple ? ranking.top_factors.slice(0, 2) : ranking.top_factors;
-  const winnerDetails = getProductDetailsForVariant(ranking.winner, productCatalog);
-  const winnerCandidate = ranking.candidates.find((candidate) => candidate.variant_id === ranking.winner) ?? null;
-  const winnerTrust = winnerDetails.product?.buyer_trust ?? null;
-  const canRecommendWinner = winnerTrust?.can_recommend ?? (winnerCandidate ? trustScorePercent(winnerCandidate) >= 75 : false);
-  const alternativeDetails = ranking.alternative
-    ? getProductDetailsForVariant(ranking.alternative, productCatalog)
-    : null;
+  const [selectedVariantId, setSelectedVariantId] = useState(ranking.winner);
   const candidateRows = ranking.candidates.map((candidate, index) => ({
     candidate,
     details: getProductDetailsForVariant(candidate.variant_id, productCatalog),
@@ -62,24 +56,47 @@ export function CompareSheet({
     isWinner: candidate.variant_id === ranking.winner,
     isAlternative: candidate.variant_id === ranking.alternative
   }));
+  const selectedCandidate = ranking.candidates.find((candidate) => candidate.variant_id === selectedVariantId)
+    ?? ranking.candidates.find((candidate) => candidate.variant_id === ranking.winner)
+    ?? null;
+  const selectedDetails = getProductDetailsForVariant(selectedCandidate?.variant_id ?? selectedVariantId, productCatalog);
+  const selectedTrust = selectedDetails.product?.buyer_trust ?? null;
+  const selectedScore = selectedCandidate ? trustScorePercent(selectedCandidate) : null;
+  const canRecommendSelected = selectedTrust?.can_recommend ?? (selectedScore !== null ? selectedScore >= 75 : false);
+  const alternativeDetails = ranking.alternative
+    ? getProductDetailsForVariant(ranking.alternative, productCatalog)
+    : null;
   const sellerOptionRows = uniqueSellerCandidateRows(candidateRows);
   const sellerListingRows = sellerListingOptions(comparison, productCatalog, candidateRows, fit.recommended_size);
+  const lowestOptionPrice = sellerListingRows.reduce((lowest, option) => Math.min(lowest, option.price), Number.POSITIVE_INFINITY);
+
+  useEffect(() => {
+    setSelectedVariantId(ranking.winner);
+  }, [comparison.trace_id, ranking.winner]);
+
+  function chooseSelectedOption() {
+    if (onSelectProduct && selectedDetails.product) {
+      onSelectProduct(selectedDetails.product.product_id, selectedCandidate?.variant_id ?? selectedVariantId);
+      return;
+    }
+    onContinue();
+  }
 
   return (
     <div className="compare-sheet">
       <section className="compare-best-card interactive-lift">
         <div className="compare-card-header">
           <div className="compare-title-row">
-            <span className={`compare-icon-badge ${canRecommendWinner ? "positive" : "watch"}`}>
-              {canRecommendWinner ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+            <span className={`compare-icon-badge ${canRecommendSelected ? "positive" : "watch"}`}>
+              {canRecommendSelected ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
             </span>
             <div>
-              <span className="eyebrow">{canRecommendWinner ? t(language, "bestMatchForYou") : t(language, "checkOnce")}</span>
-              <h3>{winnerDetails.sellerName}</h3>
+              <span className="eyebrow">{canRecommendSelected ? t(language, "bestMatchForYou") : t(language, "checkOnce")}</span>
+              <h3>{selectedDetails.sellerName}</h3>
             </div>
           </div>
           <div className="compare-score-ring">
-            <strong>{winnerCandidate ? trustScorePercent(winnerCandidate) : "--"}</strong>
+            <strong>{selectedScore ?? "--"}</strong>
             <span>/100</span>
           </div>
         </div>
@@ -87,11 +104,11 @@ export function CompareSheet({
         <div className="compare-kv-panel">
           <div className="kv-row">
             <span>{t(language, "product")}</span>
-            <strong>{winnerDetails.title}</strong>
+            <strong>{selectedDetails.title}</strong>
           </div>
           <div className="kv-row">
             <span>{t(language, "price")}</span>
-            <strong className="compare-price">Rs {winnerDetails.price}</strong>
+            <strong className="compare-price">Rs {selectedDetails.price}</strong>
           </div>
           <div className="kv-row">
             <span>{t(language, "size")}</span>
@@ -109,10 +126,10 @@ export function CompareSheet({
           </div>
         )}
 
-        {winnerTrust && !winnerTrust.can_recommend && (
+        {selectedTrust && !selectedTrust.can_recommend && (
           <div className="compare-simple-note">
             <AlertTriangle size={14} />
-            <span>{winnerTrust.buyer_guidance}</span>
+            <span>{selectedTrust.buyer_guidance}</span>
           </div>
         )}
 
@@ -120,7 +137,7 @@ export function CompareSheet({
           comparison={comparison}
           decision={decision}
           trustRun={trustRun}
-          winner={winnerCandidate}
+          winner={selectedCandidate}
           language={language}
         />
 
@@ -131,13 +148,12 @@ export function CompareSheet({
               <button
                 key={`${option.product.product_id}-${option.variantId}`}
                 type="button"
-                className={`compare-similar-card ${option.isRecommended ? "winner" : ""} ${option.isCurrent ? "current" : ""}`}
+                className={`compare-similar-card ${option.isRecommended ? "winner" : ""} ${option.isCurrent ? "current" : ""} ${option.variantId === selectedVariantId ? "selected active" : ""}`}
+                aria-pressed={option.variantId === selectedVariantId}
                 data-product-id={option.product.product_id}
                 data-variant-id={option.variantId}
                 onClick={() => {
-                  if (onSelectProduct) {
-                    onSelectProduct(option.product.product_id, option.variantId);
-                  }
+                  setSelectedVariantId(option.variantId);
                 }}
               >
                 <img
@@ -150,7 +166,7 @@ export function CompareSheet({
                   <span>{option.title} · Rs {option.price}</span>
                 </div>
                 <small>{option.score === null ? "--" : option.score}/100</small>
-                <em>{option.isCurrent ? "Current" : option.isRecommended ? "Best score" : "Open"}</em>
+                <em>{option.variantId === selectedVariantId ? "Selected" : option.isRecommended ? "Best score" : option.price === lowestOptionPrice ? "Lowest price" : option.isCurrent ? "Current" : "Preview"}</em>
                 <ChevronRight size={14} aria-hidden="true" />
               </button>
             ))}
@@ -167,9 +183,9 @@ export function CompareSheet({
           ))}
         </div>
 
-        {winnerCandidate && (
+        {selectedCandidate && (
           <div className="compare-factor-meter-list">
-            {factorRowsForCandidate(winnerCandidate, language).map((factor) => (
+            {factorRowsForCandidate(selectedCandidate, language).map((factor) => (
               <div className="compare-factor-meter" key={factor.key}>
                 <div>
                   <span>{factor.label}</span>
@@ -230,18 +246,16 @@ export function CompareSheet({
             {sellerOptionRows.map(({ candidate, details, isWinner, isAlternative }, index) => (
               <div
                 key={candidate.variant_id}
-                className={`compare-candidate-row ${isWinner ? "winner" : ""} ${isAlternative ? "alternative" : ""}`}
-                role={onSelectProduct && details.product ? "button" : undefined}
-                tabIndex={onSelectProduct && details.product ? 0 : undefined}
+                className={`compare-candidate-row ${isWinner ? "winner" : ""} ${isAlternative ? "alternative" : ""} ${candidate.variant_id === selectedVariantId ? "selected active" : ""}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => {
-                  if (onSelectProduct && details.product) {
-                    onSelectProduct(details.product.product_id, candidate.variant_id);
-                  }
+                  setSelectedVariantId(candidate.variant_id);
                 }}
                 onKeyDown={(e) => {
-                  if ((e.key === "Enter" || e.key === " ") && onSelectProduct && details.product) {
+                  if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    onSelectProduct(details.product.product_id, candidate.variant_id);
+                    setSelectedVariantId(candidate.variant_id);
                   }
                 }}
               >
@@ -281,7 +295,7 @@ export function CompareSheet({
         </button>
       </div>
 
-      <button className="compare-primary-cta" type="button" onClick={onContinue}>
+      <button className="compare-primary-cta" type="button" onClick={chooseSelectedOption}>
         {t(language, "chooseThisOption")}
       </button>
     </div>

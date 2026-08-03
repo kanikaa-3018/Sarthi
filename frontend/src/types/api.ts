@@ -2246,10 +2246,47 @@ export type AdminProofQualityPrescreen = {
   claim_checked: string;
   trust_lift_ready: boolean;
   detected_issues: string[];
+  visual_match: {
+    score: number;
+    tone: "pass" | "warn" | "fail";
+    label: string;
+    summary: string;
+    detail?: string;
+    reference_image_url?: string | null;
+    requires_human_check?: boolean;
+  };
   checks: Array<{
     key: "relevance" | "clarity" | "measurement_readability" | "claim_match" | "human_decision";
     label: string;
     status: "pass" | "warn" | "fail";
+    detail: string;
+  }>;
+};
+
+export type AdminTriageBucket =
+  | "fast_review"
+  | "manual_review"
+  | "senior_review"
+  | "seller_fix"
+  | "reuse_standard"
+  | "stored_only";
+
+export type AdminTriageView = {
+  headline: string;
+  summary: string;
+  stored_count: number;
+  reviewer_queue_count: number;
+  filtered_count: number;
+  pipeline: Array<{
+    key: string;
+    label: string;
+    count: number;
+    detail: string;
+  }>;
+  buckets: Array<{
+    key: AdminTriageBucket;
+    label: string;
+    count: number;
     detail: string;
   }>;
 };
@@ -2282,8 +2319,35 @@ export type AdminPrescreenSuggestion = {
   evidence: Array<{ label: string; value: string; source_id: string }>;
   checks: Array<{ label: string; status: "pass" | "warn" | "fail"; detail: string }>;
   proof_quality?: AdminProofQualityPrescreen;
+  triage_bucket?: AdminTriageBucket;
+  triage_label?: string;
+  triage_reason?: string;
   fact_ids: string[];
   agent_provider: AiAnswerProvider;
+};
+
+export type AdminStoredEvidenceItem = {
+  id: string;
+  item_type: AdminPrescreenSuggestion["item_type"];
+  seller_id: string;
+  seller_name: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  submitted_at: string | null;
+  triage_bucket: AdminTriageBucket;
+  triage_label: string;
+  triage_reason: string;
+  review_visibility: "reviewer_queue" | "auto_reviewed" | "ai_bypassed" | "completed";
+  suggested_action: AdminPrescreenSuggestion["suggested_action"];
+  risk_score: number;
+  risk_level: AdminPrescreenSuggestion["risk_level"];
+  confidence: AdminPrescreenSuggestion["confidence"];
+  agent_provider: AiAnswerProvider;
+  asset_url: string | null;
+  product_image_url: string | null;
+  reference: string | null;
+  open_request_count: number;
 };
 
 export type AdminQueueItem = {
@@ -2309,6 +2373,10 @@ export type AdminQueueItem = {
   primary_action: string;
   evidence: Array<{ label: string; value: string; source_id: string }>;
   agent_provider: AiAnswerProvider;
+  triage_bucket: AdminTriageBucket;
+  triage_label?: string;
+  triage_reason?: string;
+  reviewer_visible?: boolean;
   case_file?: AdminReviewCaseFile | null;
 };
 
@@ -2369,6 +2437,12 @@ export type AdminReviewCaseFile = {
     status: "done" | "current" | "next" | string;
     timestamp: string | null;
   }>;
+  marketplace_impact?: Array<{
+    actor: string;
+    label: string;
+    value: string;
+    detail: string;
+  }>;
 };
 
 export type AdminSellerDossier = {
@@ -2404,6 +2478,10 @@ export type AdminReviewQueue = {
     suggested_actions: number;
     buyer_requests_waiting: number;
     trust_lift_pending: number;
+    auto_reviewed_count?: number;
+    fast_review_count?: number;
+    reusable_standard_count?: number;
+    stored_evidence_count?: number;
     source_status: SourceHealth["overall_status"];
     source_blocking: boolean;
   };
@@ -2453,4 +2531,6 @@ export type AdminReviewQueue = {
   listing_drafts: Array<AdminListingDraft & { prescreen: AdminPrescreenSuggestion }>;
   proof_assets: Array<AdminProofAsset & { prescreen: AdminPrescreenSuggestion }>;
   audit_events: AdminAuditEvent[];
+  triage?: AdminTriageView;
+  stored_evidence?: AdminStoredEvidenceItem[];
 };

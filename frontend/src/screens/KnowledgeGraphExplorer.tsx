@@ -104,6 +104,14 @@ type GraphAnswerAction = {
   onClick: () => void;
 };
 
+type ProofMapPreviewItem = {
+  key: string;
+  label: string;
+  detail: string;
+  pathId?: string | null;
+  edgeId?: string | null;
+};
+
 type GraphEmptyCopy = {
   title: string;
   body: string;
@@ -236,6 +244,7 @@ export function KnowledgeGraphExplorer({
   });
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
   const visibleEdges = graphView.edges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
+  const proofMapPreview = buildProofMapPreview(visibleEvidencePaths, visibleEdges, activeTrustGuide);
   const graphEmptyState = mapOpen && (visibleNodes.length === 0 || visibleEdges.length === 0)
     ? graphEmptyCopy(activeTrustGuide, visibleNodes.length, searchTerm)
     : null;
@@ -303,7 +312,7 @@ export function KnowledgeGraphExplorer({
           aria-label="Close full graph"
         />
       )}
-      <div className={`kg-card kg-simple-card ${expanded ? "graph-expanded" : ""}`}>
+      <div className={`kg-card kg-simple-card ${mapOpen ? "map-open" : ""} ${expanded ? "graph-expanded" : ""}`}>
       <div className="kg-card-header kg-simple-header">
         <div>
           <span className="eyebrow">Proof graph</span>
@@ -353,7 +362,7 @@ export function KnowledgeGraphExplorer({
             );
           })}
         </div>
-        {activeTrustGuide && (
+        {activeTrustGuide && activeGuide !== "score" && (
           <div className={`kg-guide-result ${activeTrustGuide.tone}`} aria-live="polite">
             <span className="kg-guide-result-icon" aria-hidden="true">
               <ActiveGuideIcon size={15} />
@@ -506,9 +515,33 @@ export function KnowledgeGraphExplorer({
       </div>
 
       <section className="kg-map-reveal-card" aria-label="Proof map controls">
-        <div>
+        <div className="kg-map-reveal-copy">
           <strong>Proof map</strong>
-          <span>{mapOpen ? "Showing linked evidence" : "Hidden to keep this page simple"}</span>
+          <small>{mapOpen ? "Showing linked evidence" : "Quick proof links from this item"}</small>
+          {!mapOpen && proofMapPreview.length > 0 && (
+            <div className="kg-map-preview-list" aria-label="Proof map preview">
+              {proofMapPreview.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => {
+                    setMapOpen(true);
+                    if (item.pathId) {
+                      setSelectedPathId(item.pathId);
+                      setSelectedEdgeId(null);
+                    } else if (item.edgeId) {
+                      setSelectedEdgeId(item.edgeId);
+                      setSelectedPathId(null);
+                    }
+                    setSelectedNodeId(null);
+                  }}
+                >
+                  <b>{item.label}</b>
+                  <em>{item.detail}</em>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <button type="button" onClick={() => setMapOpen((open) => !open)} aria-expanded={mapOpen}>
           {mapOpen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -1166,7 +1199,7 @@ function buildTrustGuideCards(
     ? `Size ${context.fit.recommended_size}`
     : "Fit check";
   const offerStatus = context?.price_context?.offer?.status
-    ? labelize(context.price_context.offer.status)
+    ? offerStatusLabel(context.price_context.offer.status)
     : sourceBlocking
       ? "Paused"
       : "Checked";
@@ -1269,7 +1302,7 @@ function buildTrustGuideCards(
         context?.price_context?.inventory ? "Stock checked" : "Inventory pending",
         labelize(sourceStatus)
       ],
-      question: "Is this offer safe or should I wait?",
+      question: "Is this offer verified for current price?",
       tone: sourceBlocking ? "watch" : sourceStatus === "unavailable" ? "danger" : "safe",
       Icon: Clock3,
       nodeIds: compactIds([offerNode, context?.node_ids.price, context?.node_ids.score]),
@@ -1278,6 +1311,53 @@ function buildTrustGuideCards(
       filter: "evidence"
     }
   ];
+}
+
+function buildProofMapPreview(
+  paths: KnowledgeGraphEvidencePath[],
+  edges: ViewEdge[],
+  activeGuide?: TrustGuideCard | null
+): ProofMapPreviewItem[] {
+  const pathItems = paths.slice(0, 3).map((path) => ({
+    key: `path-${path.path_id}`,
+    label: proofMapPathLabel(path),
+    detail: compactPathSteps(path),
+    pathId: path.path_id
+  }));
+  if (pathItems.length) return pathItems;
+
+  const edgeItems = edges.slice(0, 3).map((edge) => ({
+    key: `edge-${edge.id}`,
+    label: edgeLabelShort(edge.label),
+    detail: `${edge.sourceNode.title} -> ${edge.targetNode.title}`,
+    edgeId: edge.id
+  }));
+  if (edgeItems.length) return edgeItems;
+
+  if (activeGuide) {
+    return [{
+      key: `guide-${activeGuide.key}`,
+      label: `${activeGuide.label} check`,
+      detail: activeGuide.detail,
+      pathId: activeGuide.pathId
+    }];
+  }
+  return [];
+}
+
+function proofMapPathLabel(path: KnowledgeGraphEvidencePath) {
+  if (path.path_id === "product_score_path") return "Score";
+  if (path.path_id === "buyer_fit_path") return "Fit";
+  if (path.path_id === "offer_timer_path") return "Price";
+  return path.title;
+}
+
+function compactPathSteps(path: KnowledgeGraphEvidencePath) {
+  if (path.path_id === "product_score_path") return "Seller, returns, proof";
+  if (path.path_id === "buyer_fit_path") return "Size outcomes checked";
+  if (path.path_id === "offer_timer_path") return "Price history checked";
+  const labels = path.steps.slice(0, 3).map((step) => step.label).filter(Boolean);
+  return labels.length ? labels.join(" -> ") : shortPathSummary(path.summary);
 }
 
 function guideHeadline(guide: TrustGuideCard) {
@@ -1293,6 +1373,11 @@ function guideHeadlineLabel(key: TrustGuideKey, fallback: string) {
   if (key === "offer") return "Offer check";
   if (key === "proof") return "Seller proof";
   return fallback;
+}
+
+function offerStatusLabel(status: string) {
+  if (status === "no_need_to_rush") return "Price proof checked";
+  return labelize(status);
 }
 
 function reviewGuideDetail(reviewSignal: number | null, reviewCount: number, topReturn: string) {

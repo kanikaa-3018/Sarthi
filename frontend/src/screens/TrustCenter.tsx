@@ -97,11 +97,11 @@ export function TrustCenter({ buyerId, language }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [payload, dashboardPayload, ordersPayload, readinessPayload] = await Promise.all([
+      const readinessRequest = getSystemReadiness().catch(() => null);
+      const [payload, dashboardPayload, ordersPayload] = await Promise.all([
         getMemory(buyerId),
         getBuyerDashboard(buyerId),
-        getBuyerOrders(buyerId),
-        getSystemReadiness()
+        getBuyerOrders(buyerId)
       ]);
       const nextPreferredFit = normalizePreferredFit(
         dashboardPayload.profile.preferred_fit ?? payload.memory[0]?.preferred_fit ?? "comfort"
@@ -109,7 +109,7 @@ export function TrustCenter({ buyerId, language }: Props) {
       setData(payload);
       setDashboard(dashboardPayload);
       setOrders(ordersPayload);
-      setReadiness(readinessPayload);
+      readinessRequest.then((readinessPayload) => setReadiness(readinessPayload));
       setPreferredFit(nextPreferredFit);
       setFitQuiz((current) => ({ ...current, preferred_fit: nextPreferredFit }));
     } catch (err) {
@@ -225,6 +225,7 @@ export function TrustCenter({ buyerId, language }: Props) {
       (privacy?.memory_record_count ?? 0) < 2 ||
       dashboard.review_credibility.risk_band === "new_user")
   );
+  const isInitialLoad = loading && !data && !dashboard;
 
   return (
     <main className="trust-center-shell trust-center-v5">
@@ -240,7 +241,7 @@ export function TrustCenter({ buyerId, language }: Props) {
             </span>
             <span>
               <PackageCheck size={13} />
-              {dashboard ? `${dashboard.activity.total_outcomes} orders learnt` : "Orders loading"}
+              {dashboard ? `${dashboard.activity.total_outcomes} orders learnt` : "Order history private"}
             </span>
           </div>
         </div>
@@ -260,7 +261,8 @@ export function TrustCenter({ buyerId, language }: Props) {
             </button>
           </div>
           <button className="trust-refresh-button" onClick={load} disabled={busy} title="Refresh trust center" aria-label="Refresh trust center">
-            <RefreshCcw size={15} className={busy ? "spin-icon" : ""} />
+            <RefreshCcw size={15} className={busy && !isInitialLoad ? "spin-icon" : ""} />
+            <span>{busy && !isInitialLoad ? "Refreshing" : "Refresh"}</span>
           </button>
         </div>
       </section>

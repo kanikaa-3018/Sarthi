@@ -47,6 +47,51 @@ const SELLER_NAV_COPY: Record<LanguageCode, { console: string; proofs: string; c
   }
 };
 
+const SELLER_WORKSPACE_NAV_COPY: Record<LanguageCode, { today: string; products: string; proofs: string; market: string; add: string }> = {
+  english: {
+    today: "Today",
+    products: "Products",
+    proofs: "Proof center",
+    market: "Rating plan",
+    add: "Add product"
+  },
+  hindi: {
+    today: "आज",
+    products: "प्रोडक्ट",
+    proofs: "प्रूफ सेंटर",
+    market: "रेटिंग प्लान",
+    add: "प्रोडक्ट जोड़ें"
+  },
+  hinglish: {
+    today: "Aaj",
+    products: "Products",
+    proofs: "Proof center",
+    market: "Rating plan",
+    add: "Product jodo"
+  }
+};
+
+const ADMIN_NAV_COPY: Record<LanguageCode, { review: string; aiQueue: string; risk: string; saved: string }> = {
+  english: {
+    review: "Review",
+    aiQueue: "AI Queue",
+    risk: "Risk",
+    saved: "Saved"
+  },
+  hindi: {
+    review: "रिव्यू",
+    aiQueue: "AI कतार",
+    risk: "रिस्क",
+    saved: "सेव्ड"
+  },
+  hinglish: {
+    review: "Review",
+    aiQueue: "AI queue",
+    risk: "Risk",
+    saved: "Saved"
+  }
+};
+
 export function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -222,6 +267,8 @@ export function App() {
   const isSellerRoute = location.pathname.startsWith("/seller");
   const isAuthRoute = location.pathname === "/login";
   const sellerNavCopy = SELLER_NAV_COPY[language] ?? SELLER_NAV_COPY.english;
+  const sellerWorkspaceNavCopy = SELLER_WORKSPACE_NAV_COPY[language] ?? SELLER_WORKSPACE_NAV_COPY.english;
+  const adminNavCopy = ADMIN_NAV_COPY[language] ?? ADMIN_NAV_COPY.english;
   const sellerNavActive = (path: string) => {
     const normalizedPath = location.pathname.replace(/\/$/, "") || "/";
     return path === "/seller"
@@ -236,7 +283,7 @@ export function App() {
   };
   const isReviewDeskActive = () => {
     const p = location.pathname;
-    return p === "/admin" || p.startsWith("/admin/uploads") || p.startsWith("/admin/drafts") || p.startsWith("/admin/audit");
+    return p === "/admin" || p.startsWith("/admin/sellers") || p.startsWith("/admin/uploads") || p.startsWith("/admin/drafts") || p.startsWith("/admin/audit");
   };
   const buyerShopActive = location.pathname === "/shop" ||
     location.pathname.startsWith("/shop/product") ||
@@ -299,10 +346,10 @@ export function App() {
                       type="button"
                       className={`proof-nav-item ${location.pathname.startsWith("/shop/proofs") ? "active" : ""}`}
                       onClick={() => navigate("/shop/proofs")}
-                      aria-label={buyerProofNav ? `Proof, ${buyerProofNav.label}` : "Proof"}
-                      title={buyerProofNav ? `Proof: ${buyerProofNav.label}` : "Proof"}
+                      aria-label={buyerProofNav ? `${t(language, "proof")}, ${buyerProofNav.label}` : t(language, "proof")}
+                      title={buyerProofNav ? `${t(language, "proof")}: ${buyerProofNav.label}` : t(language, "proof")}
                     >
-                      <span className="proof-nav-label">Proof</span>
+                      <span className="proof-nav-label">{t(language, "proof")}</span>
                       {buyerProofNav?.badgeLabel && (
                         <em className={`nav-proof-badge ${buyerProofNav.needsAttention ? "attention" : "ready"}`}>
                           {buyerProofNav.badgeLabel}
@@ -315,17 +362,33 @@ export function App() {
                   <>
                     <button
                       type="button"
-                      className={sellerNavActive("/seller") ? "active" : ""}
+                      className={
+                        sellerNavActive("/seller") &&
+                        !sellerNavActive("/seller/products") &&
+                        !sellerNavActive("/seller/proofs") &&
+                        !sellerNavActive("/seller/market")
+                          ? "active"
+                          : ""
+                      }
                       onClick={() => navigate("/seller")}
                     >
-                      <span>{sellerNavCopy.console}</span>
+                      <span>{sellerWorkspaceNavCopy.today}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={sellerNavActive("/seller/products") ? "active" : ""}
+                      onClick={() => navigate("/seller/products")}
+                    >
+                      <span>{sellerWorkspaceNavCopy.products}</span>
+                      <em>3</em>
                     </button>
                     <button
                       type="button"
                       className={`seller-proof-nav-item ${sellerNavActive("/seller/proofs") ? "active" : ""}`}
                       onClick={() => navigate("/seller/proofs")}
                     >
-                      <span>{sellerNavCopy.proofs}</span>
+                      <span>{sellerWorkspaceNavCopy.proofs}</span>
+                      <em>5</em>
                     </button>
                     <button
                       type="button"
@@ -341,7 +404,15 @@ export function App() {
                       }
                       onClick={() => navigate("/seller/market")}
                     >
-                      <span>{sellerNavCopy.coach}</span>
+                      <span>{sellerWorkspaceNavCopy.market}</span>
+                      <em>+18</em>
+                    </button>
+                    <button
+                      type="button"
+                      className={`seller-add-nav ${sellerNavActive("/seller/new") ? "active" : ""}`}
+                      onClick={() => navigate("/seller/new")}
+                    >
+                      <span>{sellerWorkspaceNavCopy.add}</span>
                     </button>
                   </>
                 )}
@@ -352,28 +423,28 @@ export function App() {
                       className={`admin-nav-item ${isReviewDeskActive() ? "active" : ""}`}
                       onClick={() => navigate("/admin")}
                     >
-                      <span>Review Desk</span>
+                      <span>{adminNavCopy.review}</span>
                     </button>
                     <button
                       type="button"
                       className={`admin-nav-item agent ${location.pathname.startsWith("/admin/agent") ? "active" : ""}`}
                       onClick={() => navigate("/admin/agent")}
                     >
-                      <span>AI Triage</span>
+                      <span>{adminNavCopy.aiQueue}</span>
                     </button>
                     <button
                       type="button"
                       className={`admin-nav-item ${location.pathname.startsWith("/admin/policy") ? "active" : ""}`}
                       onClick={() => navigate("/admin/policy")}
                     >
-                      <span>Risk & Policy</span>
+                      <span>{adminNavCopy.risk}</span>
                     </button>
                     <button
                       type="button"
                       className={`admin-nav-item ${location.pathname.startsWith("/admin/impact") ? "active" : ""}`}
                       onClick={() => navigate("/admin/impact")}
                     >
-                      <span>Work Saved</span>
+                      <span>{adminNavCopy.saved}</span>
                     </button>
                   </>
                 )}
@@ -512,7 +583,7 @@ export function App() {
           />
           <Route
             path="/admin/*"
-            element={role === "admin" ? <AdminReviewPanel /> : <RoleRedirect session={session} />}
+            element={role === "admin" ? <AdminReviewPanel language={language} /> : <RoleRedirect session={session} />}
           />
           <Route path="/" element={<RoleRedirect session={session} />} />
           <Route path="*" element={<RoleRedirect session={session} />} />
@@ -618,7 +689,7 @@ export function App() {
                 onClick={() => navigate("/admin")}
               >
                 <ClipboardCheck size={18} />
-                <span>Review</span>
+                <span>{adminNavCopy.review}</span>
               </button>
               <button
                 type="button"
@@ -626,7 +697,7 @@ export function App() {
                 onClick={() => navigate("/admin/agent")}
               >
                 <Cpu size={18} />
-                <span>Triage</span>
+                <span>{adminNavCopy.aiQueue}</span>
               </button>
               <button
                 type="button"
@@ -634,7 +705,7 @@ export function App() {
                 onClick={() => navigate("/admin/policy")}
               >
                 <ShieldCheck size={18} />
-                <span>Policy</span>
+                <span>{adminNavCopy.risk}</span>
               </button>
               <button
                 type="button"
@@ -642,7 +713,7 @@ export function App() {
                 onClick={() => navigate("/admin/impact")}
               >
                 <Sparkles size={18} />
-                <span>Impact</span>
+                <span>{adminNavCopy.saved}</span>
               </button>
             </>
           )}

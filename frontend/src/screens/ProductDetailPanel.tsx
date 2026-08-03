@@ -76,7 +76,7 @@ export function ProductDetailPanel({
   onOpenAudit: (traceId: string) => void;
   onLoadSellerComparison: (product: Product) => Promise<CompareResponse>;
   onOpenSellerComparison: (product: Product) => Promise<void> | void;
-  onOpenCheckout: (variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant }) => void;
+  onOpenCheckout: (variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant & { quantity?: number } }) => void;
   language: LanguageCode;
   experienceMode: "simple" | "standard";
   comparisonTraceId?: string;
@@ -118,6 +118,8 @@ export function ProductDetailPanel({
   const [proofSpotlightSource, setProofSpotlightSource] = useState<"agent" | "manual" | null>(null);
   const [skuProofModalOpen, setSkuProofModalOpen] = useState(false);
   const [proofHighlight, setProofHighlight] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [showRequestSuccessModal, setShowRequestSuccessModal] = useState(false);
   const scoreRefreshTimerRef = useRef<number | null>(null);
   const proofHighlightTimerRef = useRef<number | null>(null);
   const proofPanelRef = useRef<HTMLElement | null>(null);
@@ -439,7 +441,7 @@ export function ProductDetailPanel({
       });
       onOpenCheckout(selectedVariant.variant_id, contract, {
         product: detail.product,
-        variant: selectedVariant
+        variant: { ...selectedVariant, quantity }
       });
     } catch (err) {
       setContractError(err instanceof Error ? err.message : "Could not lock expectation contract");
@@ -460,6 +462,7 @@ export function ProductDetailPanel({
         create_seller_signal: true
       });
       setProofRequested(true);
+      setShowRequestSuccessModal(true);
       focusProofPanel("manual");
       await refreshTrustScore("proof");
     } catch (err) {
@@ -484,6 +487,7 @@ export function ProductDetailPanel({
       <div className="web-detail-layout">
         <div className="detail-gallery-container">
           <section className="detail-product-card">
+            <ProductMediaGallery product={detail.product} />
             <div className="detail-product-summary">
               <span>{t(language, "soldBy")} {detail.product.seller_name}</span>
               <h1>{displayTitle}</h1>
@@ -515,18 +519,7 @@ export function ProductDetailPanel({
                 </button>
               </div>
             </div>
-            <ProductMediaGallery product={detail.product} />
           </section>
-
-          <SellerCompareLauncher
-            comparison={sellerComparison}
-            productCatalog={productCatalog}
-            currentProduct={detail.product}
-            loading={sellerComparisonLoading}
-            error={sellerComparisonError}
-            onOpenCompare={() => void onOpenSellerComparison(detail.product)}
-            onOpenProofMap={() => setGraphDrawerOpen(true)}
-          />
 
           <section className="sku-evidence-card">
             <span className="eyebrow">{t(language, "quickChecks")}</span>
@@ -548,43 +541,16 @@ export function ProductDetailPanel({
               {t(language, "checkedFrom")} <strong>{detail.evidence.delivered_orders_90d}</strong> {t(language, "recentOrders")}.
             </p>
           </section>
-        </div>
 
-        <aside className="detail-decision-container" aria-label="Listing decision">
-          <KeepConfidenceCard
-            confidence={selectedKeepConfidence}
-            loading={keepConfidenceLoading}
-            error={keepConfidenceError}
-            refreshState={scoreRefreshState}
-            onApplySize={handleSelectVariant}
-            onOpenAudit={onOpenAudit}
-            language={language}
+          <SellerCompareLauncher
+            comparison={sellerComparison}
+            productCatalog={productCatalog}
+            currentProduct={detail.product}
+            loading={sellerComparisonLoading}
+            error={sellerComparisonError}
+            onOpenCompare={() => void onOpenSellerComparison(detail.product)}
+            onOpenProofMap={() => setGraphDrawerOpen(true)}
           />
-
-          <section className="size-selector-card detail-priority-card">
-            <div className="section-heading-row compact">
-              <div>
-                <span className="eyebrow">{t(language, "beforeYouDecide")}</span>
-                <h3>{t(language, "selectSize")}</h3>
-              </div>
-              <span className="ui-badge neutral">{detail.fit.confidence} {t(language, "confidence")}</span>
-            </div>
-            <div className="detail-size-options">
-              {detail.variants.map((v) => (
-                <button
-                  key={v.variant_id}
-                  type="button"
-                  onClick={() => handleSelectVariant(v.variant_id)}
-                  className={v.variant_id === selectedVariantId ? "active" : ""}
-                >
-                  {v.size}
-                </button>
-              ))}
-            </div>
-            <p>
-              {sizeSelectionHint(selectedVariant.size, selectedRecommendedSize, language)}
-            </p>
-          </section>
 
           <section id="verified-facts" className="samvaad-card detail-samvaad-priority" aria-label="Ask from verified facts">
             <div className="samvaad-card-header">
@@ -645,6 +611,23 @@ export function ProductDetailPanel({
                     <span>{answer.answer.caution}</span>
                   </div>
                 )}
+
+                {shouldOfferProofRequest && (
+                  <div className="samvaad-missing-proof-cta-box">
+                    <div className="cta-info">
+                      <AlertTriangle size={15} style={{ color: "#D97706" }} />
+                      <span>Color/fabric daylight verification photos are missing.</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`btn-request-proof-inline ${proofRequested ? "requested" : ""}`}
+                      onClick={() => void handleAskSellerProof()}
+                      disabled={proofRequesting}
+                    >
+                      {proofRequesting ? "Sending..." : proofRequested ? "Requested ✓" : "Request Seller Proof"}
+                    </button>
+                  </div>
+                )}
                 <div className="response-actions">
                   <button
                     className="btn-action-primary"
@@ -660,46 +643,93 @@ export function ProductDetailPanel({
               </div>
             )}
           </section>
+        </div>
 
-          {detail.avoidable_issue && (
-            <section className="avoidable-issue-card" aria-label="Important warning">
-              <AlertTriangle size={18} />
-              <div>
-                <span>{t(language, "caution")}</span>
-                <strong>{detail.avoidable_issue.title}</strong>
-                <p>{detail.avoidable_issue.action}</p>
-              </div>
-            </section>
-          )}
+        <aside className="detail-decision-container" aria-label="Listing decision">
 
-          {contractError && <div className="notice error">{contractError}</div>}
-
-          <CartConfidenceCard
-            confidence={selectedCartConfidence}
-            loading={cartConfidenceLoading}
-            error={cartConfidenceError}
+          <KeepConfidenceCard
+            confidence={selectedKeepConfidence}
+            loading={keepConfidenceLoading}
+            error={keepConfidenceError}
+            refreshState={scoreRefreshState}
+            onApplySize={handleSelectVariant}
             onOpenAudit={onOpenAudit}
             language={language}
           />
 
-          <section className="cod-action-card">
-            <div>
-              <span>{t(language, "size")} {selectedVariant.size} {t(language, "selected").toLowerCase()}</span>
-              <strong>Rs {selectedVariant.current_price}</strong>
-              <small className={trustBlocksCheckout ? "checkout-risk-note" : "checkout-ready-note"}>
-                {checkoutCopy.helper}
-              </small>
+          <section className="detail-buy-block">
+            <div className="size-qty-row">
+              <div className="size-selection-area">
+                <span className="eyebrow">{t(language, "selectSize")}</span>
+                <div className="detail-size-options">
+                  {detail.variants.map((v) => (
+                    <button
+                      key={v.variant_id}
+                      type="button"
+                      onClick={() => handleSelectVariant(v.variant_id)}
+                      className={v.variant_id === selectedVariantId ? "active" : ""}
+                    >
+                      {v.size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="product-qty-stepper">
+                <span className="qty-label">Qty</span>
+                <div className="stepper-controls">
+                  <button 
+                    type="button" 
+                    onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                    disabled={quantity <= 1}
+                    aria-label="Decrease quantity"
+                  >
+                    -
+                  </button>
+                  <span className="qty-value">{quantity}</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setQuantity(q => Math.min(10, q + 1))}
+                    aria-label="Increase quantity"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <button
-              className="btn-sticky-buy"
-              type="button"
-              onClick={() => void handleBuyWithContract()}
-              disabled={contractLocking}
-            >
-              <span>{contractLocking ? t(language, "checkingProof") : checkoutCopy.cta}</span>
-              <ChevronRight size={18} />
-            </button>
+            <div className={`size-recommendation-badge ${selectedVariant.size === selectedRecommendedSize ? "matches" : "differs"}`}>
+              {selectedVariant.size === selectedRecommendedSize ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+              <span>{sizeSelectionHint(selectedVariant.size, selectedRecommendedSize, language)}</span>
+            </div>
+
+            {detail.avoidable_issue && (
+              <div className="avoidable-issue-inline">
+                <AlertTriangle size={15} />
+                <span><strong>{detail.avoidable_issue.title}:</strong> {detail.avoidable_issue.action}</span>
+              </div>
+            )}
+
+            {contractError && <div className="notice error">{contractError}</div>}
+
+            <div className="buy-price-cta-row">
+              <div className="price-display">
+                <span className="price-main">Rs {selectedVariant.current_price * quantity}</span>
+                <span className={`price-helper ${trustBlocksCheckout ? "checkout-risk-note" : "checkout-ready-note"}`}>
+                  {checkoutCopy.helper}
+                </span>
+              </div>
+
+              <button
+                className="btn-sticky-buy"
+                type="button"
+                onClick={() => void handleBuyWithContract()}
+                disabled={contractLocking}
+              >
+                <span>{contractLocking ? t(language, "checkingProof") : checkoutCopy.cta}</span>
+                <ChevronRight size={18} />
+              </button>
+            </div>
           </section>
         </aside>
       </div>
@@ -848,6 +878,18 @@ export function ProductDetailPanel({
               onRetry={onRetryGraph}
             />
           </section>
+        </div>
+      )}
+
+      {showRequestSuccessModal && (
+        <div className="bottom-sheet-overlay request-success-overlay" onClick={() => setShowRequestSuccessModal(false)}>
+          <div className="request-success-alert" onClick={(e) => e.stopPropagation()}>
+            <div className="alert-icon-check">✓</div>
+            <h3>Request Submitted to Seller</h3>
+            <p>We've successfully notified the seller to upload daylight images/closeup videos for this product.</p>
+            <p className="alert-sub">Sarthi will notify you as soon as verified proof is updated!</p>
+            <button type="button" className="btn-ok" onClick={() => setShowRequestSuccessModal(false)}>Okay, thanks</button>
+          </div>
         </div>
       )}
 
@@ -1031,13 +1073,23 @@ function SellerCompareLauncher({
       )}
 
       <div className="compare-launch-actions">
-        <button type="button" className="primary" onClick={onOpenCompare}>
+        <button
+          type="button"
+          className="btn-action-primary"
+          style={{ background: "#0f172a", color: "#ffffff", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}
+          onClick={onOpenCompare}
+        >
           <Layers size={15} />
-          Compare
+          Compare {sellerCount} options
         </button>
-        <button type="button" onClick={onOpenProofMap}>
-          <MessageCircle size={15} />
-          Ask proof
+        <button
+          type="button"
+          className="btn-action-secondary"
+          style={{ background: "#f1f5f9", color: "#0f172a", border: "1px solid #cbd5e1", padding: "8px 14px", borderRadius: "8px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "6px" }}
+          onClick={onOpenProofMap}
+        >
+          <ShieldCheck size={15} />
+          Proof Map
         </button>
       </div>
     </section>
@@ -1061,6 +1113,8 @@ function KeepConfidenceCard({
   onOpenAudit: (traceId: string) => void;
   language: LanguageCode;
 }) {
+  const [showDrivers, setShowDrivers] = useState(false);
+
   if (error) {
     return (
       <section className="keep-confidence-card low simple-decision-card">
@@ -1099,7 +1153,7 @@ function KeepConfidenceCard({
 
   return (
     <section className={`keep-confidence-card ${confidence.confidence_band} simple-decision-card ${tone} score-${refreshState}`} aria-live="polite">
-      <div className="simple-decision-top">
+      <div className="simple-decision-top" onClick={() => setShowDrivers(!showDrivers)} style={{ cursor: "pointer" }}>
         <span className={`simple-decision-icon ${tone}`}>
           {tone === "safe" ? <CheckCircle2 size={20} /> : tone === "watch" ? <CircleAlert size={20} /> : <AlertTriangle size={20} />}
         </span>
@@ -1108,19 +1162,37 @@ function KeepConfidenceCard({
           <strong>{decision.title}</strong>
           <p>{decision.line}</p>
         </div>
-        <div className="keep-score-meter" aria-label={`Keep confidence ${score} out of 100`}>
+        <div className={`keep-score-meter ${tone} interactive-score-meter`} title="Click to view trust breakdown">
           <span>{score}</span>
           <small>/100</small>
         </div>
       </div>
 
-        <div className="keep-driver-list simple-signal-list">
-        {confidence.drivers.slice(0, 3).map((driver) => (
+      <div className="keep-driver-list simple-signal-list">
+        {confidence.drivers.slice(0, showDrivers ? 6 : 2).map((driver) => (
           <span key={`${driver.type}-${driver.label}`} className={driver.positive ? "positive" : driver.severity}>
             {driver.positive ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
             {driver.label}
           </span>
         ))}
+      </div>
+
+      <div className="keep-score-interactive-bar">
+        <button 
+          type="button" 
+          className="btn-toggle-drivers"
+          onClick={() => setShowDrivers(!showDrivers)}
+        >
+          {showDrivers ? "Hide evidence signals ▲" : `View ${confidence.drivers.length} trust signals ▼`}
+        </button>
+        <button
+          type="button"
+          className="btn-open-audit-link"
+          onClick={() => onOpenAudit(confidence.trace_id)}
+        >
+          <ShieldCheck size={13} />
+          {t(language, "seeProof")}
+        </button>
       </div>
 
       {refreshState !== "idle" && (
@@ -1153,15 +1225,6 @@ function KeepConfidenceCard({
           )}
         </div>
       )}
-
-      <button
-        type="button"
-        className="keep-proof-link"
-        onClick={() => onOpenAudit(confidence.trace_id)}
-      >
-        <HelpCircle size={12} />
-        <span>{t(language, "seeProof")}</span>
-      </button>
     </section>
   );
 }
