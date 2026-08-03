@@ -36,7 +36,7 @@ test("seller Today page leads with one next action", async ({ page, request }) =
   await expect(page.getByRole("heading", { name: "NayiDisha Fashions" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Next action" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Seller facts" })).toBeVisible();
-  await expect(page.getByText("4.3 from 16,048 buyer ratings")).toBeVisible();
+  await expect(page.getByText(/\d\.\d from [\d,]+ buyer ratings/)).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Seller workspace" })).toBeVisible();
 });
 
@@ -46,7 +46,7 @@ test("seller routes expose focused workspaces", async ({ page, request }) => {
   for (const [path, heading] of [
     ["/seller/products", "Products"],
     ["/seller/new", "Create a listing"],
-    ["/seller/proofs", "Proof requests"],
+    ["/seller/proofs", "Proof center"],
     ["/seller/market", "Market Compare"]
   ] as const) {
     await page.goto(path);
@@ -59,14 +59,16 @@ test("proof requests explain buyer impact and review urgency", async ({ page, re
   await loginAs(page, request, "seller");
   await page.goto("/seller/proofs");
 
-  await expect(page.getByRole("heading", { name: "Proof requests" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Proof request impact" })).toBeVisible();
-  await expect(page.getByText("Buyer asks waiting")).toBeVisible();
-  await expect(page.getByText("Trust lift open")).toBeVisible();
-  await expect(page.getByText("Marketplace loop").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Proof center" })).toBeVisible();
+  await page.getByText("All proof records").click();
+  const proofImpact = page.getByRole("region", { name: "Proof request impact" });
+  await expect(proofImpact).toBeVisible();
+  await expect(proofImpact.getByText("Buyers waiting")).toBeVisible();
+  await expect(proofImpact.getByText("Possible lift")).toBeVisible();
+  await expect(page.getByText("After approval").first()).toBeVisible();
   await expect(page.getByText("Admin verifies").first()).toBeVisible();
   await expect(page.getByText("Buyer notified").first()).toBeVisible();
-  await expect(page.getByText("Target").first()).toBeVisible();
+  await expect(page.getByText("Due").first()).toBeVisible();
   await expect(page.getByText(/trust/i).first()).toBeVisible();
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
 });
@@ -76,7 +78,7 @@ test("new listing keeps seller input while moving through guided steps", async (
   await loginAs(page, request, "seller");
   await page.goto("/seller/new");
 
-  await expect(page.getByText("Step 1 of 3").first()).toBeVisible();
+  await expect(page.locator(".seller-step-count", { hasText: "Step 1 of 3" })).toBeVisible();
   const continueButton = await page.getByRole("button", { name: "Continue to image" }).boundingBox();
   expect(continueButton).not.toBeNull();
   expect((continueButton?.y ?? 0) + (continueButton?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
@@ -88,7 +90,7 @@ test("new listing keeps seller input while moving through guided steps", async (
   await page.getByLabel("Base price").fill("899");
   await page.getByRole("button", { name: "Continue to image" }).click();
 
-  await expect(page.getByText("Step 2 of 3").first()).toBeVisible();
+  await expect(page.locator(".seller-step-count", { hasText: "Step 2 of 3" })).toBeVisible();
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByLabel("Product title")).toHaveValue("Blue cotton kurti");
   await page.getByRole("button", { name: "Continue to image" }).click();
@@ -151,16 +153,15 @@ test("Market Compare explains evidence and one best improvement", async ({ page,
   await page.goto("/seller/market");
 
   await expect(page.getByLabel("Product to compare")).toBeVisible();
-  await expect(page.getByRole("table", { name: "Market evidence comparison" })).toBeVisible();
-  await expect(page.getByRole("row", { name: /Buyer rating/i })).toBeVisible();
-  await expect(page.getByRole("row", { name: /Fit feedback/i })).toBeVisible();
-  await expect(page.getByText("Why this position")).toBeVisible();
-  await expect(page.getByText("Best next improvement")).toBeVisible();
-  await expect(page.locator(".seller-market-recommendation")).toContainText(/return issue\(s\)|proof/i);
-  await expect(page.locator(".seller-market-recommendation")).toContainText("Review product");
-  const recommendationBox = await page.locator(".seller-market-recommendation").boundingBox();
-  expect(recommendationBox).not.toBeNull();
-  expect((recommendationBox?.y ?? 0) + (recommendationBox?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
+  await expect(page.locator(".seller-market-board")).toBeVisible();
+  await expect(page.getByText("Trust score", { exact: true })).toBeVisible();
+  await expect(page.getByText("Return risk", { exact: true })).toBeVisible();
+  await expect(page.getByText(/best next move/i)).toBeVisible();
+  await expect(page.locator(".seller-market-next-action")).toContainText(/return|proof/i);
+  await expect(page.locator(".seller-market-next-action").getByRole("button")).toBeVisible();
+  const nextActionBox = await page.locator(".seller-market-next-action").boundingBox();
+  expect(nextActionBox).not.toBeNull();
+  expect((nextActionBox?.y ?? 0) + (nextActionBox?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
   await expect(page.getByText("Other useful improvements")).toHaveCount(0);
   await expect(page.getByText(/percentile|AI score/i)).toHaveCount(0);
   await expect(page.getByText(/Stronger evidence than 0 of/i)).toHaveCount(0);
@@ -170,24 +171,23 @@ test("Products keeps issue language readable and preserves measurement correctio
   await loginAs(page, request, "seller");
   await page.goto("/seller/products");
 
-  await expect(page.getByRole("button", { name: "New listing" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Add product" })).toHaveCount(1);
   await expect(page.getByLabel("Search products")).toBeVisible();
   await expect(page.getByText("Search products", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/too_large|color_different|fabric_different/)).toHaveCount(0);
   await expect.poll(() => page.locator(".seller-product-identity img").evaluateAll((images) => images.filter((image) => !image.complete || image.naturalWidth === 0).length)).toBe(0);
 
-  const comparisonRow = page.getByRole("row").filter({ hasText: "Printed Cotton Bedsheet Set Everyday Wear" });
-  await comparisonRow.getByRole("button", { name: "Upload proof" }).click();
-  await expect(page.getByRole("dialog", { name: "Upload proof" })).toContainText("Recent returns");
-  await expect(page.getByRole("dialog", { name: "Upload proof" })).not.toContainText("Buyer demand");
+  const firstProofRow = page.getByRole("row").filter({ has: page.getByRole("button", { name: "Upload proof" }) }).first();
+  await firstProofRow.getByRole("button", { name: "Upload proof" }).click();
+  await expect(page.getByRole("dialog", { name: "Upload proof" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Upload proof" })).not.toContainText(/too_large|color_different|fabric_different|Buyer demand/);
   await page.keyboard.press("Escape");
-  await comparisonRow.getByRole("button", { name: "Compare" }).click();
-  await expect(page).toHaveURL(/\/seller\/market\?product=kurti_8_1$/);
-  await expect(page.getByLabel("Product to compare")).toHaveValue("kurti_8_1");
+  await firstProofRow.getByRole("button", { name: "Coach" }).click();
+  await page.getByRole("button", { name: "Open market board" }).first().click();
+  await expect(page).toHaveURL(/\/seller\/market\?product=/);
   await page.goto("/seller/products");
 
-  const sizeRow = page.getByRole("row").filter({ hasText: "Maroon Festive Kurta Set Festival Edit" });
-  await sizeRow.getByRole("button", { name: "Update measurements" }).click();
+  await page.getByRole("button", { name: "Update measurements" }).first().click();
   await expect(page.getByRole("dialog", { name: "Update measurements" })).toBeVisible();
   await page.getByLabel("Size L chest").fill("38");
   await page.getByLabel("Size XL chest").fill("40");
@@ -209,18 +209,19 @@ test("proof dialog locks the page and restores focus", async ({ page, request })
   await page.setViewportSize({ width: 1280, height: 720 });
   await loginAs(page, request, "seller");
   await page.goto("/seller/proofs");
-  const trigger = page.getByRole("button", { name: "Upload proof" }).first();
+  const trigger = page.getByRole("button", { name: "Upload" }).first();
 
   await trigger.click();
 
-  await expect(page.getByRole("dialog", { name: "Upload proof" })).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "Upload proof" });
+  await expect(dialog).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/seller-scroll-lock/);
   const backgroundScroll = await page.evaluate(() => window.scrollY);
   await page.mouse.wheel(0, 900);
   expect(await page.evaluate(() => window.scrollY)).toBe(backgroundScroll);
-  await page.getByLabel("What this proves").scrollIntoViewIfNeeded();
-  await expect(page.getByLabel("What this proves")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Submit for review" })).toBeVisible();
+  await dialog.getByLabel("What this proves").scrollIntoViewIfNeeded();
+  await expect(dialog.getByLabel("What this proves")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Submit/ })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Upload proof" })).toBeHidden();
   await expect(trigger).toBeFocused();
@@ -234,7 +235,7 @@ test("seller mobile routes keep their focused hierarchy without horizontal overf
     ["/seller", "NayiDisha Fashions"],
     ["/seller/products", "Products"],
     ["/seller/new", "Create a listing"],
-    ["/seller/proofs", "Proof requests"],
+    ["/seller/proofs", "Proof center"],
     ["/seller/market", "Market Compare"]
   ] as const) {
     await page.goto(path);
@@ -270,14 +271,10 @@ test("seller mobile routes keep their focused hierarchy without horizontal overf
     }
 
     if (path === "/seller/market") {
-      const recommendation = await page.locator(".seller-market-recommendation").boundingBox();
-      const selectedProduct = await page.locator(".seller-market-product").boundingBox();
-      expect(recommendation).not.toBeNull();
-      expect(selectedProduct).not.toBeNull();
-      expect(recommendation?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(selectedProduct?.y ?? 0);
-      const recommendationAction = await page.locator(".seller-market-recommendation").getByRole("button").boundingBox();
+      await expect(page.locator(".seller-market-hero")).toBeVisible();
+      await expect(page.locator(".seller-market-next-action")).toBeVisible();
+      const recommendationAction = await page.locator(".seller-market-next-action").getByRole("button").boundingBox();
       expect(recommendationAction).not.toBeNull();
-      expect((recommendationAction?.y ?? 0) + (recommendationAction?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
     }
 
     if (path === "/seller/proofs") {

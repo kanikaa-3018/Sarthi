@@ -308,10 +308,8 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
     <SellerShell
       seller={seller}
       verificationStatus={verification?.verification_status === "verified" ? "Seller verified" : verification ? labelize(verification.verification_status) : "Verification unavailable"}
-      activeRoute={activeRoute}
       copy={copy}
       loading={loading}
-      onNavigate={navigateSeller}
     >
       {error && <div className="seller-inline-error" role="alert"><span>{error}</span><button type="button" onClick={() => void loadWorkspace()}>{copy.retry}</button></div>}
       {statusMessage && <div ref={statusRef} className="seller-inline-status" role="status" tabIndex={-1}>{statusMessage}</div>}
@@ -339,7 +337,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
           }}
         />
       )}
-      {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} automation={automation} agent={coach?.proof_agent ?? null} copy={copy} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
+      {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} rows={productRows} automation={automation} agent={coach?.proof_agent ?? null} copy={copy} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
       {activeRoute === "market" && <SellerMarketPage listings={listings} competitors={panel?.competing_listings ?? []} actions={actions} initialProductId={new URLSearchParams(location.search).get("product")} onAction={handleAction} />}
 
       {activeProofTask && <SellerProofDialog task={activeProofTask} proofPacket={automation.proofPacket?.taskKey === `${activeProofTask.product_id}:${activeProofTask.attribute}` ? automation.proofPacket : null} submitting={proofSubmitting} apiError={proofError} onClose={() => { if (!proofSubmitting) setActiveProofTask(null); }} onSubmit={handleProofSubmit} />}
