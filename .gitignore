@@ -19,6 +19,8 @@ coverage/
 playwright-report/
 test-results/
 output/
+artifacts/
+frontend/artifacts/
 .worktrees/
 .playwright-cli/
 .runtime/
@@ -30,8 +32,33 @@ payment-*.png
 proof-login-smoke.png
 safety_check_loader.png
 safety_session_loader.png
+tmp-*.png
+*-viewport.png
+*-desktop.png
+*-mobile.png
 .DS_Store
 *.log
+
+# Local generated demo media/proof assets. Keep curated marketplace assets tracked explicitly.
+frontend/public/catalog/*-model.png
+frontend/public/catalog/*-model.jpg
+frontend/public/catalog/*-front.png
+frontend/public/catalog/*-front.jpg
+frontend/public/catalog/*-fabric.png
+frontend/public/catalog/*-fabric.jpg
+frontend/public/catalog/*-measurement.png
+frontend/public/catalog/*-measurement.jpg
+frontend/public/catalog/*-back.png
+frontend/public/catalog/*-inside.jpg
+frontend/public/catalog/*-material.jpg
+frontend/public/catalog/*-product.jpg
+frontend/public/catalog/*-scale.jpg
+frontend/public/catalog/*-room.jpg
+frontend/public/catalog/*-set.jpg
+frontend/public/catalog/*-fit.jpg
+frontend/public/catalog/*-length.jpg
+frontend/public/catalog/phone-kit-*.png
+frontend/public/seeded/
 
 # Internal planning notes kept locally, not in the public submission repo.
 docs/PHASE_*.md
