@@ -1515,3 +1515,48 @@ function median(values: number[]) {
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(3));
 }
+
+export async function parseListingDescriptionWithAi(description: string) {
+  const systemInstruction = [
+    "You are Sarthi's intelligent listing extraction agent.",
+    "Extract the product title, category, garment type, fabric, color family, base price, and any image URL from the supplier note/description.",
+    "If any attribute is not explicitly mentioned, use e-commerce product catalog intelligence to infer/guess it reasonably based on the context.",
+    "category must be strictly one of: women_kurtis, women_sarees, women_kurta_sets, women_bottomwear, women_tops, women_accessories, home_furnishing.",
+    "For base_price, return a positive number. If not mentioned or not clear, default to 399.",
+    "For fabric, if not clear, default to cotton.",
+    "For color_family, if not clear, default to mixed.",
+    "For garment_type, if not clear, default to kurti.",
+    "For category, if not clear, default to women_kurtis.",
+    "For title, write an elegant, short, non-spammy e-commerce listing title.",
+    "Return JSON only with keys: title, category, garment_type, fabric, color_family, base_price, image_url."
+  ].join(" ");
+
+  const generated = await generateStructuredJson({
+    capability: "text",
+    systemInstruction,
+    userText: JSON.stringify({ description }),
+    schemaName: "ListingExtraction",
+    schemaDescription: "Extracted and inferred product listing attributes",
+    schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        category: { type: "string" },
+        garment_type: { type: "string" },
+        fabric: { type: "string" },
+        color_family: { type: "string" },
+        base_price: { type: "number" },
+        image_url: { type: "string" }
+      },
+      required: ["title", "category", "garment_type", "fabric", "color_family", "base_price", "image_url"]
+    },
+    maxTokens: 500
+  });
+
+  if (!generated?.value) {
+    return null;
+  }
+
+  return generated.value;
+}
+

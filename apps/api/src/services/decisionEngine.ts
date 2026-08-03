@@ -630,7 +630,7 @@ function cartReasonChips(keep: any, offer: any, evidence: any, sizeMismatch: boo
   chips.push({ type: "return_rate", label: `${Math.round(evidence.return_rate * 100)}% return rate`, sentiment: evidence.return_rate <= 0.16 ? "positive" : "watch" });
   chips.push({
     type: "offer_truth",
-    label: offer.status === "verified_price_drop" ? "Verified offer" : "Do not rush offer",
+    label: offer.status === "verified_price_drop" ? "Verified offer" : "Price proof checked",
     sentiment: offer.status === "verified_price_drop" && offer.dark_pattern_shield?.status === "clear" ? "positive" : "neutral"
   });
   if (offer.dark_pattern_shield?.status && offer.dark_pattern_shield.status !== "clear") {
@@ -665,7 +665,7 @@ function cartInterventions(keep: any, item: NormalizedCartItem, profileSize: str
   if (darkPatternIssue) {
     actions.push({
       type: "dark_pattern_shield",
-      label: darkPatternIssue.key === "repeating_countdown_timer" ? "Do not rush" : darkPatternIssue.label,
+      label: darkPatternIssue.key === "repeating_countdown_timer" ? "Check price proof" : darkPatternIssue.label,
       reason: darkPatternIssue.buyer_copy
     });
   } else if (offer.status !== "verified_price_drop") {
@@ -1118,7 +1118,7 @@ function cartDarkPatternShield(lineItems: any[]) {
   return {
     shield_version: "dark_pattern_disruptor_v2",
     status,
-    headline: status === "clear" ? "Checkout pressure is clear" : status === "blocked" ? "Checkout pressure blocked" : "Do not rush checkout",
+    headline: status === "clear" ? "Checkout proof is clear" : status === "blocked" ? "Checkout proof blocked" : "Checkout proof needs attention",
     plain_copy: primary?.buyer_copy ?? "No timer, fake scarcity, price hike, hidden fee, forced payment, or hidden return condition found.",
     risk_count: blocked.length + watch.length,
     blocked_count: blocked.length,

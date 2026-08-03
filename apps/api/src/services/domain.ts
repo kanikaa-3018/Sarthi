@@ -1173,7 +1173,7 @@ export async function verifyOffer(db: Db, variantId: string) {
   const message = status === "verified_price_drop"
     ? "Verified deal. This is lower than the recent reference price."
     : status === "no_need_to_rush"
-      ? "Timer repeated before. Judge this offer by current price proof, not urgency."
+      ? "Timer history checked. Current price proof is shown with product evidence."
       : "Not enough history to verify this offer yet.";
   const fact_ids = [...events.map((event: any) => event.fact_id), campaign?.fact_id, inventory?.fact_id].filter(Boolean);
   return {
@@ -1234,12 +1234,12 @@ function buildDarkPatternShield(input: {
       status: input.timerReset ? "watch" : "clear",
       severity: input.timerReset ? "medium" : "none",
       buyer_copy: input.timerReset
-        ? "Do not rush. This timer has reset before. Decide using price and product proof."
+        ? "Timer history checked. Current price proof is shown with product evidence."
         : "No repeated timer reset found.",
       evidence: input.campaign
         ? `${input.campaign.timer_reset_count ?? 0} reset(s) in campaign ledger.`
         : "No campaign timer found.",
-      decision_effect: input.timerReset ? "Ignore urgency copy." : "Timer does not reduce confidence.",
+      decision_effect: input.timerReset ? "Use price proof instead of timer wording." : "Timer does not reduce confidence.",
       fact_ids: input.campaign?.fact_id ? [input.campaign.fact_id] : []
     }),
     darkPatternCheck({
@@ -1248,12 +1248,12 @@ function buildDarkPatternShield(input: {
       status: highStockWithUrgency ? "watch" : "clear",
       severity: highStockWithUrgency ? "medium" : "none",
       buyer_copy: highStockWithUrgency
-        ? "Stock pressure is not trusted because enough units are still available."
+        ? "Stock signal is checked against available units before it affects trust."
         : "Scarcity pressure is not being used as proof.",
       evidence: input.inventory
         ? `${available} available, ${velocity}/day recent sales velocity.`
         : "Inventory snapshot unavailable.",
-      decision_effect: highStockWithUrgency ? "Hide scarcity as a buying reason." : "No scarcity warning.",
+      decision_effect: highStockWithUrgency ? "Use inventory proof instead of scarcity wording." : "No scarcity warning.",
       fact_ids: input.inventory?.fact_id ? [input.inventory.fact_id] : []
     }),
     darkPatternCheck({
@@ -1267,7 +1267,7 @@ function buildDarkPatternShield(input: {
       evidence: spike
         ? `Price rose by Rs ${spike.amount} before the current offer.`
         : `${input.events.length} price event(s) checked.`,
-      decision_effect: spike ? "Do not trust the discount percentage." : "Price history can be used normally.",
+      decision_effect: spike ? "Show current price proof instead of discount percentage alone." : "Price history can be used normally.",
       fact_ids: input.events.map((event: any) => event.fact_id)
     }),
     darkPatternCheck({
@@ -1310,12 +1310,12 @@ function buildDarkPatternShield(input: {
       status: input.timerReset ? "watch" : "clear",
       severity: input.timerReset ? "medium" : "none",
       buyer_copy: input.timerReset
-        ? "Only-today language is unsafe because the same campaign timer has restarted."
+        ? "Only-today wording is checked against campaign history before it affects trust."
         : "No misleading only-today pattern found.",
       evidence: input.campaign
         ? `Campaign started ${input.campaign.start_at} and ends ${input.campaign.end_at}.`
         : "No campaign found.",
-      decision_effect: input.timerReset ? "Remove urgency from recommendation." : "No urgency warning.",
+      decision_effect: input.timerReset ? "Use campaign history in the recommendation." : "No timer wording issue.",
       fact_ids: input.campaign?.fact_id ? [input.campaign.fact_id] : []
     }),
     darkPatternCheck({
@@ -1325,11 +1325,11 @@ function buildDarkPatternShield(input: {
       severity: returnsVisible ? "none" : "high",
       buyer_copy: returnsVisible
         ? `${returnWindow || 7}-day return condition is visible before payment.`
-        : "Return conditions are missing or unclear. Do not rush payment.",
+        : "Return conditions are missing or unclear. Keep payment protection visible.",
       evidence: returnsVisible
         ? "Return window and returns-enabled fields are present."
         : "Return window or return visibility failed.",
-      decision_effect: returnsVisible ? "Refund expectation can be locked." : "Prefer COD or review first.",
+      decision_effect: returnsVisible ? "Refund expectation can be locked." : "Show return policy and buyer protection before payment.",
       fact_ids: []
     })
   ];
@@ -1339,12 +1339,12 @@ function buildDarkPatternShield(input: {
   const status = blocked.length ? "blocked" : watch.length ? "watch" : "clear";
   const primary = blocked[0] ?? watch[0] ?? null;
   const plainCopy = input.timerReset
-    ? "Do not rush. This timer has reset before. Decide using price and product proof."
-    : primary?.buyer_copy ?? (input.hasDrop ? "Offer history is clean. Still decide using product proof." : "No verified urgency. Decide using product proof.");
+    ? "Timer history checked. Current price proof is shown with product evidence."
+    : primary?.buyer_copy ?? (input.hasDrop ? "Offer history is clean. Product proof is shown alongside price." : "Current price proof is available when history is limited.");
   return {
     shield_version: "dark_pattern_disruptor_v2",
     status,
-    headline: status === "clear" ? "No checkout pressure found" : status === "blocked" ? "Checkout pressure blocked" : "Do not rush this offer",
+    headline: status === "clear" ? "Offer proof looks clear" : status === "blocked" ? "Checkout proof blocked" : "Offer proof needs attention",
     plain_copy: plainCopy,
     buyer_guidance: status === "clear"
       ? "You can use the offer if product trust is also strong."
@@ -1747,7 +1747,7 @@ function unsafeClaims(gaps: any[], conflicts: any[], offer: any, coverage: Recor
     claims.push({
       claim: "Offer urgency",
       reason: "The campaign timer has reset before.",
-      action: "Do not rush because of the timer; use current price proof instead.",
+      action: "Use current price proof instead of timer wording.",
       severity: "medium",
       fact_ids: offer.fact_ids ?? []
     });

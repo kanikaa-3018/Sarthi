@@ -221,7 +221,7 @@ describe("trust run agent", () => {
     assert.ok(shield.checks.some((check: any) => check.key === "misleading_only_today_offer"));
     assert.ok(shield.checks.some((check: any) => check.key === "hidden_return_conditions"));
     assert.ok(shield.risk_count >= 3);
-    assert.ok(shield.plain_copy.includes("Do not rush"));
+    assert.ok(shield.plain_copy.includes("Current price proof"));
   });
 
   it("explains checkout confidence without forcing prepaid", async () => {

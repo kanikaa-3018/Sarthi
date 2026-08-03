@@ -132,7 +132,7 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
     nodes.push({
       id: offerNode,
       type: "offer",
-      label: offer.status === "verified_price_drop" ? "Offer OK" : offer.status === "no_need_to_rush" ? "No rush" : "Offer check",
+      label: offer.status === "verified_price_drop" ? "Offer OK" : offer.status === "no_need_to_rush" ? "Price proof checked" : "Offer check",
       subtitle: offer.message,
       status: offer.status,
       score: candidate?.factors.offer_truth ?? null,
@@ -367,7 +367,7 @@ function buildEvidencePaths(graph: any) {
     summary: offer.buyer_guidance ?? "Offer pressure is checked against price history and campaign resets.",
     node_ids: [ids.offer, ids.price, ids.score],
     steps: [
-      pathStep("Offer timer", ids.offer, labelize(offer.status ?? "offer check")),
+      pathStep("Offer timer", ids.offer, offerStatusLabel(offer.status ?? "offer check")),
       pathStep("Price history", ids.price, offer.price_evidence?.reference_price ? `Reference Rs ${offer.price_evidence.reference_price}` : "Not enough prior price"),
       pathStep("Campaign reset", ids.price, `${offer.campaign_evidence?.timer_reset_count ?? 0} reset(s)`),
       pathStep("Buyer guidance", ids.score, offer.buyer_guidance ?? "Decide using product proof")
@@ -375,6 +375,11 @@ function buildEvidencePaths(graph: any) {
     status: offer.status ?? "not_enough_history"
   });
   return [productPath, fitPath, offerPath];
+}
+
+function offerStatusLabel(status: string) {
+  if (status === "no_need_to_rush") return "price proof checked";
+  return labelize(status);
 }
 
 function pathFromNodes(graph: any, input: any) {

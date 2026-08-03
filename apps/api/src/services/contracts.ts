@@ -58,7 +58,7 @@ export function expectationContract(buyerId: string, productId: string, variantI
       dimension: "return",
       claim: returnsEnabled ? `Return eligible for ${returnDays} days if product promise is not met.` : "Return eligibility is not available for this listing.",
       confidence: returnsEnabled ? "medium" : "weak",
-      buyer_action: returnsEnabled ? "Return reason will be linked to the promise that failed." : "Prefer COD or review policy before payment.",
+      buyer_action: returnsEnabled ? "Return reason will be linked to the promise that failed." : "Review the policy and keep buyer protection visible before payment.",
       fact_ids: [],
       source: "return policy",
       status: returnsEnabled ? "locked" : "watch"
@@ -69,7 +69,7 @@ export function expectationContract(buyerId: string, productId: string, variantI
         ? `Offer price proof: Rs ${priceEvidence.latest_price ?? "current"} is lower than reference Rs ${priceEvidence.reference_price ?? "unknown"}.`
         : `Offer proof: ${offer.message ?? "price history is not strong enough yet"}.`,
       confidence: offer.status === "verified_price_drop" ? "high" : "medium",
-      buyer_action: offer.buyer_guidance ?? "Do not rush; decide using product proof.",
+      buyer_action: offer.buyer_guidance ?? "Use product proof and current price proof together.",
       fact_ids: offer.fact_ids ?? [],
       source: "price ledger + campaign behavior",
       status: offer.status === "verified_price_drop" ? "locked" : "watch"

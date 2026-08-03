@@ -158,7 +158,7 @@ export function deterministicGraphChatAnswer(graph: any, query: string): GraphAn
       proofGaps.length ? `Missing or weak proof: ${proofGapText}.` : "No major proof gap is currently flagged."
     ]),
     caution: proofGaps.length || highReturn || weakEvidence
-      ? "Do not rush checkout; review proof, fit, and return risk first."
+      ? "Review proof, fit, and return risk before checkout."
       : null
   };
 }
