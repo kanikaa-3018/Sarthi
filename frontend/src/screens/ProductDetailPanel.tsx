@@ -25,7 +25,8 @@ import {
   createWishlistIntent,
   getCartConfidence,
   getKeepConfidence,
-  getProductDetail
+  getProductDetail,
+  requestSellerProof
 } from "../api/client";
 import { simpleTrustMeaning, t, type LanguageCode } from "../i18n";
 import type {
@@ -38,8 +39,10 @@ import type {
   Product,
   ProductDetailResponse,
   SkuTruthCard,
-  Variant
+  Variant,
+  EvidenceAnswerAction
 } from "../types/api";
+import { fallbackProductImage, productImageLabels, productImageSources } from "../utils/productMedia";
 import { KnowledgeGraphExplorer } from "./KnowledgeGraphExplorer";
 
 // Screen 3: Responsive Split 2-Column Product Detail Panel
@@ -53,6 +56,7 @@ export function ProductDetailPanel({
   onOpenAudit,
   onLoadSellerComparison,
   onOpenSellerComparison,
+  onVariantChange,
   onOpenCheckout,
   language,
   experienceMode,
@@ -74,8 +78,9 @@ export function ProductDetailPanel({
   productCatalog: Product[];
   onBack: () => void;
   onOpenAudit: (traceId: string) => void;
-  onLoadSellerComparison: (product: Product) => Promise<CompareResponse>;
-  onOpenSellerComparison: (product: Product) => Promise<void> | void;
+  onLoadSellerComparison: (product: Product, variantId?: string | null) => Promise<CompareResponse>;
+  onOpenSellerComparison: (product: Product, variantId?: string | null) => Promise<void> | void;
+  onVariantChange: (variantId: string) => void;
   onOpenCheckout: (variantId: string, contract: ExpectationContract, item: { product: Product; variant: Variant & { quantity?: number } }) => void;
   language: LanguageCode;
   experienceMode: "simple" | "standard";
@@ -136,9 +141,12 @@ export function ProductDetailPanel({
           : null;
         const nextVariantId = initialVariant?.variant_id ?? payload.selected_variant.variant_id;
         setSelectedVariantId(nextVariantId);
+        if (nextVariantId && nextVariantId !== initialVariantId) {
+          onVariantChange(nextVariantId);
+        }
         setKeepConfidence(payload.keep_confidence.variant_id === nextVariantId ? payload.keep_confidence : null);
       });
-  }, [buyerId, productId, initialVariantId]);
+  }, [buyerId, productId, initialVariantId, onVariantChange]);
 
   useEffect(() => {
     if (!detail || !selectedVariantId) return;
@@ -186,12 +194,12 @@ export function ProductDetailPanel({
   }, [buyerId, detail, selectedVariantId]);
 
   useEffect(() => {
-    if (!detail) return;
+    if (!detail || !selectedVariantId) return;
     let cancelled = false;
     setSellerComparison(null);
     setSellerComparisonLoading(true);
     setSellerComparisonError(null);
-    onLoadSellerComparison(detail.product)
+    onLoadSellerComparison(detail.product, selectedVariantId)
       .then((payload) => {
         if (!cancelled) setSellerComparison(payload);
       })
@@ -204,7 +212,7 @@ export function ProductDetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [detail?.product.product_id, onLoadSellerComparison]);
+  }, [detail?.product.product_id, onLoadSellerComparison, selectedVariantId]);
 
   useEffect(() => {
     const storageKey = `sarthi.trust-receipt.${buyerId}.${productId}`;
@@ -364,10 +372,12 @@ export function ProductDetailPanel({
   const checkoutCopy = checkoutActionCopy(language, trustBlocksCheckout);
   const proofActionLabel = proofRequestActionLabel(language, proofRequested, proofRequesting);
   const shouldOfferProofRequest = detail.trust_state.missing_data.length > 0 || !detail.trust_state.can_recommend;
+  const answerProofAction = answer?.answer.primary_action?.type === "ask_proof" ? answer.answer.primary_action : null;
 
   function handleSelectVariant(nextVariantId: string) {
     if (nextVariantId === selectedVariantId) return;
     setSelectedVariantId(nextVariantId);
+    onVariantChange(nextVariantId);
     if (keepConfidence?.variant_id !== nextVariantId) {
       setKeepConfidence(null);
     }
@@ -392,11 +402,34 @@ export function ProductDetailPanel({
     window.setTimeout(() => onOpenAudit(traceId), 0);
   }
 
-  function requestProofFromGraph() {
-    setGraphDrawerOpen(false);
-    window.setTimeout(() => {
-      void handleAskSellerProof();
-    }, 0);
+  async function requestProofFromGraph(action: EvidenceAnswerAction | null | undefined = graphAnswer?.answer?.next_action) {
+    if (!detail || proofRequesting) return;
+    if (action?.type !== "ask_proof") {
+      setGraphDrawerOpen(false);
+      window.setTimeout(() => {
+        void handleAskSellerProof();
+      }, 0);
+      return;
+    }
+    setProofRequesting(true);
+    setProofRequestError(null);
+    try {
+      await requestSellerProof(buyerId, {
+        product_id: action.product_id ?? detail.product.product_id,
+        variant_id: action.variant_id ?? selectedVariantId,
+        attribute: normalizeProofActionAttribute(action.attribute),
+        question: graphAnswer?.answer.query ?? graphQuery
+      });
+      setProofRequested(true);
+      setShowRequestSuccessModal(true);
+      setGraphDrawerOpen(false);
+      focusProofPanel("agent");
+      await refreshTrustScore("proof", action.variant_id ?? selectedVariantId);
+    } catch (err) {
+      setProofRequestError(err instanceof Error ? err.message : "Could not ask seller proof");
+    } finally {
+      setProofRequesting(false);
+    }
   }
 
   async function refreshTrustScore(reason: "question" | "proof", variantIdOverride?: string) {
@@ -417,11 +450,40 @@ export function ProductDetailPanel({
     }
   }
 
-  function handleAgentPrimaryAction() {
+  async function handleAgentPrimaryAction() {
     const action = answer?.answer.primary_action;
     const targetVariantId = action?.variant_id ?? selectedVariantId;
     if (action?.variant_id && action.variant_id !== selectedVariantId) {
       handleSelectVariant(action.variant_id);
+    }
+    if (action?.type === "ask_proof") {
+      if (action.request_status === "open" || action.request_status === "submitted") {
+        setProofRequested(true);
+        focusProofPanel("agent");
+        setSkuProofModalOpen(true);
+        void refreshTrustScore("proof", targetVariantId);
+        return;
+      }
+      if (!detail || proofRequesting || action.disabled) return;
+      setProofRequesting(true);
+      setProofRequestError(null);
+      try {
+        await requestSellerProof(buyerId, {
+          product_id: action.product_id ?? detail.product.product_id,
+          variant_id: action.variant_id ?? selectedVariantId,
+          attribute: normalizeProofActionAttribute(action.attribute),
+          question: answer?.answer.query ?? query
+        });
+        setProofRequested(true);
+        setShowRequestSuccessModal(true);
+        focusProofPanel("agent");
+        await refreshTrustScore("proof", targetVariantId);
+      } catch (err) {
+        setProofRequestError(err instanceof Error ? err.message : "Could not ask seller proof");
+      } finally {
+        setProofRequesting(false);
+      }
+      return;
     }
     setActiveSupportPanel("proof");
     setProofSpotlightSource("agent");
@@ -505,7 +567,7 @@ export function ProductDetailPanel({
               <div className="detail-product-actions" aria-label="Product help actions">
                 <button
                   type="button"
-                  onClick={() => void onOpenSellerComparison(detail.product)}
+                  onClick={() => void onOpenSellerComparison(detail.product, selectedVariantId)}
                 >
                   <Layers size={15} />
                   Compare options
@@ -548,7 +610,7 @@ export function ProductDetailPanel({
             currentProduct={detail.product}
             loading={sellerComparisonLoading}
             error={sellerComparisonError}
-            onOpenCompare={() => void onOpenSellerComparison(detail.product)}
+            onOpenCompare={() => void onOpenSellerComparison(detail.product, selectedVariantId)}
             onOpenProofMap={() => setGraphDrawerOpen(true)}
           />
 
@@ -612,26 +674,31 @@ export function ProductDetailPanel({
                   </div>
                 )}
 
-                {shouldOfferProofRequest && (
+                {(answerProofAction || shouldOfferProofRequest) && (
                   <div className="samvaad-missing-proof-cta-box">
                     <div className="cta-info">
                       <AlertTriangle size={15} style={{ color: "#D97706" }} />
-                      <span>Color/fabric daylight verification photos are missing.</span>
+                      <span>{answerProofAction ? `${proofRequestSuccessLabel(answerProofAction.attribute)} is needed before this claim becomes stronger.` : "Seller proof can make this trust check stronger."}</span>
                     </div>
                     <button
                       type="button"
                       className={`btn-request-proof-inline ${proofRequested ? "requested" : ""}`}
-                      onClick={() => void handleAskSellerProof()}
-                      disabled={proofRequesting}
+                      onClick={() => void (answerProofAction ? handleAgentPrimaryAction() : handleAskSellerProof())}
+                      disabled={proofRequesting || Boolean(answerProofAction?.disabled) || answerProofAction?.request_status === "open" || answerProofAction?.request_status === "submitted"}
                     >
-                      {proofRequesting ? "Sending..." : proofRequested ? "Requested ✓" : "Request Seller Proof"}
+                      {proofRequesting
+                        ? "Sending..."
+                        : proofRequested || answerProofAction?.request_status === "open" || answerProofAction?.request_status === "submitted"
+                          ? "Requested"
+                          : answerProofAction?.label ?? "Request Seller Proof"}
                     </button>
                   </div>
                 )}
                 <div className="response-actions">
                   <button
                     className="btn-action-primary"
-                    onClick={handleAgentPrimaryAction}
+                    onClick={() => void handleAgentPrimaryAction()}
+                    disabled={proofRequesting || Boolean(answer.answer.primary_action?.disabled)}
                   >
                     {answer.answer.primary_action?.label || t(language, "applySizeSelection")}
                   </button>
@@ -884,9 +951,9 @@ export function ProductDetailPanel({
       {showRequestSuccessModal && (
         <div className="bottom-sheet-overlay request-success-overlay" onClick={() => setShowRequestSuccessModal(false)}>
           <div className="request-success-alert" onClick={(e) => e.stopPropagation()}>
-            <div className="alert-icon-check">✓</div>
+            <div className="alert-icon-check"><CheckCircle2 size={22} /></div>
             <h3>Request Submitted to Seller</h3>
-            <p>We've successfully notified the seller to upload daylight images/closeup videos for this product.</p>
+            <p>We counted your {proofRequestSuccessLabel(answer?.answer.primary_action?.attribute ?? graphAnswer?.answer?.next_action?.attribute)} request as aggregate demand for this product.</p>
             <p className="alert-sub">Sarthi will notify you as soon as verified proof is updated!</p>
             <button type="button" className="btn-ok" onClick={() => setShowRequestSuccessModal(false)}>Okay, thanks</button>
           </div>
@@ -903,10 +970,7 @@ function ProductMediaGallery({ product }: { product: Product }) {
   const safeIndex = Math.min(activeImageIndex, Math.max(0, images.length - 1));
   const activeImage = images[safeIndex] ?? fallbackProductImage(product.color_family);
   const media = product.media_evidence;
-  const rawLabels = media?.angle_labels?.length
-    ? media.angle_labels
-    : ["Main", "Alternate", "Fabric close-up", "Lifestyle"];
-  const labels = images.map((image, index) => buyerMediaLabel(rawLabels[index], index, image));
+  const labels = productImageLabels(product, images);
   const activeLabel = labels[safeIndex] ?? `View ${safeIndex + 1}`;
   const qualityScore = media?.quality_score ?? media?.clarity_score ?? null;
   const missingAngle = media?.missing_angles?.[0] ?? media?.warnings?.[0] ?? null;
@@ -1455,6 +1519,20 @@ function proofRequestActionLabel(language: LanguageCode, requested: boolean, req
   return "Ask proof";
 }
 
+function normalizeProofActionAttribute(attribute: EvidenceAnswerAction["attribute"]) {
+  const value = String(attribute ?? "fabric").trim().toLowerCase();
+  if (value === "measurement") return "size";
+  return value || "fabric";
+}
+
+function proofRequestSuccessLabel(attribute: EvidenceAnswerAction["attribute"]) {
+  const value = normalizeProofActionAttribute(attribute).replace(/_/g, " ");
+  if (value === "size") return "size/measurement proof";
+  if (value === "transparency") return "transparency proof";
+  if (value === "offer") return "price proof";
+  return `${value} proof`;
+}
+
 function simpleBuyDecision(band: KeepConfidenceResponse["confidence_band"], language: LanguageCode) {
   if (band === "high") {
     return {
@@ -1887,35 +1965,6 @@ function normalizeMarketplaceTitle(product: Product | null, title: string) {
   return title;
 }
 
-function buyerMediaLabel(label: string | undefined, index: number, imageUrl?: string) {
-  const normalized = (label ?? "").toLowerCase();
-  if (imageUrl && /blue-floral-product-\d\.jpg$/i.test(imageUrl)) {
-    if (imageUrl.includes("product-1.")) return "Model view";
-    if (imageUrl.includes("product-2.")) return "Back fit";
-    if (imageUrl.includes("product-3.")) return "Fabric detail";
-    if (imageUrl.includes("product-4.")) return "Measurement proof";
-  }
-  if (imageUrl && /maroon-set-product-\d\.jpg$/i.test(imageUrl)) {
-    if (imageUrl.includes("product-1.")) return "Model view";
-    if (imageUrl.includes("product-2.")) return "Back fit";
-    if (imageUrl.includes("product-3.")) return "Fabric detail";
-    if (imageUrl.includes("product-4.")) return "Measurement proof";
-  }
-  if (imageUrl && /-1(-\d)?\.(jpg|png)$/i.test(imageUrl)) {
-    if (index === 0) return "Model view";
-    if (imageUrl.includes("-1-2.")) return "Fit angle";
-    if (imageUrl.includes("-1-3.")) return "Fabric detail";
-    if (imageUrl.includes("-1-4.")) return "Close-up";
-  }
-  if (index === 0 || normalized.includes("main") || normalized.includes("model")) return "Model view";
-  if (normalized.includes("fabric")) return "Fabric detail";
-  if (normalized.includes("measurement")) return "Size chart";
-  if (normalized.includes("reviewer") || normalized.includes("customer")) return "Buyer photo";
-  if (normalized.includes("lifestyle")) return "Full look";
-  if (normalized.includes("alternate") || normalized.includes("side")) return "Side view";
-  return `View ${index + 1}`;
-}
-
 function productForCandidate(
   candidate: CompareResponse["ranking"]["candidates"][number],
   catalog: Product[],
@@ -1949,64 +1998,10 @@ function labelize(value: string) {
   return value.replace(/_/g, " ");
 }
 
-function productImageSources(product: Pick<Product, "image_url" | "image_urls" | "color_family">) {
-  const rawCandidates = [...(product.image_urls ?? []), product.image_url]
-    .filter((value): value is string => Boolean(value?.trim()));
-  const curatedCatalogImages = curatedCatalogImageFamily(rawCandidates);
-  if (curatedCatalogImages.length) return curatedCatalogImages;
-  const expandedCatalogImages = rawCandidates.flatMap((image) => catalogFamilyImages(image));
-  const cleanRawCandidates = rawCandidates.filter((image) => !isJpgProofCrop(image));
-  const candidates = [product.image_url, ...expandedCatalogImages, ...cleanRawCandidates]
-    .filter((value): value is string => Boolean(value?.trim()));
-  const unique = Array.from(new Set(candidates));
-  return unique.length ? unique : [fallbackProductImage(product.color_family)];
-}
-
-function curatedCatalogImageFamily(imageUrls: string[]) {
-  if (imageUrls.some((image) => /\/catalog\/blue-floral(?:-|-product-)/i.test(image))) {
-    return [
-      "/catalog/blue-floral-product-1.jpg",
-      "/catalog/blue-floral-product-2.jpg",
-      "/catalog/blue-floral-product-3.jpg",
-      "/catalog/blue-floral-product-4.jpg"
-    ];
-  }
-  if (imageUrls.some((image) => /\/catalog\/maroon-set(?:-|-product-)/i.test(image))) {
-    return [
-      "/catalog/maroon-set-product-1.jpg",
-      "/catalog/maroon-set-product-2.jpg",
-      "/catalog/maroon-set-product-3.jpg",
-      "/catalog/maroon-set-product-4.jpg"
-    ];
-  }
-  return [];
-}
-
-function catalogFamilyImages(imageUrl: string) {
-  const match = imageUrl.match(/^(\/catalog\/.+?)-\d(?:-\d)?\.(jpg|png)$/i);
-  if (!match) return [];
-  const [, prefix, ext] = match;
-  const lowerExt = ext.toLowerCase();
-  const primaryAngles = lowerExt === "jpg"
-    ? [1, 2, 3, 4].map((index) => `${prefix}-${index}.${ext}`)
-    : [`${prefix}-1.${ext}`, `${prefix}-1-2.${ext}`, `${prefix}-1-3.${ext}`, `${prefix}-1-4.${ext}`];
-  return primaryAngles;
-}
-
-function isJpgProofCrop(imageUrl: string) {
-  return /-\d-\d\.jpe?g$/i.test(imageUrl);
-}
-
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function mediaAssetReady(status: string) {
   return ["present", "linked", "not_required"].includes(status);
-}
-
-function fallbackProductImage(color: string) {
-  if (color === "pink") return "/product-pink.svg";
-  if (color === "maroon") return "/product-maroon.svg";
-  return "/product-blue.svg";
 }

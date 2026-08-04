@@ -266,15 +266,16 @@ export function CheckoutPage({ buyerId, language }: Props) {
 
   // ---- Render: Success ----
   if (checkoutStep === "success" || placedOrder) {
+    const successCopy = checkoutSuccessCopy(language, paymentMode);
     return (
       <section className="checkout-page-shell">
         <div className="checkout-success-shell">
           <div className="checkout-success-badge-container">
             <div className="checkout-success-icon-check">✓</div>
           </div>
-          <h1>Order placed!</h1>
+          <h1>{successCopy.title}</h1>
           <p className="checkout-success-sub">
-            {paymentMode === "cod" ? "Cash on delivery – pay when you receive." : "Payment confirmed via UPI."}
+            {successCopy.subtitle}
           </p>
           
           <div className="checkout-success-invoice">
@@ -288,7 +289,7 @@ export function CheckoutPage({ buyerId, language }: Props) {
                 />
                 <div className="checkout-success-product-info">
                   <h4>{product.title.split("-")[0].trim()}</h4>
-                  <p>Size {selectedVariant?.size || "XL"}</p>
+                  <p>{t(language, "size")} {selectedVariant?.size || "XL"}</p>
                 </div>
               </div>
             )}
@@ -296,36 +297,36 @@ export function CheckoutPage({ buyerId, language }: Props) {
             <div className="checkout-success-receipt-divider" />
 
             <div className="checkout-invoice-row">
-              <span>Invoice No.</span>
+              <span>{successCopy.invoiceNo}</span>
               <strong>{invoiceNo}</strong>
             </div>
             <div className="checkout-invoice-row">
-              <span>Tracking ID</span>
+              <span>{successCopy.trackingId}</span>
               <strong>{trackingId}</strong>
             </div>
             <div className="checkout-invoice-row">
-              <span>Estimated Delivery</span>
+              <span>{successCopy.estimatedDelivery}</span>
               <strong>{deliveryDate}</strong>
             </div>
             <div className="checkout-invoice-row">
-              <span>Amount</span>
+              <span>{successCopy.amount}</span>
               <strong>Rs {payablePrice || "--"}</strong>
             </div>
             <div className="checkout-invoice-row">
-              <span>Payment</span>
-              <strong>{paymentMode === "cod" ? "Cash on Delivery" : "UPI Prepaid"}</strong>
+              <span>{successCopy.payment}</span>
+              <strong>{successCopy.paymentMode}</strong>
             </div>
             <div className="checkout-invoice-row">
-              <span>Delivery to</span>
-              <strong>{address.name}, {address.flat}, {address.area}, {address.city} – {address.pincode}</strong>
+              <span>{successCopy.deliveryTo}</span>
+              <strong>{address.name}, {address.flat}, {address.area}, {address.city} - {address.pincode}</strong>
             </div>
           </div>
           <div className="checkout-success-actions">
             <button type="button" className="checkout-page-primary" onClick={() => navigate("/shop/orders")}>
-              Track Order
+              {successCopy.trackOrder}
             </button>
             <button type="button" className="checkout-page-secondary" onClick={() => navigate("/shop")}>
-              Continue Shopping
+              {t(language, "continueShopping")}
             </button>
           </div>
         </div>
@@ -348,7 +349,7 @@ export function CheckoutPage({ buyerId, language }: Props) {
             <div className="checkout-otp-display">
               <span>Your OTP: </span>
               <strong className="otp-code">{generatedOtp}</strong>
-              <small>(Simulated – shown for demo)</small>
+              <small>Use this code to confirm this order.</small>
             </div>
             <label className="checkout-otp-label">
               Enter OTP
@@ -823,6 +824,7 @@ function PaymentCoachPanel({
   const saving = totalBenefit > 0 ? totalBenefit : 38;
   const pts = rewardPoints > 0 ? rewardPoints : 25;
   const codFee = codCharge > 0 ? codCharge : 0;
+  const coach = paymentCoachCopy(language, saving, pts, codFee);
 
   return (
     <div className="pcp-root" aria-label="Payment method">
@@ -838,22 +840,22 @@ function PaymentCoachPanel({
         <div className="pcp-card__indicator" />
         <div className="pcp-card__body">
           <div className="pcp-card__label-row">
-            <span className="pcp-card__mode">Pay online (UPI, Card, Netbanking)</span>
-            {prepaidRecommended && <span className="pcp-badge pcp-badge--best">Best choice</span>}
+            <span className="pcp-card__mode">{coach.payOnlineMode}</span>
+            {prepaidRecommended && <span className="pcp-badge pcp-badge--best">{coach.bestChoice}</span>}
           </div>
           
           <div className="pcp-card__trust-list">
             <div className="pcp-card__trust-item">
               <span className="pcp-card__bullet-dot" />
-              <span>Instant Refund Guarantee: Refund credited to source within 2 hours of return pickup.</span>
+              <span>{coach.refundLine}</span>
             </div>
             <div className="pcp-card__trust-item">
               <span className="pcp-card__bullet-dot" />
-              <span>Multi-Bank Protection: Auto-routes transaction to bypass network lags or bank server failures.</span>
+              <span>{coach.bankLine}</span>
             </div>
             <div className="pcp-card__trust-item">
               <span className="pcp-card__bullet-dot" />
-              <span>Save Rs {saving} instantly on this checkout + earn {pts} Sarthi points.</span>
+              <span>{coach.saveLine}</span>
             </div>
           </div>
         </div>
@@ -871,18 +873,18 @@ function PaymentCoachPanel({
         <div className="pcp-card__indicator" />
         <div className="pcp-card__body">
           <div className="pcp-card__label-row">
-            <span className="pcp-card__mode">Cash on delivery (COD)</span>
-            {codFee > 0 && <span className="pcp-badge pcp-badge--warn">+Rs {codFee} handling fee</span>}
+            <span className="pcp-card__mode">{coach.codMode}</span>
+            {codFee > 0 && <span className="pcp-badge pcp-badge--warn">{coach.codFee}</span>}
           </div>
           
           <div className="pcp-card__trust-list">
             <div className="pcp-card__trust-item">
               <span className="pcp-card__bullet-dot" />
-              <span>Pay only when your item is delivered.</span>
+              <span>{coach.codPayLine}</span>
             </div>
             <div className="pcp-card__trust-item">
               <span className="pcp-card__bullet-dot" />
-              <span>UPI/Cash accepted at door. Note: No online discount or reward points applied.</span>
+              <span>{coach.codTradeoffLine}</span>
             </div>
           </div>
         </div>
@@ -892,14 +894,103 @@ function PaymentCoachPanel({
       {/* Prepaid switch micro-nudge */}
       {paymentMode === "cod" && prepaidRecommended && (
         <div className="pcp-nudge-bar">
-          <span>Switch to Pay online to save Rs {saving} instantly + unlock instant refund promise.</span>
+          <span>{coach.switchLine}</span>
           <button type="button" className="pcp-nudge-cta" onClick={() => onSelect("prepaid")} disabled={disabled}>
-            Switch to Pay Online
+            {coach.switchCta}
           </button>
         </div>
       )}
     </div>
   );
+}
+
+function checkoutSuccessCopy(language: LanguageCode, paymentMode: "prepaid" | "cod") {
+  if (language === "hindi") {
+    return {
+      title: "ऑर्डर प्लेस हुआ",
+      subtitle: paymentMode === "cod" ? "कैश ऑन डिलीवरी चुना गया. डिलीवरी पर पेमेंट करें." : "UPI पेमेंट कन्फर्म हुआ.",
+      invoiceNo: "इनवॉइस नंबर",
+      trackingId: "ट्रैकिंग ID",
+      estimatedDelivery: "अनुमानित डिलीवरी",
+      amount: "राशि",
+      payment: "पेमेंट",
+      paymentMode: paymentMode === "cod" ? "कैश ऑन डिलीवरी" : "UPI प्रीपेड",
+      deliveryTo: "डिलीवरी पता",
+      trackOrder: "ऑर्डर ट्रैक करें"
+    };
+  }
+  if (language === "hinglish") {
+    return {
+      title: "Order placed",
+      subtitle: paymentMode === "cod" ? "COD selected. Delivery par payment karna." : "UPI payment confirm ho gaya.",
+      invoiceNo: "Invoice no.",
+      trackingId: "Tracking ID",
+      estimatedDelivery: "Estimated delivery",
+      amount: "Amount",
+      payment: "Payment",
+      paymentMode: paymentMode === "cod" ? "Cash on Delivery" : "UPI Prepaid",
+      deliveryTo: "Delivery to",
+      trackOrder: "Track order"
+    };
+  }
+  return {
+    title: "Order placed",
+    subtitle: paymentMode === "cod" ? "Cash on delivery selected. Pay when you receive it." : "Payment confirmed via UPI.",
+    invoiceNo: "Invoice no.",
+    trackingId: "Tracking ID",
+    estimatedDelivery: "Estimated delivery",
+    amount: "Amount",
+    payment: "Payment",
+    paymentMode: paymentMode === "cod" ? "Cash on Delivery" : "UPI Prepaid",
+    deliveryTo: "Delivery to",
+    trackOrder: "Track order"
+  };
+}
+
+function paymentCoachCopy(language: LanguageCode, saving: number, points: number, codFee: number) {
+  if (language === "hindi") {
+    return {
+      payOnlineMode: "ऑनलाइन पेमेंट (UPI, कार्ड, नेटबैंकिंग)",
+      bestChoice: "बेहतर विकल्प",
+      refundLine: "रिफंड भरोसा: रिटर्न पिकअप के बाद रिफंड उसी स्रोत में शुरू होगा.",
+      bankLine: "बैंक सुरक्षा: नेटवर्क या बैंक दिक्कत पर ट्रांजैक्शन सुरक्षित तरीके से संभलता है.",
+      saveLine: `इस चेकआउट पर Rs ${saving} बचत और ${points} Sarthi points मिल सकते हैं.`,
+      codMode: "कैश ऑन डिलीवरी (COD)",
+      codFee: `+Rs ${codFee} हैंडलिंग शुल्क`,
+      codPayLine: "डिलीवरी पर ही पेमेंट करें.",
+      codTradeoffLine: "दरवाजे पर UPI या कैश चलेगा. ऑनलाइन डिस्काउंट और points लागू नहीं होंगे.",
+      switchLine: `Rs ${saving} बचत और रिफंड भरोसा पाने के लिए ऑनलाइन पेमेंट चुनें.`,
+      switchCta: "ऑनलाइन पेमेंट चुनें"
+    };
+  }
+  if (language === "hinglish") {
+    return {
+      payOnlineMode: "Pay online (UPI, Card, Netbanking)",
+      bestChoice: "Best choice",
+      refundLine: "Refund promise: return pickup ke baad source refund start hota hai.",
+      bankLine: "Bank protection: network ya bank issue aaye toh payment safely handle hoti hai.",
+      saveLine: `Is checkout par Rs ${saving} save + ${points} Sarthi points mil sakte hain.`,
+      codMode: "Cash on delivery (COD)",
+      codFee: `+Rs ${codFee} handling fee`,
+      codPayLine: "Item deliver hone par payment karo.",
+      codTradeoffLine: "Door par UPI/cash chalega. Online discount aur reward points apply nahi honge.",
+      switchLine: `Pay online choose karke Rs ${saving} save aur refund promise unlock karo.`,
+      switchCta: "Pay online choose karo"
+    };
+  }
+  return {
+    payOnlineMode: "Pay online (UPI, Card, Netbanking)",
+    bestChoice: "Best choice",
+    refundLine: "Refund promise: source refund starts after return pickup.",
+    bankLine: "Bank protection: payment is handled safely if a network or bank issue happens.",
+    saveLine: `Save Rs ${saving} on this checkout and earn ${points} Sarthi points.`,
+    codMode: "Cash on delivery (COD)",
+    codFee: `+Rs ${codFee} handling fee`,
+    codPayLine: "Pay only when your item is delivered.",
+    codTradeoffLine: "UPI or cash is accepted at the door. Online discount and reward points will not apply.",
+    switchLine: `Switch to Pay online to save Rs ${saving} and unlock the refund promise.`,
+    switchCta: "Switch to Pay online"
+  };
 }
 
 function paymentModeLabel(choice: PaymentAssistChoice, language: LanguageCode) {

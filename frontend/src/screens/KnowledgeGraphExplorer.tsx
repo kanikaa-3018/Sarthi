@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type {
   ClusterKnowledgeGraph,
+  EvidenceAnswerAction,
   KnowledgeGraphChatResponse,
   KnowledgeGraphEdge,
   KnowledgeGraphEvidencePath,
@@ -39,7 +40,7 @@ type Props = {
   onQueryChange: (value: string) => void;
   onAsk: (query: string) => void;
   onOpenProof: (traceId: string) => void;
-  onRequestProof?: () => void;
+  onRequestProof?: (action?: EvidenceAnswerAction | null) => void;
   proofRequestState?: "idle" | "loading" | "sent";
   onRetry?: () => void;
 };
@@ -1051,33 +1052,42 @@ function buildGraphAnswerActions(
   suggestions: string[],
   handlers: {
     openProof: () => void;
-    requestProof?: () => void;
+    requestProof?: (action?: EvidenceAnswerAction | null) => void;
     proofRequestState: "idle" | "loading" | "sent";
     askFollowUp: (suggestion: string) => void;
   }
 ): GraphAnswerAction[] {
   const answerText = graphAnswerText(answer);
-  const proofMissing = hasMissingProofSignal(answerText);
+  const nextAction = answer.answer.next_action ?? null;
+  const proofMissing = nextAction?.type === "ask_proof" || (!nextAction && hasMissingProofSignal(answerText));
+  const alreadyRequested = nextAction?.request_status === "open" || nextAction?.request_status === "submitted";
+  const requestCount = Number(nextAction?.request_count ?? 0);
   const actions: GraphAnswerAction[] = [];
   const followUp = suggestions.find((suggestion) => normalizeInline(suggestion) !== normalizeInline(answer.answer.query)) ?? suggestions[0];
 
   if (proofMissing) {
     actions.push({
       key: "request-proof",
-      label: handlers.proofRequestState === "sent"
+      label: alreadyRequested || handlers.proofRequestState === "sent"
         ? "Proof requested"
         : handlers.proofRequestState === "loading"
           ? "Requesting"
-          : "Ask for proof",
-      detail: handlers.proofRequestState === "sent"
-        ? "Seller demand is logged"
+          : nextAction?.label || "Ask for proof",
+      detail: alreadyRequested
+        ? requestCount > 1
+          ? `${requestCount} buyers waiting`
+          : "Seller demand is logged"
+        : handlers.proofRequestState === "sent"
+          ? "Seller demand is logged"
         : handlers.requestProof
-          ? "Send aggregate seller demand"
+          ? nextAction?.attribute
+            ? `Ask seller for ${proofAttributeLabel(nextAction.attribute)}`
+            : "Send aggregate seller demand"
           : "Open proof trail",
       tone: "primary",
-      disabled: handlers.proofRequestState === "loading" || handlers.proofRequestState === "sent",
+      disabled: Boolean(nextAction?.disabled) || alreadyRequested || handlers.proofRequestState === "loading" || handlers.proofRequestState === "sent",
       Icon: FileCheck2,
-      onClick: handlers.requestProof ?? handlers.openProof
+      onClick: handlers.requestProof ? () => handlers.requestProof?.(nextAction) : handlers.openProof
     });
     actions.push({
       key: "proof-trail",
@@ -1134,6 +1144,17 @@ function hasMissingProofSignal(value: string) {
     normalized.includes("pending") ||
     normalized.includes("uploaded and reviewed")
   );
+}
+
+function proofAttributeLabel(attribute: EvidenceAnswerAction["attribute"]) {
+  const value = String(attribute ?? "proof").replace(/_/g, " ").trim().toLowerCase();
+  if (value === "size" || value === "measurement") return "size proof";
+  if (value === "transparency") return "transparency proof";
+  if (value === "fabric") return "fabric proof";
+  if (value === "color") return "color proof";
+  if (value === "offer") return "price proof";
+  if (value === "seller") return "seller proof";
+  return `${value || "seller"} proof`;
 }
 
 function answerReasonNeedsCare(reason: string) {

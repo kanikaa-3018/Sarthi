@@ -622,7 +622,7 @@ function ProofLoopNote({
     aggregate_demand: "Sarthi aggregates demands across similar items for bulk resolution.",
     seller_upload: "Seller uploads a single high-quality daylight photo or document.",
     seller_fix: "Seller provides clear catalog proof to resolve the expectation gap.",
-    admin_review: "Meesho's reviewer verifies authenticity before making it buyer-visible.",
+    admin_review: "A reviewer verifies authenticity before making it buyer-visible.",
     buyer_update: "Buyers get notified and see verified evidence on the product page.",
     score_update: "Product trust score updates dynamically and protects seller rating."
   };

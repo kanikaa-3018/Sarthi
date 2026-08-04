@@ -6462,14 +6462,28 @@ function evidenceAssetUrl(value?: string | null) {
   if (!value) return null;
   const clean = value.trim().replace(/\\/g, "/");
   if (!clean) return null;
-  if (clean === "seeded://proofs/seller_a/kurti_3_3_size_chart") {
-    return "/catalog/pink-kurti-measurement.png";
+  if (clean.startsWith("seeded://proofs/")) {
+    return seededProofAssetUrl(clean);
   }
   if (clean.startsWith("seeded/seller_documents/")) {
     return `/${clean}`;
   }
   if (/^https?:\/\//i.test(clean) || clean.startsWith("/") || clean.startsWith("data:")) {
     return clean;
+  }
+  return null;
+}
+
+function seededProofAssetUrl(value: string) {
+  const hint = value.toLowerCase();
+  if (/(measurement|size[_-]?chart|size|chest|length)/.test(hint)) {
+    return "/catalog/pink-kurti-measurement.png";
+  }
+  if (/(fabric|close[_-]?up|material|transparent|transparency)/.test(hint)) {
+    return "/catalog/pink-kurti-fabric.png";
+  }
+  if (/(color|colour|daylight|shade)/.test(hint)) {
+    return "/catalog/pink-print-3.jpg";
   }
   return null;
 }

@@ -8,6 +8,7 @@ import type {
   BuyerDashboardResponse,
   BuyerOrdersResponse,
   BuyerProofLedgerResponse,
+  BuyerProofRequestActionResponse,
   BuyerWishlistResponse,
   CartConfidenceResponse,
   CheckoutOrderResponse,
@@ -49,6 +50,14 @@ import type { LanguageCode } from "../i18n";
 const API_BASE = "/api";
 const AUTH_STORAGE_KEY = "sarthi.auth.session";
 const LOGOUT_TIMEOUT_MS = 2_500;
+const PRODUCT_DETAIL_CACHE_TTL_MS = 30_000;
+
+type ProductDetailCacheEntry = {
+  expiresAt: number;
+  promise: Promise<ProductDetailResponse>;
+};
+
+const productDetailCache = new Map<string, ProductDetailCacheEntry>();
 
 export function getStoredSession(): AuthSession | null {
   const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -62,10 +71,12 @@ export function getStoredSession(): AuthSession | null {
 }
 
 export function storeSession(session: AuthSession) {
+  productDetailCache.clear();
   window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
 }
 
 export function clearStoredSession() {
+  productDetailCache.clear();
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
@@ -387,11 +398,35 @@ export function parseListingWithAi(description: string) {
 }
 
 export function getProductDetail(buyerId: string, productId: string, variantId?: string | null) {
+  const cacheKey = productDetailCacheKey(buyerId, productId, variantId);
+  const cached = productDetailCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+  const promise = fetchProductDetail(buyerId, productId, variantId).catch((error) => {
+    productDetailCache.delete(cacheKey);
+    throw error;
+  });
+  productDetailCache.set(cacheKey, { expiresAt: Date.now() + PRODUCT_DETAIL_CACHE_TTL_MS, promise });
+  return promise;
+}
+
+export function prefetchProductDetail(buyerId: string, productId: string, variantId?: string | null) {
+  void getProductDetail(buyerId, productId, variantId).catch(() => {
+    // Prefetch is opportunistic; the visible open flow will show the actual error if it fails.
+  });
+}
+
+function fetchProductDetail(buyerId: string, productId: string, variantId?: string | null) {
   const params = new URLSearchParams({ buyer_id: buyerId });
   if (variantId) params.set("variant_id", variantId);
   return request<ProductDetailResponse>(
     `/products/${encodeURIComponent(productId)}?${params.toString()}`
   );
+}
+
+function productDetailCacheKey(buyerId: string, productId: string, variantId?: string | null) {
+  return `${buyerId}:${productId}:${variantId ?? "default"}`;
 }
 
 export function getSkuTruthPassport(buyerId: string, productId: string, variantId?: string) {
@@ -442,6 +477,21 @@ export function createWishlistIntent(payload: {
   create_seller_signal?: boolean;
 }) {
   return request<WishlistIntentResponse>("/wishlist/intents", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function requestSellerProof(
+  buyerId: string,
+  payload: {
+    product_id: string;
+    variant_id?: string | null;
+    attribute: ProofAttribute | string;
+    question?: string;
+  }
+) {
+  return request<BuyerProofRequestActionResponse>(`/buyers/${encodeURIComponent(buyerId)}/proof-requests`, {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -516,24 +566,26 @@ export function runTrustRun(payload: {
   });
 }
 
-export function compareCluster(buyerId: string, clusterId: string, productId?: string) {
+export function compareCluster(buyerId: string, clusterId: string, productId?: string, selectedVariantId?: string | null) {
   return request<CompareResponse>("/compare", {
     method: "POST",
     body: JSON.stringify({
       buyer_id: buyerId,
       cluster_id: clusterId,
       ...(productId ? { product_id: productId } : {}),
+      ...(selectedVariantId ? { selected_variant_id: selectedVariantId } : {}),
       preferred_fit: "comfort"
     })
   });
 }
 
-export function getClusterKnowledgeGraph(buyerId: string, clusterId: string, productId?: string) {
+export function getClusterKnowledgeGraph(buyerId: string, clusterId: string, productId?: string, selectedVariantId?: string | null) {
   const params = new URLSearchParams({
     buyer_id: buyerId,
     preferred_fit: "comfort"
   });
   if (productId) params.set("product_id", productId);
+  if (selectedVariantId) params.set("selected_variant_id", selectedVariantId);
   return request<ClusterKnowledgeGraph>(
     `/knowledge-graph/clusters/${encodeURIComponent(clusterId)}?${params.toString()}`
   );
@@ -543,6 +595,7 @@ export function askKnowledgeGraph(payload: {
   buyer_id: string;
   cluster_id: string;
   product_id?: string;
+  selected_variant_id?: string | null;
   query: string;
   preferred_fit?: "comfort" | "regular";
 }) {
