@@ -190,9 +190,9 @@ function SellerAutomationPanel({
       <div className="seller-automation-stats" aria-label={tx("Automation summary")}>
         {automation.stats.map((stat) => (
           <dl key={stat.label}>
-            <dt>{stat.label}</dt>
+            <dt>{tx(stat.label)}</dt>
             <dd>{stat.value}</dd>
-            <dd>{stat.detail}</dd>
+            <dd>{tx(stat.detail)}</dd>
           </dl>
         ))}
       </div>
@@ -217,15 +217,15 @@ function SellerAutomationPanel({
           <ol>
             {activityItems.map((entry) => (
               <li key={entry.key} className={`automation-${entry.status}`}>
-                <strong>{entry.label}</strong>
-                <p>{entry.detail}</p>
+                <strong>{tx(entry.label)}</strong>
+                <p>{tx(entry.detail)}</p>
               </li>
             ))}
           </ol>
         </div>
       </div>
 
-      <p className="seller-automation-guardrail"><ShieldCheck size={15} aria-hidden="true" />{automation.guardrail}</p>
+      <p className="seller-automation-guardrail"><ShieldCheck size={15} aria-hidden="true" />{tx(automation.guardrail)}</p>
     </section>
   );
 }

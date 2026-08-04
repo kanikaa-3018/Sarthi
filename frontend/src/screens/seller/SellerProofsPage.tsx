@@ -215,10 +215,10 @@ export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, la
       <section className="seller-proof-lane compact" role="tabpanel">
         {lane === "action" && <CompactProofQueue tasks={taskRows} selectedTaskKey={selectedTaskKey} language={language} onOpenTask={onOpenTask} />}
         {lane === "review" && (
-          lanes.inReview.length ? lanes.inReview.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<Clock3 size={18} />} />) : <ProofEmpty icon={<Clock3 size={21} />} title={tx("Nothing is with the reviewer")} detail={tx("Submitted proof will appear here until a decision is made.")} />
+          lanes.inReview.length ? lanes.inReview.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<Clock3 size={18} />} language={language} />) : <ProofEmpty icon={<Clock3 size={21} />} title={tx("Nothing is with the reviewer")} detail={tx("Submitted proof will appear here until a decision is made.")} />
         )}
         {lane === "visible" && (
-          lanes.buyerVisible.length ? lanes.buyerVisible.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<CheckCircle2 size={18} />} />) : <ProofEmpty icon={<CheckCircle2 size={21} />} title={tx("No buyer-visible proof yet")} detail={tx("Approved proof will appear here with its product and review date.")} />
+          lanes.buyerVisible.length ? lanes.buyerVisible.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<CheckCircle2 size={18} />} language={language} />) : <ProofEmpty icon={<CheckCircle2 size={21} />} title={tx("No buyer-visible proof yet")} detail={tx("Approved proof will appear here with its product and review date.")} />
         )}
       </section>
 
@@ -378,7 +378,7 @@ function BulkProofQueue({
       <div>
         {automation.bulkProofGroups.map((group) => (
           <article key={group.key}>
-            <div className="seller-bulk-proof-meta">
+            <div className="seller-proof-meta">
               <span>{group.productCount} products</span>
               <span>{group.buyerDemand} buyer asks</span>
               <span>+{group.trustLift} trust</span>
@@ -478,7 +478,8 @@ function ProofAgentPanel({
   );
 }
 
-function ProofImpactSummary({ lanes, actionCount }: { lanes: SellerProofLanes; actionCount: number }) {
+function ProofImpactSummary({ lanes, actionCount, language }: { lanes: SellerProofLanes; actionCount: number; language: LanguageCode }) {
+  const tx = (text: string) => roleText(language, text);
   const tasks = [...lanes.openTasks, ...lanes.rejected.map(taskFromRejected)];
   const waitingBuyers = tasks.reduce((sum, task) => sum + Math.max(0, Number(task.buyer_demand ?? 0)), 0);
   const urgentTasks = tasks.filter((task) => task.sla_state === "breached" || task.sla_state === "due_today" || task.priority === "high").length;
@@ -489,23 +490,23 @@ function ProofImpactSummary({ lanes, actionCount }: { lanes: SellerProofLanes; a
     <section className="seller-proof-impact-summary" aria-label="Proof request impact">
       <ProofImpactMetric
         icon={<AlertTriangle size={16} />}
-        label="Needs action"
+        label={tx("Needs action")}
         value={String(actionCount)}
-        detail={urgentTasks ? `${urgentTasks} time-sensitive` : "No urgent breach"}
+        detail={urgentTasks ? `${urgentTasks} ${tx("time-sensitive")}` : tx("No urgent breach")}
         tone={urgentTasks ? "warn" : "good"}
       />
       <ProofImpactMetric
         icon={<ShieldCheck size={16} />}
-        label="Buyer asks waiting"
+        label={tx("Buyer asks waiting")}
         value={String(waitingBuyers)}
-        detail="Aggregate demand only"
+        detail={tx("Aggregate demand only")}
         tone={waitingBuyers ? "warn" : "good"}
       />
       <ProofImpactMetric
         icon={<TrendingUp size={16} />}
-        label="Trust lift open"
+        label={tx("Trust lift open")}
         value={`+${trustLift}`}
-        detail={`${visibleLift ? `+${visibleLift} already visible` : "Visible after approval"}`}
+        detail={`${visibleLift ? `+${visibleLift} ${tx("already visible")}` : tx("Visible after approval")}`}
         tone={trustLift ? "good" : "neutral"}
       />
     </section>
@@ -545,13 +546,16 @@ function ProofTaskRow({
   task,
   rejected = false,
   highlighted = false,
+  language,
   onOpen
 }: {
   task: SellerEvidenceCoachTask;
   rejected?: boolean;
   highlighted?: boolean;
+  language: LanguageCode;
   onOpen: () => void;
 }) {
+  const tx = (text: string) => roleText(language, text);
   const replacement = rejected || Boolean(task.rejection_note);
   const sla = proofTaskSla(task);
   const trustLift = task.trust_lift_points ?? proofTaskFallbackTrustLift(task);
@@ -559,78 +563,82 @@ function ProofTaskRow({
     <article className={`seller-proof-row ${replacement ? "rejected" : ""} ${highlighted ? "agent-selected" : ""}`}>
       <div className="seller-proof-row-icon" aria-hidden="true">{replacement ? <RotateCcw size={18} /> : <span>{task.buyer_demand}</span>}</div>
       <div className="seller-proof-row-main">
-        {highlighted && <em className="seller-proof-agent-match"><Bot size={13} aria-hidden="true" /> Agent pick</em>}
+        {highlighted && <em className="seller-proof-agent-match"><Bot size={13} aria-hidden="true" /> {tx("Agent pick")}</em>}
         <span>{task.product_title}</span>
-        <h3>{task.title}</h3>
+        <h3>{tx(task.title)}</h3>
         <p>{proofTaskReason(task)}</p>
         <dl className="seller-proof-evidence-grid">
           <div>
-            <dt>Required</dt>
+            <dt>{tx("Required")}</dt>
             <dd>{proofTypeLabel(task.recommended_proof_type)}</dd>
           </div>
           <div>
-            <dt>Target</dt>
+            <dt>{tx("Target")}</dt>
             <dd className={sla.tone}>{sla.label}</dd>
           </div>
           <div>
-            <dt>Unlocks</dt>
-            <dd>+{trustLift} trust</dd>
+            <dt>{tx("Unlocks")}</dt>
+            <dd>+{trustLift} {tx("trust")}</dd>
           </div>
         </dl>
-        <small>{task.buyer_impact || (replacement ? "Reviewer asked for clearer replacement proof." : `${task.buyer_demand} buyer ${task.buyer_demand === 1 ? "request" : "requests"} can be answered after review.`)}</small>
-        {task.proof_loop && <ProofLoopNote loop={task.proof_loop} />}
+        <small>{task.buyer_impact || (replacement ? tx("Reviewer asked for clearer replacement proof.") : `${task.buyer_demand} ${tx(task.buyer_demand === 1 ? "buyer request" : "buyer requests")} ${tx("can be answered after review.")}`)}</small>
+        {task.proof_loop && <ProofLoopNote loop={task.proof_loop} language={language} />}
       </div>
-      <button type="button" className="seller-button seller-button-primary" onClick={onOpen}>{replacement ? "Replace proof" : "Upload proof"}</button>
+      <button type="button" className="seller-button seller-button-primary" onClick={onOpen}>{replacement ? tx("Replace proof") : tx("Upload proof")}</button>
     </article>
   );
 }
 
-function ProofAssetRow({ asset, icon }: { asset: SellerProofAsset; icon: React.ReactNode }) {
+function ProofAssetRow({ asset, icon, language }: { asset: SellerProofAsset; icon: React.ReactNode; language: LanguageCode }) {
+  const tx = (text: string) => roleText(language, text);
   return (
     <article className="seller-proof-row seller-proof-history-row">
       <div className="seller-proof-row-icon" aria-hidden="true">{icon}</div>
       <div className="seller-proof-row-main">
         <span>{asset.product_title}</span>
         <h3>{proofTypeLabel(asset.proof_type)}</h3>
-        <p>{asset.review_notes || (asset.status === "verified" ? "Approved evidence is available to buyer trust checks." : "The reviewer is checking this evidence.")}</p>
+        <p>{asset.review_notes || (asset.status === "verified" ? tx("Approved evidence is available to buyer trust checks.") : tx("The reviewer is checking this evidence."))}</p>
         <dl className="seller-proof-evidence-grid compact">
           <div>
-            <dt>Quality</dt>
+            <dt>{tx("Quality")}</dt>
             <dd>{asset.quality_label}</dd>
           </div>
           <div>
-            <dt>Trust lift</dt>
+            <dt>{tx("Trust lift")}</dt>
             <dd>+{asset.trust_lift_points}</dd>
           </div>
           <div>
-            <dt>{asset.status === "verified" ? "Reviewed" : "Submitted"}</dt>
+            <dt>{asset.status === "verified" ? tx("Reviewed") : tx("Submitted")}</dt>
             <dd>{formatShortDate(asset.reviewed_at || asset.submitted_at)}</dd>
           </div>
         </dl>
-        {asset.proof_loop && <ProofLoopNote loop={asset.proof_loop} />}
+        {asset.proof_loop && <ProofLoopNote loop={asset.proof_loop} language={language} />}
       </div>
-      <span className={`seller-state seller-state-${asset.status === "verified" ? "healthy" : "review"}`}>{asset.status === "verified" ? "Buyer-visible" : "With reviewer"}</span>
+      <span className={`seller-state seller-state-${asset.status === "verified" ? "healthy" : "review"}`}>{asset.status === "verified" ? tx("Buyer-visible") : tx("With reviewer")}</span>
     </article>
   );
 }
 
 function ProofLoopNote({
-  loop
+  loop,
+  language
 }: {
   loop: NonNullable<SellerEvidenceCoachTask["proof_loop"]>;
+  language: LanguageCode;
 }) {
+  const tx = (text: string) => roleText(language, text);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
   const stepDetails: Record<string, string> = {
-    buyer_doubt: "A buyer questioned listing claims (e.g. color mismatch or size doubt).",
-    contract_locked: "Catalog promise is logged to establish a clear expectation contract.",
-    buyer_outcome: "Buyer returns/outcomes flagged a gap in the expected promise.",
-    aggregate_demand: "Sarthi aggregates demands across similar items for bulk resolution.",
-    seller_upload: "Seller uploads a single high-quality daylight photo or document.",
-    seller_fix: "Seller provides clear catalog proof to resolve the expectation gap.",
-    admin_review: "A reviewer verifies authenticity before making it buyer-visible.",
-    buyer_update: "Buyers get notified and see verified evidence on the product page.",
-    score_update: "Product trust score updates dynamically and protects seller rating."
+    buyer_doubt: tx("A buyer questioned listing claims (e.g. color mismatch or size doubt)."),
+    contract_locked: tx("Catalog promise is logged to establish a clear expectation contract."),
+    buyer_outcome: tx("Buyer returns/outcomes flagged a gap in the expected promise."),
+    aggregate_demand: tx("Sarthi aggregates demands across similar items for bulk resolution."),
+    seller_upload: tx("Seller uploads a single high-quality daylight photo or document."),
+    seller_fix: tx("Seller provides clear catalog proof to resolve the expectation gap."),
+    admin_review: tx("A reviewer verifies authenticity before making it buyer-visible."),
+    buyer_update: tx("Buyers get notified and see verified evidence on the product page."),
+    score_update: tx("Product trust score updates dynamically and protects seller rating.")
   };
 
   const currentText = hoveredKey ? stepDetails[hoveredKey] : loop.buyer_notification_preview;
@@ -639,12 +647,12 @@ function ProofLoopNote({
     <div className="seller-proof-loop-note">
       <div className="loop-note-header">
         <div>
-          <span>Marketplace loop</span>
+          <span>{tx("Marketplace loop")}</span>
           <strong>{loop.aggregate_demand}</strong>
         </div>
         <div className="loop-note-info-pill">
           <Info size={11} aria-hidden="true" />
-          <span>Interactive steps</span>
+          <span>{tx("Interactive steps")}</span>
         </div>
       </div>
       
@@ -663,7 +671,7 @@ function ProofLoopNote({
                 <div className="step-circle">
                   {isDone ? <span className="check-mark">{"\u2713"}</span> : <span className="step-num">{idx + 1}</span>}
                 </div>
-                <span className="step-label">{step.label}</span>
+                <span className="step-label">{tx(step.label)}</span>
               </li>
             );
           })}
