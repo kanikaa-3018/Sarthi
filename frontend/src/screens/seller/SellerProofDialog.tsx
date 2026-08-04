@@ -1,5 +1,6 @@
 import { AlertCircle, Bot, CheckCircle2, FileText, ShieldCheck, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { roleText, type LanguageCode } from "../../i18n";
 import type { SellerEvidenceCoachTask } from "../../types/api";
 import { proofPacketForTask, proofTaskContext, proofTaskReason, proofTypeLabel, type SellerProofPacket } from "./sellerModel";
 import { useDialogLock } from "./useDialogLock";
@@ -13,6 +14,7 @@ export type SellerProofSubmission = {
 type SellerProofDialogProps = {
   task: SellerEvidenceCoachTask;
   proofPacket?: SellerProofPacket | null;
+  language: LanguageCode;
   submitting: boolean;
   apiError: string | null;
   onClose: () => void;
@@ -26,8 +28,9 @@ type ProofPrecheckItem = {
   status: "pass" | "warn" | "blocked";
 };
 
-export function SellerProofDialog({ task, proofPacket, submitting, apiError, onClose, onSubmit }: SellerProofDialogProps) {
+export function SellerProofDialog({ task, proofPacket, language, submitting, apiError, onClose, onSubmit }: SellerProofDialogProps) {
   const dialogRef = useRef<HTMLElement>(null);
+  const tx = (text: string) => roleText(language, text);
   const packet = useMemo(() => proofPacket ?? proofPacketForTask(task), [proofPacket, task]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -99,11 +102,11 @@ export function SellerProofDialog({ task, proofPacket, submitting, apiError, onC
       >
         <header className="seller-dialog-header">
           <div>
-            <p className="seller-kicker">{isRejectedEvidence ? "Reviewer feedback" : isReturnEvidence ? "Listing evidence gap" : "Proof request"}</p>
-            <h2 id="seller-proof-dialog-title">Upload proof</h2>
-            <p id="seller-proof-dialog-description">{isRejectedEvidence ? "Replace the rejected proof with clearer evidence for the reviewer." : isReturnEvidence ? "Address the repeated return issue with evidence a reviewer can verify." : "Answer the buyer concern with evidence a reviewer can verify."}</p>
+            <p className="seller-kicker">{tx(isRejectedEvidence ? "Reviewer feedback" : isReturnEvidence ? "Listing evidence gap" : "Proof request")}</p>
+            <h2 id="seller-proof-dialog-title">{tx("Upload proof")}</h2>
+            <p id="seller-proof-dialog-description">{tx(isRejectedEvidence ? "Replace the rejected proof with clearer evidence for the reviewer." : isReturnEvidence ? "Address the repeated return issue with evidence a reviewer can verify." : "Answer the buyer concern with evidence a reviewer can verify.")}</p>
           </div>
-          <button type="button" className="seller-icon-button" aria-label="Close proof dialog" onClick={onClose} disabled={submitting}><X size={18} /></button>
+          <button type="button" className="seller-icon-button" aria-label={tx("Close proof dialog")} onClick={onClose} disabled={submitting}><X size={18} /></button>
         </header>
 
         <form id="seller-proof-form" className="seller-dialog-body" onSubmit={handleSubmit}>
@@ -112,17 +115,17 @@ export function SellerProofDialog({ task, proofPacket, submitting, apiError, onC
             <h3>{task.title}</h3>
             <p>{proofTaskReason(task)}</p>
             <dl>
-              <div><dt>Required proof</dt><dd>{proofTypeLabel(task.recommended_proof_type)}</dd></div>
+              <div><dt>{tx("Required proof")}</dt><dd>{proofTypeLabel(task.recommended_proof_type)}</dd></div>
               <div>
-                <dt>{isRejectedEvidence ? "Review status" : isReturnEvidence ? "Recent returns" : "Buyer demand"}</dt>
-                <dd>{isRejectedEvidence ? "Replacement needed" : `${task.buyer_demand} ${isReturnEvidence ? (task.buyer_demand === 1 ? "return" : "returns") : (task.buyer_demand === 1 ? "request" : "requests")}`}</dd>
+                <dt>{tx(isRejectedEvidence ? "Review status" : isReturnEvidence ? "Recent returns" : "Buyer demand")}</dt>
+                <dd>{isRejectedEvidence ? tx("Replacement needed") : `${task.buyer_demand} ${isReturnEvidence ? (task.buyer_demand === 1 ? tx("return") : tx("returns")) : (task.buyer_demand === 1 ? tx("request") : tx("requests"))}`}</dd>
               </div>
             </dl>
           </section>
 
           <section className="seller-proof-packet" aria-label="Prepared proof packet">
             <div className="seller-proof-packet-head">
-              <span><Bot size={15} aria-hidden="true" /> Prepared packet</span>
+              <span><Bot size={15} aria-hidden="true" /> {tx("Prepared packet")}</span>
               <strong>{packet.title}</strong>
               <p>{packet.buyerDemand} buyer asks, +{packet.trustLift} trust after approval, target {packet.target.toLowerCase()}.</p>
             </div>
@@ -136,7 +139,7 @@ export function SellerProofDialog({ task, proofPacket, submitting, apiError, onC
 
           <section className="seller-proof-precheck" aria-label="Proof quality precheck">
             <header>
-              <span><ShieldCheck size={15} aria-hidden="true" /> Proof precheck</span>
+              <span><ShieldCheck size={15} aria-hidden="true" /> {tx("Proof precheck")}</span>
               <strong>{precheckReady}/{proofPrecheck.length} ready</strong>
             </header>
             <ul>
@@ -157,42 +160,42 @@ export function SellerProofDialog({ task, proofPacket, submitting, apiError, onC
           <div className="seller-field">
             <label className="seller-proof-dropzone">
               <Upload size={20} aria-hidden="true" />
-              <strong>{fileName || "Choose proof file"}</strong>
-              <span>JPG, PNG, WebP, or PDF · maximum 2 MB</span>
+              <strong>{fileName || tx("Choose proof file")}</strong>
+              <span>{tx("JPG, PNG, WebP, or PDF / maximum 2 MB")}</span>
               <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => void handleFile(event)} />
             </label>
             {assetUrl && (
               <div className="seller-proof-preview">
                 {assetUrl.startsWith("data:image/") ? <img src={assetUrl} alt="Selected proof preview" /> : <FileText size={20} aria-hidden="true" />}
-                <span>{fileName || "Proof reference added"}</span>
+                <span>{fileName || tx("Proof reference added")}</span>
               </div>
             )}
           </div>
 
           <div className="seller-field">
-            <label htmlFor="seller-proof-link">Proof file or secure link</label>
+            <label htmlFor="seller-proof-link">{tx("Proof file or secure link")}</label>
             <input id="seller-proof-link" name="assetUrl" value={assetUrl.startsWith("data:") ? fileName : assetUrl} onChange={(event) => { setAssetUrl(event.target.value); setFileName(""); setErrors((current) => ({ ...current, assetUrl: undefined })); }} placeholder="https://... or seeded://..." aria-invalid={Boolean(errors.assetUrl)} aria-describedby={errors.assetUrl ? "seller-proof-link-error" : undefined} />
             {errors.assetUrl && <span id="seller-proof-link-error" className="seller-field-error">{errors.assetUrl}</span>}
           </div>
 
           <div className="seller-field">
-            <label htmlFor="seller-proof-title">Proof title</label>
+            <label htmlFor="seller-proof-title">{tx("Proof title")}</label>
             <input id="seller-proof-title" name="title" value={title} onChange={(event) => { setTitle(event.target.value); setErrors((current) => ({ ...current, title: undefined })); }} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? "seller-proof-title-error" : undefined} />
             {errors.title && <span id="seller-proof-title-error" className="seller-field-error">{errors.title}</span>}
           </div>
 
           <div className="seller-field">
-            <label htmlFor="seller-proof-description">What this proves</label>
+            <label htmlFor="seller-proof-description">{tx("What this proves")}</label>
             <textarea id="seller-proof-description" name="description" value={description} onChange={(event) => { setDescription(event.target.value); setErrors((current) => ({ ...current, description: undefined })); }} aria-invalid={Boolean(errors.description)} aria-describedby={errors.description ? "seller-proof-description-error" : undefined} />
             {errors.description && <span id="seller-proof-description-error" className="seller-field-error">{errors.description}</span>}
           </div>
 
-          <p className="seller-review-note">A reviewer checks whether this evidence matches the product before buyers can see it.</p>
+          <p className="seller-review-note">{tx("A reviewer checks whether this evidence matches the product before buyers can see it.")}</p>
         </form>
 
         <footer className="seller-dialog-footer">
-          <button type="button" className="seller-button seller-button-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" form="seller-proof-form" className="seller-button seller-button-primary" disabled={submitting}>{submitting ? "Submitting for review" : precheckBlocked ? "Submit for review" : "Submit checked proof"}</button>
+          <button type="button" className="seller-button seller-button-secondary" onClick={onClose} disabled={submitting}>{tx("Cancel")}</button>
+          <button type="submit" form="seller-proof-form" className="seller-button seller-button-primary" disabled={submitting}>{submitting ? tx("Submitting for review") : precheckBlocked ? tx("Submit for review") : tx("Submit checked proof")}</button>
         </footer>
       </section>
     </div>

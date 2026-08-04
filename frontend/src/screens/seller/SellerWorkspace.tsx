@@ -11,7 +11,7 @@ import {
   submitSellerEvidenceAsset,
   updateListingDraft
 } from "../../api/client";
-import type { LanguageCode } from "../../i18n";
+import { roleText, type LanguageCode } from "../../i18n";
 import type {
   ListingDraft,
   SellerEvidenceCoachResponse,
@@ -44,6 +44,7 @@ import {
 
 export function SellerWorkspace({ language = "english" }: { language?: LanguageCode }) {
   const copy = useMemo(() => sellerCopy(language), [language]);
+  const tx = useCallback((text: string) => roleText(language, text), [language]);
   const location = useLocation();
   const navigate = useNavigate();
   const activeRoute = parseSellerRoute(location.pathname, location.search);
@@ -81,14 +82,14 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
     const failures = [onboardingResult, panelResult, coachResult].filter((result) => result.status === "rejected");
     if (failures.length === 3) {
       const reason = failures[0].status === "rejected" ? failures[0].reason : null;
-      setError(reason instanceof Error ? reason.message : "Could not load the seller workspace.");
+      setError(reason instanceof Error ? reason.message : tx("Seller workspace unavailable"));
     } else if (failures.length) {
-      setError("Some seller information could not be refreshed. Available work is still shown.");
+      setError(tx("Some seller information could not be refreshed. Available work is still shown."));
     } else if (announce) {
-      setStatusMessage("Seller workspace refreshed.");
+      setStatusMessage(tx("Seller workspace refreshed."));
     }
     setLoading(false);
-  }, []);
+  }, [tx]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -204,7 +205,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
         asset_url: submission.assetUrl
       });
       setActiveProofTask(null);
-      setStatusMessage("Proof submitted to reviewer.");
+      setStatusMessage(tx("Proof submitted to reviewer."));
       await loadWorkspace();
       navigate("/seller/proofs");
     } catch (caught) {
@@ -219,7 +220,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
     setError(null);
     try {
       await createListingDraft(input);
-      setStatusMessage("Listing draft saved.");
+      setStatusMessage(tx("Listing draft saved."));
       await loadWorkspace();
       return true;
     } catch (caught) {
@@ -235,7 +236,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
     setError(null);
     try {
       await updateListingDraft(draftId, input);
-      setStatusMessage("Listing changes saved.");
+      setStatusMessage(tx("Listing changes saved."));
       await loadWorkspace();
       return true;
     } catch (caught) {
@@ -258,7 +259,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
         content_base64: submission.contentBase64
       });
       setOnboarding(updated);
-      setStatusMessage("Verification document sent for review.");
+      setStatusMessage(tx("Verification document sent for review."));
       await loadWorkspace();
       return true;
     } catch (caught) {
@@ -284,14 +285,14 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
   }
 
   if (!seller && loading) {
-    return <SellerWorkspaceLoader copy={copy} />;
+    return <SellerWorkspaceLoader copy={copy} language={language} />;
   }
 
   if (!seller) {
     return (
       <main className="seller-app seller-fatal-state">
-        <h1>Seller workspace unavailable</h1>
-        <p>{error || "Seller identity could not be loaded."}</p>
+        <h1>{tx("Seller workspace unavailable")}</h1>
+        <p>{error || tx("Seller identity could not be loaded.")}</p>
         <button type="button" className="seller-button seller-button-primary" onClick={() => void loadWorkspace()}>{copy.retry}</button>
       </main>
     );
@@ -309,13 +310,14 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
       seller={seller}
       verificationStatus={verification?.verification_status === "verified" ? "Seller verified" : verification ? labelize(verification.verification_status) : "Verification unavailable"}
       copy={copy}
+      language={language}
       loading={loading}
     >
       {error && <div className="seller-inline-error" role="alert"><span>{error}</span><button type="button" onClick={() => void loadWorkspace()}>{copy.retry}</button></div>}
       {statusMessage && <div ref={statusRef} className="seller-inline-status" role="status" tabIndex={-1}>{statusMessage}</div>}
 
-      {activeRoute === "today" && <SellerTodayPage actions={actions} facts={facts} automation={automation} proofAgent={coach?.proof_agent ?? null} copy={copy} onAction={handleAction} onOpenProofs={() => navigateSeller("proofs")} />}
-      {activeRoute === "products" && <SellerProductsPage rows={productRows} automation={automation} copy={copy} onAction={handleProductAction} onCompare={openMarketComparison} />}
+      {activeRoute === "today" && <SellerTodayPage actions={actions} facts={facts} automation={automation} proofAgent={coach?.proof_agent ?? null} copy={copy} language={language} onAction={handleAction} onOpenProofs={() => navigateSeller("proofs")} />}
+      {activeRoute === "products" && <SellerProductsPage rows={productRows} automation={automation} copy={copy} language={language} onAction={handleProductAction} onCompare={openMarketComparison} />}
       {activeRoute === "new" && (
         <SellerListingFlow
           onboarding={onboarding}
@@ -323,6 +325,7 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
           submitting={listingSubmitting}
           verificationSubmitting={verificationSubmitting}
           verificationError={verificationError}
+          language={language}
           onCreateDraft={handleCreateDraft}
           onUpdateDraft={handleUpdateDraft}
           onSubmitDraft={handleSubmitDraft}
@@ -337,24 +340,25 @@ export function SellerWorkspace({ language = "english" }: { language?: LanguageC
           }}
         />
       )}
-      {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} rows={productRows} automation={automation} agent={coach?.proof_agent ?? null} copy={copy} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
-      {activeRoute === "market" && <SellerMarketPage listings={listings} competitors={panel?.competing_listings ?? []} actions={actions} initialProductId={new URLSearchParams(location.search).get("product")} onAction={handleAction} />}
+      {activeRoute === "proofs" && <SellerProofsPage lanes={proofLanes} rows={productRows} automation={automation} agent={coach?.proof_agent ?? null} copy={copy} language={language} onOpenTask={(task) => { setProofError(null); setActiveProofTask(task); }} />}
+      {activeRoute === "market" && <SellerMarketPage listings={listings} competitors={panel?.competing_listings ?? []} actions={actions} initialProductId={new URLSearchParams(location.search).get("product")} language={language} onAction={handleAction} />}
 
-      {activeProofTask && <SellerProofDialog task={activeProofTask} proofPacket={automation.proofPacket?.taskKey === `${activeProofTask.product_id}:${activeProofTask.attribute}` ? automation.proofPacket : null} submitting={proofSubmitting} apiError={proofError} onClose={() => { if (!proofSubmitting) setActiveProofTask(null); }} onSubmit={handleProofSubmit} />}
-      {activeMeasurementRow && <SellerMeasurementDialog row={activeMeasurementRow} submitting={measurementSubmitting} apiError={measurementError} onClose={() => { if (!measurementSubmitting) setActiveMeasurementRow(null); }} onSubmit={handleMeasurementSubmit} />}
+      {activeProofTask && <SellerProofDialog task={activeProofTask} proofPacket={automation.proofPacket?.taskKey === `${activeProofTask.product_id}:${activeProofTask.attribute}` ? automation.proofPacket : null} language={language} submitting={proofSubmitting} apiError={proofError} onClose={() => { if (!proofSubmitting) setActiveProofTask(null); }} onSubmit={handleProofSubmit} />}
+      {activeMeasurementRow && <SellerMeasurementDialog row={activeMeasurementRow} submitting={measurementSubmitting} apiError={measurementError} language={language} onClose={() => { if (!measurementSubmitting) setActiveMeasurementRow(null); }} onSubmit={handleMeasurementSubmit} />}
     </SellerShell>
   );
 }
 
-function SellerWorkspaceLoader({ copy }: { copy: ReturnType<typeof sellerCopy> }) {
+function SellerWorkspaceLoader({ copy, language }: { copy: ReturnType<typeof sellerCopy>; language: LanguageCode }) {
+  const tx = (text: string) => roleText(language, text);
   const steps = ["Proof demand", "Listing risks", "Reviewer queue"];
   return (
     <main className="seller-app seller-loading-shell" role="status" aria-live="polite">
       <section className="seller-loading-hero">
         <div>
-          <span>Seller workspace</span>
+          <span>{tx("Seller workspace")}</span>
           <h1>{copy.loading}</h1>
-          <p>Preparing proof work, product actions, and review status from seller data.</p>
+          <p>{tx("Preparing proof work, product actions, and review status from seller data.")}</p>
         </div>
         <div className="seller-loading-meter" aria-hidden="true"><span /></div>
       </section>
@@ -363,7 +367,7 @@ function SellerWorkspaceLoader({ copy }: { copy: ReturnType<typeof sellerCopy> }
         {steps.map((step, index) => (
           <article key={step}>
             <span>{index + 1}</span>
-            <strong>{step}</strong>
+            <strong>{tx(step)}</strong>
             <i aria-hidden="true" />
           </article>
         ))}

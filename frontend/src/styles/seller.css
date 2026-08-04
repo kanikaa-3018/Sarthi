@@ -2488,57 +2488,95 @@ body.seller-scroll-lock {
 
 .seller-automation-commands {
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.seller-automation-commands button,
 .seller-automation-commands article,
 .seller-listing-agent-items article,
 .seller-bulk-proof-queue article {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
   gap: 6px;
   min-width: 0;
   padding: 14px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-surface-muted);
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 12px;
+  background: var(--bg-surface, #ffffff);
+  transition: all 0.2s ease;
+  cursor: pointer;
 }
 
+.seller-automation-commands button:hover,
 .seller-automation-commands article:hover,
 .seller-listing-agent-items article:hover,
 .seller-bulk-proof-queue article:hover {
-  border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--accent-primary, #8c2680) 40%, var(--border-subtle, #e5e7eb));
+  box-shadow: 0 4px 12px rgba(140, 38, 128, 0.08);
   transform: translateY(-1px);
 }
 
+.seller-automation-commands button > span,
 .seller-automation-commands article > span {
-  color: var(--accent-primary);
-  font-size: 11px;
-  font-weight: 700;
+  color: var(--accent-primary, #8c2680);
+  font-size: 10.5px;
+  font-weight: 750;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  background: color-mix(in srgb, var(--accent-primary, #8c2680) 8%, transparent);
+  padding: 2px 7px;
+  border-radius: 4px;
+  align-self: flex-start;
+  margin-bottom: 4px;
 }
 
 .seller-automation-commands strong,
 .seller-listing-agent-items strong,
 .seller-bulk-proof-queue strong {
-  color: var(--text-primary);
+  color: var(--text-primary, #111827);
   font-size: 14px;
-  line-height: 1.25;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
 }
 
 .seller-automation-commands p,
 .seller-listing-agent-items p,
 .seller-bulk-proof-queue p {
-  font-size: 12px;
+  color: var(--text-secondary, #4b5563);
+  font-size: 12.5px;
   line-height: 1.45;
+  margin: 0;
 }
 
 .seller-automation-commands small {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 800;
+  color: var(--text-secondary, #6b7280);
+  font-size: 11.5px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle, #f3f4f6);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.seller-automation-commands small em {
+  font-style: normal;
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.35;
+}
+
+.seller-automation-commands small b {
+  color: var(--accent-primary, #8c2680);
+  font-size: 12.5px;
+  font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .seller-automation-log {
@@ -3787,7 +3825,7 @@ body.seller-scroll-lock {
 
 .seller-proof-instruction-grid li::before {
   color: var(--accent-primary);
-  content: "✓";
+  content: "\2713";
   font-weight: 900;
 }
 
@@ -4347,7 +4385,7 @@ body.seller-scroll-lock {
 }
 
 /* ================================================
-   SELLER PORTAL — TABLET (≤ 1024px)
+   SELLER PORTAL - TABLET (<= 1024px)
    ================================================ */
 @media (max-width: 1024px) {
   .seller-app {
@@ -4373,7 +4411,7 @@ body.seller-scroll-lock {
 }
 
 /* ================================================
-   SELLER PORTAL — MOBILE (≤ 768px)
+   SELLER PORTAL - MOBILE (<= 768px)
    ================================================ */
 @media (max-width: 768px) {
   .seller-app {
@@ -4535,6 +4573,3 @@ body.seller-scroll-lock {
     width: 100% !important;
   }
 }
-
-
-

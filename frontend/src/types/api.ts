@@ -116,6 +116,8 @@ export type RankingResult = {
   winner_label: string;
   top_factors: string[];
   uncertainty: "low" | "medium" | "high";
+  selected_variant_id?: string | null;
+  selected_size?: string | null;
   candidates: Array<{
     variant_id: string;
     product_id?: string;
@@ -136,6 +138,7 @@ export type RankingResult = {
       offer_truth?: number;
       uncertainty_penalty: number;
       fair_start_boost?: number;
+      integrity_penalty?: number;
     };
     fair_start_policy?: {
       verification_gate: "passed" | "pending" | "restricted" | string;
@@ -148,6 +151,31 @@ export type RankingResult = {
       kept_rate: number | null;
       confidence_growth: string;
       buyer_label: string;
+    };
+    score_integrity_guard?: {
+      guard_version: string;
+      status: "clear" | "watch" | "blocked" | string;
+      applied_penalty: number;
+      score_cap: number | null;
+      adjusted_score: number;
+      adjusted_score_percent?: number;
+      source_health_status: string;
+      previous_score?: {
+        variant_id: string;
+        average: number;
+        latest: number;
+        sample_size: number;
+        last_seen_at: string | null;
+      } | null;
+      reasons: Array<{
+        key: string;
+        label: string;
+        detail: string;
+        severity: "low" | "medium" | "high" | string;
+        penalty: number;
+        score_cap?: number;
+        fact_ids?: string[];
+      }>;
     };
     score_breakdown?: {
       formula: string;
@@ -171,7 +199,18 @@ export type RankingResult = {
         uncertainty_penalty: number;
         fair_start_boost: number;
         score_cap?: number;
+        integrity_penalty?: number;
+        integrity_cap?: number | null;
       };
+      guardrails?: Array<{
+        key: string;
+        label: string;
+        detail: string;
+        severity: "low" | "medium" | "high" | string;
+        penalty: number;
+        score_cap?: number;
+        fact_ids?: string[];
+      }>;
       scoring_context: {
         item_category: string;
         locality: string;
@@ -319,9 +358,18 @@ export type ClusterKnowledgeGraph = {
     similarity?: SimilaritySummary | null;
     source_health: SourceHealth;
     fact_count: number;
+    cache?: {
+      status: "hit" | "miss";
+      cache_key: string;
+      cache_version: string;
+      evidence_version: string;
+      ttl_seconds: number;
+    };
   };
   ranking: RankingResult | null;
   selected_product_id: string | null;
+  selected_variant_id?: string | null;
+  selected_size?: string | null;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   seller_context: SellerGraphContext[];
@@ -338,11 +386,32 @@ export type KnowledgeGraphAnswer = {
   caution?: string | null;
   unsupported?: boolean;
   support_reason?: string;
+  intent?: string;
+  verdict?: "safe" | "needs_check" | "avoid" | "cannot_answer";
+  confidence?: "low" | "medium" | "high";
+  evidence_used?: string[];
+  missing_evidence?: string[];
+  next_action?: EvidenceAnswerAction | null;
   matched_node_ids: string[];
   highlighted_edge_ids: string[];
   matched_path_ids?: string[];
   fact_ids: string[];
   follow_up_questions: string[];
+};
+
+export type EvidenceAnswerAction = {
+  type: string;
+  label: string;
+  reason: string;
+  attribute?: ProofAttribute | string | null;
+  product_id?: string | null;
+  variant_id?: string | null;
+  seller_id?: string | null;
+  request_id?: string | null;
+  request_status?: "none" | "open" | "submitted" | "resolved" | "missing_product_context" | "not_applicable" | string;
+  request_count?: number;
+  privacy_note?: string;
+  disabled?: boolean;
 };
 
 export type KnowledgeGraphChatResponse = {
@@ -451,7 +520,7 @@ export type ProductDetailResponse = {
   privacy: PrivacySummary;
 };
 
-export type ProofAttribute = "transparency" | "fabric" | "color" | "size" | "packaging" | "offer";
+export type ProofAttribute = "transparency" | "fabric" | "color" | "size" | "measurement" | "packaging" | "offer" | "seller";
 
 export type ProofCoverageItem = {
   attribute: ProofAttribute;
@@ -895,15 +964,12 @@ export type ProductTrustState = {
 };
 
 export type AgentAnswer = {
+  query?: string;
   title: string;
   summary: string;
   reasons: string[];
   caution?: string | null;
-  primary_action?: {
-    type: string;
-    variant_id: string;
-    label: string;
-  } | null;
+  primary_action?: EvidenceAnswerAction | null;
 };
 
 export type AgentResponse = {
@@ -1114,6 +1180,17 @@ export type WishlistIntentResponse = {
   privacy: {
     seller_sees: string;
     buyer_profile_shared_with_seller: boolean;
+  };
+};
+
+export type BuyerProofRequestActionResponse = {
+  trace_id: string;
+  request: ProofRequest;
+  action: EvidenceAnswerAction;
+  privacy: {
+    seller_sees: string;
+    buyer_profile_shared_with_seller: boolean;
+    reviewer_scope: string;
   };
 };
 

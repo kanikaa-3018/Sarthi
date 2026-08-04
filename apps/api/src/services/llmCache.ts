@@ -5,10 +5,14 @@ import { sha256 } from "./crypto.js";
 import { nowIso } from "./time.js";
 
 export function llmCacheKey(scope: string, payload: Record<string, unknown>) {
-  return `${scope}:${sha256(JSON.stringify(stableCachePayload({
+  return stableDataCacheKey(scope, {
     ai: aiCacheFingerprint(),
     ...payload
-  })))}`;
+  });
+}
+
+export function stableDataCacheKey(scope: string, payload: Record<string, unknown>) {
+  return `${scope}:${sha256(JSON.stringify(stableCachePayload(payload)))}`;
 }
 
 export async function readLlmCache(db: Db, cacheKey: string) {
@@ -16,7 +20,13 @@ export async function readLlmCache(db: Db, cacheKey: string) {
   return row?.payload ?? null;
 }
 
-export async function writeLlmCache(db: Db, cacheKey: string, scope: string, payload: Record<string, unknown>) {
+export async function writeLlmCache(
+  db: Db,
+  cacheKey: string,
+  scope: string,
+  payload: Record<string, unknown>,
+  options: { ttlMs?: number } = {}
+) {
   await collections(db).llmCache.updateOne(
     { cache_key: cacheKey },
     {
@@ -25,7 +35,7 @@ export async function writeLlmCache(db: Db, cacheKey: string, scope: string, pay
         scope,
         payload,
         created_at: nowIso(),
-        expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000)
+        expires_at: new Date(Date.now() + (options.ttlMs ?? 6 * 60 * 60 * 1000))
       }
     },
     { upsert: true }

@@ -1,8 +1,8 @@
-const DEFAULT_E2E_API_PORT = "58001";
+const DEFAULT_E2E_DATABASE_NAME = "sarthi_e2e_auth_58001";
 const SAFE_E2E_DATABASE_NAME = /^sarthi_e2e_[a-z0-9_]+$/;
 
 export function resolveE2eDatabaseName(
-  value = process.env.E2E_MONGODB_DB ?? `sarthi_e2e_auth_${process.env.E2E_API_PORT ?? DEFAULT_E2E_API_PORT}`
+  value = process.env.E2E_MONGODB_DB ?? DEFAULT_E2E_DATABASE_NAME
 ) {
   const databaseName = value;
   if (!SAFE_E2E_DATABASE_NAME.test(databaseName) || /prod(?:uction)?/.test(databaseName)) {

@@ -1,5 +1,6 @@
 import { Ruler, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { roleText, type LanguageCode } from "../../i18n";
 import type { SellerProductRow } from "./sellerModel";
 import { useDialogLock } from "./useDialogLock";
 
@@ -12,11 +13,13 @@ type SellerMeasurementDialogProps = {
   row: SellerProductRow;
   submitting: boolean;
   apiError: string | null;
+  language: LanguageCode;
   onClose: () => void;
   onSubmit: (submission: SellerMeasurementSubmission) => Promise<void>;
 };
 
-export function SellerMeasurementDialog({ row, submitting, apiError, onClose, onSubmit }: SellerMeasurementDialogProps) {
+export function SellerMeasurementDialog({ row, submitting, apiError, language, onClose, onSubmit }: SellerMeasurementDialogProps) {
+  const tx = (text: string) => roleText(language, text);
   const dialogRef = useRef<HTMLElement>(null);
   const [lChest, setLChest] = useState("38");
   const [xlChest, setXlChest] = useState("40");
@@ -34,8 +37,8 @@ export function SellerMeasurementDialog({ row, submitting, apiError, onClose, on
     const lValue = Number(lChest);
     const xlValue = Number(xlChest);
     const nextErrors = {
-      lChest: lValue > 0 ? undefined : "Enter the measured chest for size L.",
-      xlChest: xlValue > lValue ? undefined : "Size XL must be larger than size L."
+      lChest: lValue > 0 ? undefined : tx("Enter the measured chest for size L."),
+      xlChest: xlValue > lValue ? undefined : tx("Size XL must be larger than size L.")
     };
     setErrors(nextErrors);
     const firstError = Object.entries(nextErrors).find(([, value]) => value)?.[0];
@@ -62,40 +65,40 @@ export function SellerMeasurementDialog({ row, submitting, apiError, onClose, on
       >
         <header className="seller-dialog-header">
           <div>
-            <p className="seller-kicker">Size evidence</p>
-            <h2 id="seller-measurement-dialog-title">Update measurements</h2>
-            <p id="seller-measurement-dialog-description">Submit measured values for reviewer approval before they affect buyer trust.</p>
+            <p className="seller-kicker">{tx("Size evidence")}</p>
+            <h2 id="seller-measurement-dialog-title">{tx("Update measurements")}</h2>
+            <p id="seller-measurement-dialog-description">{tx("Submit measured values for reviewer approval before they affect buyer trust.")}</p>
           </div>
-          <button type="button" className="seller-icon-button" aria-label="Close measurement dialog" onClick={onClose} disabled={submitting}><X size={18} /></button>
+          <button type="button" className="seller-icon-button" aria-label={tx("Close measurement dialog")} onClick={onClose} disabled={submitting}><X size={18} /></button>
         </header>
 
         <form id="seller-measurement-form" className="seller-dialog-body" onSubmit={handleSubmit}>
           <section className="seller-measurement-context">
             <Ruler size={20} aria-hidden="true" />
-            <div><span>{row.listing.product.title}</span><strong>{row.concern}</strong><p>Measure the garment flat across the chest. Enter the full chest measurement in inches.</p></div>
+            <div><span>{row.listing.product.title}</span><strong>{row.concern}</strong><p>{tx("Measure the garment flat across the chest. Enter the full chest measurement in inches.")}</p></div>
           </section>
 
           {apiError && <div className="seller-form-error-summary" role="alert" tabIndex={-1}>{apiError}</div>}
 
           <div className="seller-measurement-fields">
             <div className="seller-field">
-              <label htmlFor="seller-l-chest">Size L chest</label>
+              <label htmlFor="seller-l-chest">{tx("Size L chest")}</label>
               <div className="seller-unit-input"><input id="seller-l-chest" name="lChest" type="number" min="1" step="0.5" value={lChest} onChange={(event) => { setLChest(event.target.value); setErrors((current) => ({ ...current, lChest: undefined })); }} aria-invalid={Boolean(errors.lChest)} aria-describedby={errors.lChest ? "seller-l-chest-error" : undefined} /><span>in</span></div>
               {errors.lChest && <span id="seller-l-chest-error" className="seller-field-error">{errors.lChest}</span>}
             </div>
             <div className="seller-field">
-              <label htmlFor="seller-xl-chest">Size XL chest</label>
+              <label htmlFor="seller-xl-chest">{tx("Size XL chest")}</label>
               <div className="seller-unit-input"><input id="seller-xl-chest" name="xlChest" type="number" min="1" step="0.5" value={xlChest} onChange={(event) => { setXlChest(event.target.value); setErrors((current) => ({ ...current, xlChest: undefined })); }} aria-invalid={Boolean(errors.xlChest)} aria-describedby={errors.xlChest ? "seller-xl-chest-error" : undefined} /><span>in</span></div>
               {errors.xlChest && <span id="seller-xl-chest-error" className="seller-field-error">{errors.xlChest}</span>}
             </div>
           </div>
 
-          <p className="seller-review-note">A reviewer checks these values against the listing before the correction becomes buyer-visible.</p>
+          <p className="seller-review-note">{tx("A reviewer checks these values against the listing before the correction becomes buyer-visible.")}</p>
         </form>
 
         <footer className="seller-dialog-footer">
-          <button type="button" className="seller-button seller-button-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" form="seller-measurement-form" className="seller-button seller-button-primary" disabled={submitting}>{submitting ? "Submitting measurements" : "Submit measurements"}</button>
+          <button type="button" className="seller-button seller-button-secondary" onClick={onClose} disabled={submitting}>{tx("Cancel")}</button>
+          <button type="submit" form="seller-measurement-form" className="seller-button seller-button-primary" disabled={submitting}>{submitting ? tx("Submitting measurements") : tx("Submit measurements")}</button>
         </footer>
       </section>
     </div>

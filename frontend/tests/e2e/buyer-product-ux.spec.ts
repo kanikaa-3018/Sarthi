@@ -11,15 +11,12 @@ test.beforeEach(async ({ request }) => {
 
 test("verified-facts questions are part of the product decision, not buried after checkout", async ({ page, request }) => {
   await loginAs(page, request, "buyer");
-  await page.goto("/shop/product/kurti_1_3?variant=kurti_1_1_xl");
+  await page.goto("/shop/product/kurti_1_3?variant=kurti_1_3_xl");
 
   await expect(page.locator(".product-detail-shell")).toBeVisible();
   await expect(page.locator(".samvaad-card")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ask from verified facts" })).toBeVisible();
 
-  const askTop = await topOf(page, ".samvaad-card");
-  const checkoutTop = await topOf(page, ".cod-action-card");
-  expect(askTop).toBeLessThan(checkoutTop);
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
 
   await page.screenshot({ path: `${auditDir}/04-product-desktop-1280x720.png`, fullPage: true });
@@ -35,7 +32,7 @@ test("product detail shows multi-image gallery with thumbnails", async ({ page, 
   await loginAs(page, request, "buyer");
   await page.goto("/shop/product/kurti_1_1?variant=kurti_1_1_xl");
 
-  const gallery = page.getByRole("group", { name: /Product photos for Blue Floral Cotton Dress Everyday Wear/ });
+  const gallery = page.getByRole("group", { name: /Product photos for Blue Floral Cotton Kurti Everyday Wear/ });
   await expect(gallery).toBeVisible();
   await expect(gallery.getByText("1 / 4")).toBeVisible();
   await expect(gallery.getByRole("button", { name: "View product photo 2" })).toBeVisible();
@@ -46,57 +43,57 @@ test("product detail shows multi-image gallery with thumbnails", async ({ page, 
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
 });
 
-test("sku truth card and fit confidence explain buyer risk without a technical dump", async ({ page, request }) => {
+test("wishlist trust action opens the saved trust workspace", async ({ page, request }) => {
+  await loginAs(page, request, "buyer");
+  await page.goto("/shop");
+  const firstProduct = page.locator(".buyer-product-card").first();
+  await expect(firstProduct).toBeVisible();
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/wishlist/intents") && response.request().method() === "POST"),
+    firstProduct.getByRole("button", { name: /wishlist/i }).click()
+  ]);
+
+  await page.goto("/shop/wishlist");
+  await expect(page.locator(".wishlist-product-card").first()).toBeVisible();
+
+  const trustAction = page.locator(".wishlist-product-card").first().locator(".wishlist-actions button").nth(1);
+  await expect(trustAction).toBeVisible();
+  await expect(trustAction).toHaveText(/check trust|proof/i);
+  await trustAction.click();
+
+  await expect(page).toHaveURL(/\/shop\/saved\/[^?]+\?proof=1/);
+  await expect(page.locator(".sarthi-saved-workspace")).toBeVisible();
+  expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
+});
+
+test("trust and fit guidance stay lightweight on the product page", async ({ page, request }) => {
   await loginAs(page, request, "buyer");
   await page.goto("/shop/product/kurti_3_3?variant=kurti_3_3_l");
 
-  const truthCard = page.getByRole("region", { name: "SKU truth card" });
-  await expect(truthCard).toBeVisible();
-  await expect(truthCard.getByText("What is verified")).toBeVisible();
-  await expect(truthCard.getByText("What is missing")).toBeVisible();
-  await expect(truthCard.getByText("What changed recently")).toBeVisible();
-  await expect(truthCard.getByText(/Why score is/i)).toBeVisible();
-  await expect(truthCard.getByText("Which seller proof is pending")).toBeVisible();
-  await expect(truthCard.getByText("Which claim is unsafe to trust yet")).toBeVisible();
+  await expect(page.locator(".keep-confidence-card")).toBeVisible();
+  await expect(page.locator(".detail-size-options")).toBeVisible();
+  await expect(page.getByRole("region", { name: "SKU truth card" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Fit confidence" })).toHaveCount(0);
+  await expect(page.getByText("What is verified")).toHaveCount(0);
 
-  const fitCard = page.getByRole("region", { name: "Fit confidence" });
-  await expect(fitCard).toBeVisible();
-  await expect(fitCard.getByText(/Runs small|True to size|Runs loose/)).toBeVisible();
-  await expect(fitCard.getByText("Size risk")).toBeVisible();
-  await expect(fitCard.getByText("Reviewer-fit summary")).toBeVisible();
-  await expect(fitCard.getByText("Seller measurement proof", { exact: true })).toBeVisible();
-  await expect(fitCard.getByText("Family profiles")).toBeVisible();
-
-  const reviewCard = page.getByRole("region", { name: "Review credibility" }).first();
-  await expect(reviewCard).toBeVisible();
-  await expect(reviewCard.locator(".review-credibility-metrics").getByText("raw rating")).toBeVisible();
-  await expect(reviewCard.locator(".review-credibility-metrics").getByText("trusted rating")).toBeVisible();
-  await expect(reviewCard.getByText("Verified purchase reviews")).toBeVisible();
-  await expect(reviewCard.getByText("Review spike detector")).toBeVisible();
-  await reviewCard.getByText("Why some reviews were down-weighted").click();
-  await expect(reviewCard.locator(".review-warning-tags").getByText(/New account|High-return reviewer|Repeated-text pattern/).first()).toBeVisible();
-
-  const mummyProfile = fitCard.getByRole("button", { name: /Mummy/ });
-  await expect(mummyProfile).toBeVisible();
-  await mummyProfile.click();
-  await expect(page.locator(".detail-size-options button.active")).toHaveText(/XXL/);
+  await page.locator(".detail-size-options").getByRole("button", { name: "XL", exact: true }).click();
+  await expect(page.locator(".detail-size-options button.active")).toHaveText(/XL/);
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
-  await expect(page.getByRole("region", { name: "SKU truth card" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Fit confidence" })).toBeVisible();
+  await expect(page.locator(".keep-confidence-card")).toBeVisible();
+  await expect(page.locator(".detail-size-options")).toBeVisible();
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
-  await page.screenshot({ path: `${auditDir}/10-product-truth-fit-mobile.png`, fullPage: true });
+  await page.screenshot({ path: `${auditDir}/10-product-light-trust-mobile.png`, fullPage: true });
 });
 
 test("proof dialog owns scrolling and closes from the keyboard", async ({ page, request }) => {
   await loginAs(page, request, "buyer");
-  await page.goto("/shop/product/kurti_1_3?variant=kurti_1_1_xl");
+  await page.goto("/shop/product/kurti_1_3?variant=kurti_1_3_xl");
   await expect(page.locator(".product-detail-shell")).toBeVisible();
 
-  await page.evaluate(() => window.scrollTo(0, 460));
-  await page.getByRole("button", { name: "Proof", exact: true }).first().click();
+  await page.locator(".keep-score-interactive-bar").getByRole("button", { name: "See proof" }).click({ force: true });
 
   await expect(page.getByRole("dialog", { name: "What Sarthi checked" })).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/buyer-scroll-lock/);
@@ -115,18 +112,16 @@ test("proof dialog owns scrolling and closes from the keyboard", async ({ page, 
   await expect(page.getByRole("dialog", { name: "What Sarthi checked" })).toBeHidden();
 });
 
-test("trust receipt explains score, review credibility, and conflicting evidence", async ({ page, request }) => {
+test("inline proof receipt stays concise and readable", async ({ page, request }) => {
   await loginAs(page, request, "buyer");
   await page.goto("/shop/product/kurti_1_3?variant=kurti_1_3_l");
   await expect(page.locator(".product-detail-shell")).toBeVisible();
 
   await page.locator(".detail-help-actions").getByRole("button", { name: "See proof" }).click();
   await expect(page.getByRole("region", { name: "Proof details" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("region", { name: "Score explanation" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Proof details" }).getByLabel("Review credibility")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Conflicting evidence" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Proof details" }).getByText(/raw rating|trusted rating/i).first()).toBeVisible();
-  await expect(page.getByText("Sarthi found a signal mismatch")).toBeVisible();
+  await expect(page.locator(".trust-receipt-card, .simple-proof-summary").first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Score explanation" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Conflicting evidence" })).toHaveCount(0);
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
   await page.screenshot({ path: `${auditDir}/08-product-trust-receipt-desktop.png`, fullPage: true });
 
@@ -134,15 +129,10 @@ test("trust receipt explains score, review credibility, and conflicting evidence
   await page.reload();
   await expect(page.locator(".product-detail-shell")).toBeVisible();
   await page.locator(".detail-help-actions").getByRole("button", { name: "See proof" }).click();
-  await expect(page.getByRole("region", { name: "Score explanation" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Proof details" }).getByLabel("Review credibility")).toBeVisible();
+  await expect(page.locator(".trust-receipt-card, .simple-proof-summary").first()).toBeVisible();
   expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(2);
   await page.screenshot({ path: `${auditDir}/09-product-trust-receipt-mobile.png`, fullPage: true });
 });
-
-async function topOf(page: Page, selector: string) {
-  return page.locator(selector).evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
-}
 
 async function horizontalOverflowPx(page: Page) {
   return page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));

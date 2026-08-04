@@ -3,9 +3,9 @@
 @import './styles/base.css';
 @import './styles/landing.css';
 @import './styles/buyer.css';
-@import './styles/seller.css';
 @import './styles/admin-trust.css';
 @import './styles/responsive.css';
 @import './styles/refined.css';
 @import './styles/auth.css';
 @import './styles/reviewer-workbench.css';
+@import './styles/seller.css';

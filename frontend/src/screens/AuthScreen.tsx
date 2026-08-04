@@ -168,6 +168,29 @@ export function AuthScreen({ language, onLanguageChange, onAuthenticated }: Prop
 
   return (
     <div className="mobile-auth-container auth-entry-shell">
+      {loading && (
+        <div className={`auth-handoff-overlay ${portal}`} role="status" aria-live="polite" aria-busy="true">
+          <section className="auth-handoff-card">
+            <div className="auth-handoff-mark" aria-hidden="true">
+              <ShieldCheck size={20} />
+              <span />
+            </div>
+            <div className="auth-handoff-copy">
+              <strong>{portal === "reviewer" ? "Opening reviewer desk" : portal === "seller" ? "Opening seller workspace" : "Opening buyer workspace"}</strong>
+              <p>
+                {portal === "reviewer"
+                  ? "Verifying admin access and loading seller, proof, and listing queues."
+                  : portal === "seller"
+                    ? "Verifying store access and loading proof tasks."
+                    : "Verifying your session and loading saved trust checks."}
+              </p>
+            </div>
+            <div className="auth-handoff-progress" aria-hidden="true">
+              <i />
+            </div>
+          </section>
+        </div>
+      )}
       <div className="auth-entry-layout">
         <aside className="auth-story-panel" aria-label="Sarthi product summary">
 

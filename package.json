@@ -4,7 +4,8 @@
   "scripts": {
     "build": "npm --prefix apps/api run build && npm --prefix frontend run build",
     "test": "npm --prefix apps/api run test",
-    "build:test": "npm --prefix apps/api run build && npm --prefix apps/api run test && npm --prefix frontend run build",
+    "build:test": "npm run text:check && npm --prefix apps/api run build && npm --prefix apps/api run test && npm --prefix frontend run build",
+    "text:check": "node scripts/check-text-integrity.mjs",
     "e2e": "npm --prefix frontend run test:e2e",
     "setup:gemini": "powershell -ExecutionPolicy Bypass -File scripts/setup-gemini-env.ps1",
     "setup:bedrock": "powershell -ExecutionPolicy Bypass -File scripts/setup-bedrock-env.ps1",

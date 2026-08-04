@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { t, type LanguageCode } from "../i18n";
 import type { CompareResponse, Product, RegretDecisionResponse, TrustRunResponse } from "../types/api";
+import { fallbackProductImage, productImageSource } from "../utils/productMedia";
 
 type Props = {
   comparison: CompareResponse;
@@ -63,6 +64,8 @@ export function CompareSheet({
   const selectedTrust = selectedDetails.product?.buyer_trust ?? null;
   const selectedScore = selectedCandidate ? trustScorePercent(selectedCandidate) : null;
   const canRecommendSelected = selectedTrust?.can_recommend ?? (selectedScore !== null ? selectedScore >= 75 : false);
+  const selectedGuard = selectedCandidate?.score_integrity_guard;
+  const selectedGuardReason = selectedGuard?.reasons?.[0] ?? null;
   const alternativeDetails = ranking.alternative
     ? getProductDetailsForVariant(ranking.alternative, productCatalog)
     : null;
@@ -130,6 +133,19 @@ export function CompareSheet({
           <div className="compare-simple-note">
             <AlertTriangle size={14} />
             <span>{selectedTrust.buyer_guidance}</span>
+          </div>
+        )}
+
+        {selectedGuard && selectedGuard.status !== "clear" && selectedGuardReason && (
+          <div className={`compare-integrity-note ${selectedGuard.status === "blocked" ? "blocked" : "watch"}`}>
+            <AlertTriangle size={14} />
+            <div>
+              <strong>{selectedGuardReason.label}</strong>
+              <span>{selectedGuardReason.detail}</span>
+            </div>
+            {selectedGuard.score_cap !== null && (
+              <em>held at {Math.round(selectedGuard.score_cap * 100)}/100</em>
+            )}
           </div>
         )}
 
@@ -487,7 +503,7 @@ function getProductDetailsForVariant(variantId: string, productCatalog: Product[
     title: product ? marketplaceProductTitle(product) : "Selected product",
     sellerName: product?.seller_name ?? "Mapped seller",
     price: product?.base_price ?? 0,
-    imageUrl: product?.image_url || fallbackProductImage(product?.color_family),
+    imageUrl: product ? productImageSource(product) : fallbackProductImage(),
     product
   };
 }
@@ -530,7 +546,7 @@ function sellerListingOptions(
         score,
         title: marketplaceProductTitle(product),
         price: product.base_price,
-        imageUrl: product.image_url || product.image_urls?.[0] || fallbackProductImage(product.color_family),
+        imageUrl: productImageSource(product),
         isCurrent: product.product_id === selectedProduct?.product_id,
         isRecommended: variantId === comparison.ranking.winner
       };
@@ -566,12 +582,6 @@ function uniqueSellerCandidateRows<T extends { details: { product?: Product | nu
     seen.add(key);
     return true;
   });
-}
-
-function fallbackProductImage(color?: string) {
-  if (color === "pink") return "/product-pink.svg";
-  if (color === "maroon") return "/product-maroon.svg";
-  return "/product-blue.svg";
 }
 
 type CandidateFactor = Exclude<keyof CandidateScore["factors"], "uncertainty_penalty">;

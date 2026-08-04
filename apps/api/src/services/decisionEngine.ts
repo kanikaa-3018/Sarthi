@@ -434,7 +434,8 @@ async function buildTrustRadar(db: Db, intent: any, profile: any, proofRequest: 
   const ranking = await rankCluster(db, intent.buyer_id, intent.cluster_id, profile?.preferred_fit ?? "comfort", {
     recordSnapshot: true,
     intent: "wishlist_radar",
-    productIds: comparableProductIds
+    productIds: comparableProductIds,
+    selectedVariantId: intent.selected_variant_id
   });
   const savedCandidate = ranking.candidates.find((candidate: any) => candidate.product_id === selectedProduct.product_id) ?? null;
   const winnerCandidate = ranking.candidates[0] ?? savedCandidate;

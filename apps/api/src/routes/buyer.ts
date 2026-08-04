@@ -12,6 +12,7 @@ import {
 } from "../services/decisionEngine.js";
 import {
   computeKeepConfidence,
+  createOrIncrementProofRequest,
   createTrace,
   facts,
   feedTrustSummaries,
@@ -175,6 +176,66 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     return createWishlistIntent(db, body.buyer_id, body);
   });
 
+  app.post("/buyers/:buyer_id/proof-requests", async (request, reply) => {
+    const account = await requireRole(db, request, reply, "buyer");
+    const buyerId = (request.params as any).buyer_id;
+    assertBuyer(account, buyerId);
+    const body = z.object({
+      product_id: z.string(),
+      variant_id: z.string().nullable().optional(),
+      attribute: z.enum(["transparency", "fabric", "color", "size", "measurement", "packaging", "offer", "seller"]),
+      question: z.string().max(280).optional()
+    }).parse(request.body);
+    const product = await productWithSeller(db, body.product_id);
+    if (!product) return reply.code(404).send({ detail: "Product not found" });
+    const normalizedAttribute = normalizeProofRequestAttribute(body.attribute);
+    let variantId = body.variant_id ?? null;
+    if (variantId) {
+      const variants = await variantsForProduct(db, product.product_id);
+      const belongsToProduct = variants.some((variant: any) => variant.variant_id === variantId);
+      if (!belongsToProduct) return reply.code(400).send({ detail: "Variant does not belong to this product" });
+    }
+    const requestRow = await createOrIncrementProofRequest(
+      db,
+      buyerId,
+      product,
+      variantId,
+      normalizedAttribute,
+      body.question?.trim() || `Buyer asked for ${normalizedAttribute} proof before trusting this listing.`
+    );
+    const trace = await createTrace(db, {
+      buyer_id: buyerId,
+      product_id: product.product_id,
+      variant_id: variantId ?? undefined,
+      intent: ["buyer_proof_request", normalizedAttribute],
+      tools_used: ["validateBuyerScope", "productWithSeller", "createOrIncrementProofRequest"],
+      fact_ids: [requestRow.fact_id],
+      graph_paths: [graphPath(variantId ?? product.product_id, [requestRow.fact_id])]
+    });
+    return {
+      trace_id: trace.trace_id,
+      request: requestRow,
+      action: {
+        type: "ask_proof",
+        label: requestRow.request_count > 1 ? "Proof demand updated" : "Proof requested",
+        reason: "Seller sees aggregate demand only. Buyer identity is not shared.",
+        product_id: product.product_id,
+        variant_id: variantId,
+        seller_id: product.seller_id,
+        attribute: normalizedAttribute,
+        request_id: requestRow.request_id,
+        request_status: requestRow.status,
+        request_count: requestRow.request_count,
+        privacy_note: "Seller sees aggregate proof demand, not buyer identity."
+      },
+      privacy: {
+        seller_sees: "aggregate proof demand only",
+        buyer_profile_shared_with_seller: false,
+        reviewer_scope: "proof request, product, seller, and required attribute only"
+      }
+    };
+  });
+
   app.get("/buyers/:buyer_id/wishlist-radar", async (request, reply) => {
     const account = await requireRole(db, request, reply, "buyer");
     const buyerId = (request.params as any).buyer_id;
@@ -300,4 +361,9 @@ export async function registerBuyerRoutes(app: FastifyInstance, db: Db) {
     if (trace.buyer_id) assertBuyer(account, trace.buyer_id);
     return { ...withoutId(trace), fact_details: await facts(db, trace.fact_ids ?? []) };
   });
+}
+
+function normalizeProofRequestAttribute(attribute: string) {
+  if (attribute === "measurement") return "size";
+  return attribute;
 }

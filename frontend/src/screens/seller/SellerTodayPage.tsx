@@ -1,4 +1,5 @@
 import { ArrowRight, Bot, ListChecks, ShieldCheck } from "lucide-react";
+import { roleText, type LanguageCode } from "../../i18n";
 import type { SellerEvidenceCoachResponse, SellerEvidenceCoachTask } from "../../types/api";
 import type { SellerCopy } from "./sellerCopy";
 import type { SellerActionItem, SellerAutomationSummary } from "./sellerModel";
@@ -15,21 +16,23 @@ type SellerTodayPageProps = {
   automation?: SellerAutomationSummary | null;
   proofAgent?: SellerEvidenceCoachResponse["proof_agent"] | null;
   copy: SellerCopy;
+  language: LanguageCode;
   onAction: (action: SellerActionItem) => void;
   onOpenProofs: () => void;
 };
 
-export function SellerTodayPage({ actions, facts, automation, proofAgent, copy, onAction, onOpenProofs }: SellerTodayPageProps) {
+export function SellerTodayPage({ actions, facts, automation, proofAgent, copy, language, onAction, onOpenProofs }: SellerTodayPageProps) {
+  const tx = (text: string) => roleText(language, text);
   const next = actions[0];
   const queue = actions.slice(1, 6);
 
   return (
     <div className="seller-page seller-today-page">
       {next ? (
-        <section className={`seller-next-action priority-${next.priority}`} aria-label="Next action">
+        <section className={`seller-next-action priority-${next.priority}`} aria-label={copy.nextAction}>
           <div className="seller-section-label-row">
             <p className="seller-kicker">{copy.nextAction}</p>
-            <span>{priorityLabel(next.priority)}</span>
+            <span>{priorityLabel(next.priority, language)}</span>
           </div>
           <div className="seller-next-action-body">
             <div>
@@ -44,7 +47,7 @@ export function SellerTodayPage({ actions, facts, automation, proofAgent, copy, 
           </div>
         </section>
       ) : (
-        <section className="seller-next-action caught-up" aria-label="Next action">
+        <section className="seller-next-action caught-up" aria-label={copy.nextAction}>
           <p className="seller-kicker">{copy.nextAction}</p>
           <h2>{copy.caughtUp}</h2>
           <p>{copy.caughtUpDetail}</p>
@@ -52,17 +55,17 @@ export function SellerTodayPage({ actions, facts, automation, proofAgent, copy, 
       )}
 
       {automation ? (
-        <SellerAutomationPanel automation={automation} actions={actions} onAction={onAction} onOpenProofs={onOpenProofs} />
+        <SellerAutomationPanel automation={automation} actions={actions} language={language} onAction={onAction} onOpenProofs={onOpenProofs} />
       ) : proofAgent && (
         <section className="seller-proof-agent-brief" aria-labelledby="seller-proof-agent-brief-title">
           <div className="seller-proof-agent-brief-main">
-            <span><Bot size={17} aria-hidden="true" /> Proof agent</span>
+            <span><Bot size={17} aria-hidden="true" /> {tx("Proof agent")}</span>
             <h2 id="seller-proof-agent-brief-title">{proofAgent.headline}</h2>
             <p>{proofAgent.summary}</p>
-            <small><ShieldCheck size={14} aria-hidden="true" /> {proofAgent.metrics.waiting_buyers} buyer asks, +{proofAgent.metrics.open_trust_lift} trust lift pending, {proofAgent.metrics.submitted_count} with reviewer</small>
+            <small><ShieldCheck size={14} aria-hidden="true" /> {proofAgent.metrics.waiting_buyers} {tx("buyer asks")}, +{proofAgent.metrics.open_trust_lift} {tx("trust lift pending")}, {proofAgent.metrics.submitted_count} {tx("with reviewer")}</small>
           </div>
           <button type="button" className="seller-button seller-button-secondary" onClick={onOpenProofs}>
-            Open proof center
+            {tx("Open proof center")}
             <ArrowRight size={16} aria-hidden="true" />
           </button>
         </section>
@@ -72,15 +75,15 @@ export function SellerTodayPage({ actions, facts, automation, proofAgent, copy, 
         <div className="seller-section-heading">
           <div>
             <p className="seller-kicker">{copy.priorityQueue}</p>
-            <h2 id="seller-queue-heading">Your short work queue</h2>
+            <h2 id="seller-queue-heading">{tx("Your short work queue")}</h2>
           </div>
-          <span>{queue.length} {queue.length === 1 ? "task" : "tasks"}</span>
+          <span>{queue.length} {tx(queue.length === 1 ? "task" : "tasks")}</span>
         </div>
         {queue.length ? (
           <ol className="seller-task-list">
             {queue.map((action) => (
               <li key={action.id}>
-                <span className={`seller-priority-marker priority-${action.priority}`}>{priorityLabel(action.priority)}</span>
+                <span className={`seller-priority-marker priority-${action.priority}`}>{priorityLabel(action.priority, language)}</span>
                 <div>
                   <strong>{action.title}</strong>
                   <p>{action.reason}</p>
@@ -94,11 +97,11 @@ export function SellerTodayPage({ actions, facts, automation, proofAgent, copy, 
             ))}
           </ol>
         ) : (
-          <p className="seller-empty-line">No other task needs attention.</p>
+          <p className="seller-empty-line">{tx("No other task needs attention.")}</p>
         )}
       </section>
 
-      <section className="seller-facts" aria-label="Seller facts">
+      <section className="seller-facts" aria-label={copy.sellerFacts}>
         {facts.map((fact) => (
           <dl key={fact.label}>
             <dt>{fact.label}</dt>
@@ -116,60 +119,75 @@ export function SellerTodayPage({ actions, facts, automation, proofAgent, copy, 
 function SellerAutomationPanel({
   automation,
   actions,
+  language,
   onAction,
   onOpenProofs
 }: {
   automation: SellerAutomationSummary;
   actions: SellerActionItem[];
+  language: LanguageCode;
   onAction: (action: SellerActionItem) => void;
   onOpenProofs: () => void;
 }) {
+  const tx = (text: string) => roleText(language, text);
   const packetAction = automation.proofPacket
     ? actions.find((action) => sameProofTask(action.proofTask, automation.proofPacket?.task))
+    : undefined;
+  const listingAction = automation.rootCause
+    ? actions.find((action) => action.action.id === automation.rootCause?.productId || action.meta === automation.rootCause?.title)
+    : undefined;
+  const bulkAction = automation.bulkProofGroups[0]
+    ? actions.find((action) => sameProofTask(action.proofTask, automation.bulkProofGroups[0]?.firstTask))
     : undefined;
   const primaryAction = packetAction
     ? () => onAction(packetAction)
     : onOpenProofs;
   const secondaryCommand = automation.rootCause ? {
     key: "listing",
-    label: "Listing fix",
+    label: tx("Listing fix"),
     title: automation.rootCause.title,
     detail: automation.rootCause.reason,
-    action: automation.rootCause.action
+    action: automation.rootCause.action,
+    helper: tx("Review the safer product promise before it goes live."),
+    onSelect: listingAction ? () => onAction(listingAction) : onOpenProofs
   } : automation.bulkProofGroups[0] ? {
     key: "bulk",
-    label: "Bulk queue",
+    label: tx("Bulk queue"),
     title: automation.bulkProofGroups[0].title,
     detail: automation.bulkProofGroups[0].detail,
-    action: "Review proof center"
+    action: tx("Review proof center"),
+    helper: tx("Use one proof standard for similar buyer asks."),
+    onSelect: bulkAction ? () => onAction(bulkAction) : onOpenProofs
   } : null;
   const commandItems = [
     automation.proofPacket ? {
       key: "packet",
-      label: "Proof packet",
+      label: tx("Proof packet"),
       title: automation.proofPacket.title,
-      detail: `${automation.proofPacket.buyerDemand} buyer asks, +${automation.proofPacket.trustLift} trust after review`,
-      action: "Open packet"
+      detail: `${automation.proofPacket.buyerDemand} ${tx("buyer asks")}, +${automation.proofPacket.trustLift} ${tx("trust after review")}`,
+      action: tx("Open packet"),
+      helper: tx("Upload one reviewer-safe proof for this product."),
+      onSelect: primaryAction
     } : null,
     secondaryCommand
-  ].filter(Boolean) as Array<{ key: string; label: string; title: string; detail: string; action: string }>;
+  ].filter(Boolean) as Array<{ key: string; label: string; title: string; detail: string; action: string; helper: string; onSelect: () => void }>;
   const activityItems = automation.demoStory.slice(0, 4);
 
   return (
     <section className="seller-automation-panel" aria-labelledby="seller-automation-heading">
       <header className="seller-automation-header">
         <div>
-          <span><Bot size={17} aria-hidden="true" /> Seller autopilot</span>
+          <span><Bot size={17} aria-hidden="true" /> {tx("Seller autopilot")}</span>
           <h2 id="seller-automation-heading">{automation.headline}</h2>
           <p>{automation.summary}</p>
         </div>
         <button type="button" className="seller-button seller-button-secondary" onClick={primaryAction}>
-          {automation.proofPacket ? "Open proof packet" : "Open proof center"}
+          {automation.proofPacket ? tx("Open proof packet") : tx("Open proof center")}
           <ArrowRight size={16} aria-hidden="true" />
         </button>
       </header>
 
-      <div className="seller-automation-stats" aria-label="Automation summary">
+      <div className="seller-automation-stats" aria-label={tx("Automation summary")}>
         {automation.stats.map((stat) => (
           <dl key={stat.label}>
             <dt>{stat.label}</dt>
@@ -180,19 +198,22 @@ function SellerAutomationPanel({
       </div>
 
       <div className="seller-automation-grid">
-        <div className="seller-automation-commands" aria-label="Prepared seller work">
+        <div className="seller-automation-commands" aria-label={tx("Prepared seller work")}>
           {commandItems.map((item) => (
-            <article key={item.key}>
+            <button key={item.key} type="button" onClick={item.onSelect}>
               <span>{item.label}</span>
               <strong>{item.title}</strong>
               <p>{item.detail}</p>
-              <small>{item.action}</small>
-            </article>
+              <small>
+                <em>{item.helper}</em>
+                <b>{item.action}<ArrowRight size={14} aria-hidden="true" /></b>
+              </small>
+            </button>
           ))}
         </div>
 
-        <div className="seller-automation-log seller-demo-story" aria-label="Trust loop">
-          <div className="seller-automation-subhead"><ListChecks size={15} aria-hidden="true" /><span>Trust loop</span></div>
+        <div className="seller-automation-log seller-demo-story" aria-label={tx("Trust loop")}>
+          <div className="seller-automation-subhead"><ListChecks size={15} aria-hidden="true" /><span>{tx("Trust loop")}</span></div>
           <ol>
             {activityItems.map((entry) => (
               <li key={entry.key} className={`automation-${entry.status}`}>
@@ -213,6 +234,7 @@ function sameProofTask(left: SellerEvidenceCoachTask | undefined, right: SellerE
   return Boolean(left && right && left.product_id === right.product_id && left.attribute === right.attribute);
 }
 
-function priorityLabel(priority: SellerActionItem["priority"]): string {
-  return priority === "high" ? "Do first" : priority === "medium" ? "Next" : "When ready";
+function priorityLabel(priority: SellerActionItem["priority"], language: LanguageCode): string {
+  const text = priority === "high" ? "Do first" : priority === "medium" ? "Next" : "When ready";
+  return roleText(language, text);
 }

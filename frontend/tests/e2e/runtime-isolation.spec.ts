@@ -18,3 +18,17 @@ test("E2E database guard rejects non-test and production-like names", () => {
   expect(() => resolveE2eDatabaseName("sarthi_e2e_production")).toThrow(/Unsafe E2E database name/);
   expect(resolveE2eDatabaseName("sarthi_e2e_reviewer_ui")).toBe("sarthi_e2e_reviewer_ui");
 });
+
+test("E2E default database is stable across API ports", () => {
+  const previous = process.env.E2E_API_PORT;
+  process.env.E2E_API_PORT = "59999";
+  try {
+    expect(resolveE2eDatabaseName()).toBe("sarthi_e2e_auth_58001");
+  } finally {
+    if (previous === undefined) {
+      delete process.env.E2E_API_PORT;
+    } else {
+      process.env.E2E_API_PORT = previous;
+    }
+  }
+});

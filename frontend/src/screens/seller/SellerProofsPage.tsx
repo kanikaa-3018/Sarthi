@@ -1,6 +1,7 @@
 import { AlertTriangle, Bot, Camera, CheckCircle2, CheckSquare, Clock3, Grid3X3, Info, Layers3, List, ListChecks, RotateCcw, Search, ShieldCheck, TrendingUp, Upload } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { roleText, type LanguageCode } from "../../i18n";
 import type { SellerEvidenceCoachResponse, SellerEvidenceCoachTask } from "../../types/api";
 import type { SellerCopy } from "./sellerCopy";
 import { proofTaskReason, proofTypeLabel, type SellerAutomationSummary, type SellerProductRow, type SellerProofAsset, type SellerProofLanes } from "./sellerModel";
@@ -14,6 +15,7 @@ type SellerProofsPageProps = {
   automation?: SellerAutomationSummary | null;
   rows?: SellerProductRow[];
   copy: SellerCopy;
+  language: LanguageCode;
   onOpenTask: (task: SellerEvidenceCoachTask) => void;
 };
 
@@ -30,8 +32,9 @@ type ProofBatchCard = {
 
 type ProofViewMode = "grid" | "list";
 
-export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, onOpenTask }: SellerProofsPageProps) {
+export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, language, onOpenTask }: SellerProofsPageProps) {
   const actionCount = lanes.openTasks.length + lanes.rejected.length;
+  const tx = (text: string) => roleText(language, text);
   const [lane, setLane] = useState<ProofLane>(actionCount ? "action" : lanes.inReview.length ? "review" : "visible");
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<ProofViewMode>("grid");
@@ -83,18 +86,18 @@ export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, on
     <div className="seller-page seller-proofs-page seller-proof-studio">
       <header className="seller-page-header">
         <div>
-          <p className="seller-kicker">Buyer evidence</p>
-          <h2>Proof center</h2>
-          <p>Fix the proof gaps buyers see before they buy.</p>
+          <p className="seller-kicker">{tx("Buyer evidence")}</p>
+          <h2>{tx("Proof center")}</h2>
+          <p>{tx("Fix the proof gaps buyers see before they buy.")}</p>
         </div>
       </header>
 
       <section className="seller-proof-bulk-workbench" aria-labelledby="seller-proof-bulk-title">
         <header className="seller-proof-bulk-head">
           <div>
-            <span><Layers3 size={15} aria-hidden="true" /> Proof work</span>
-            <h3 id="seller-proof-bulk-title">Upload proof once</h3>
-            <p>Pick matching products. Send one clear photo or file. Reviewers approve it before buyers see it.</p>
+            <span><Layers3 size={15} aria-hidden="true" /> {tx("Proof work")}</span>
+            <h3 id="seller-proof-bulk-title">{tx("Upload proof once")}</h3>
+            <p>{tx("Pick matching products. Send one clear photo or file. Reviewers approve it before buyers see it.")}</p>
           </div>
           <dl aria-label="Proof work summary">
             <div><dt>{proofBatches.length}</dt><dd>batches</dd></div>
@@ -104,8 +107,8 @@ export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, on
         </header>
 
         <div className="seller-proof-batch-heading">
-          <strong>Proof batches</strong>
-          <span>Choose issue, then products.</span>
+          <strong>{tx("Proof batches")}</strong>
+          <span>{tx("Choose issue, then products.")}</span>
         </div>
 
         {proofBatches.length ? (
@@ -132,29 +135,29 @@ export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, on
 
             <div className="seller-proof-instruction-grid">
               <section>
-                <span><Camera size={14} aria-hidden="true" /> What to upload</span>
-                <h4>{activeBatch ? proofUploadInstruction(activeBatch) : "Upload one clear product proof."}</h4>
-                <p>Use natural light and the actual product shade. Avoid catalog screenshots.</p>
+                <span><Camera size={14} aria-hidden="true" /> {tx("What to upload")}</span>
+                <h4>{activeBatch ? proofUploadInstruction(activeBatch, tx) : tx("Upload one clear product proof.")}</h4>
+                <p>{tx("Use natural light and the actual product shade. Avoid catalog screenshots.")}</p>
               </section>
               <section>
-                <span><CheckSquare size={14} aria-hidden="true" /> Suggested</span>
+                <span><CheckSquare size={14} aria-hidden="true" /> {tx("Suggested")}</span>
                 <ul>
-                  <li>Start with the products buyers are asking about.</li>
-                  <li>Remove products this proof does not match.</li>
-                  <li>Each product still goes to review.</li>
+                  <li>{tx("Start with the products buyers are asking about.")}</li>
+                  <li>{tx("Remove products this proof does not match.")}</li>
+                  <li>{tx("Each product still goes to review.")}</li>
                 </ul>
               </section>
               <aside>
-                <span><Upload size={14} aria-hidden="true" /> Send for review</span>
+                <span><Upload size={14} aria-hidden="true" /> {tx("Send for review")}</span>
                 <strong>{selectedTasks.length} product{selectedTasks.length === 1 ? "" : "s"} selected</strong>
-                <p>One file must match every selected product.</p>
+                <p>{tx("One file must match every selected product.")}</p>
                 <div className="seller-proof-selected-thumbs">
                   {selectedTasks.slice(0, 4).map((task) => <ProofProductThumb key={task.product_id} task={task} imageById={productImageById} />)}
                 </div>
                 <button type="button" className="seller-proof-upload-box" onClick={() => selectedTasks[0] && onOpenTask(selectedTasks[0])} disabled={!selectedTasks.length}>
                   <Upload size={20} aria-hidden="true" />
-                  <strong>Choose one proof file</strong>
-                  <span>Use only if this proof matches every selected product.</span>
+                  <strong>{tx("Choose one proof file")}</strong>
+                  <span>{tx("Use only if this proof matches every selected product.")}</span>
                 </button>
               </aside>
             </div>
@@ -162,21 +165,21 @@ export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, on
             <div className="seller-proof-product-tools">
               <label className="seller-proof-search">
                 <Search size={16} aria-hidden="true" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product or SKU" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tx("Search product or SKU")} />
               </label>
               <div className="seller-proof-product-actions">
-                <button type="button" className={suggestedOnly ? "active" : ""} onClick={() => setSuggestedOnly(true)}>Suggested</button>
-                <button type="button" className={!suggestedOnly ? "active" : ""} onClick={() => setSuggestedOnly(false)}>Select visible</button>
+                <button type="button" className={suggestedOnly ? "active" : ""} onClick={() => setSuggestedOnly(true)}>{tx("Suggested")}</button>
+                <button type="button" className={!suggestedOnly ? "active" : ""} onClick={() => setSuggestedOnly(false)}>{tx("Select visible")}</button>
                 <div className="seller-proof-view-toggle" aria-label="Product view">
-                  <button type="button" className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")}><Grid3X3 size={14} /> Grid</button>
-                  <button type="button" className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")}><List size={14} /> List</button>
+                  <button type="button" className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")}><Grid3X3 size={14} /> {tx("Grid")}</button>
+                  <button type="button" className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")}><List size={14} /> {tx("List")}</button>
                 </div>
               </div>
             </div>
 
             <div className="seller-proof-selection-status">
               <span>{selectedTasks.length} selected</span>
-              <strong>Answers {activeBatch?.buyerDemand ?? 0} asks / +{activeBatch?.trustLift ?? openTrustLift} after review</strong>
+              <strong>{tx("Answers")} {activeBatch?.buyerDemand ?? 0} {tx("asks")} / +{activeBatch?.trustLift ?? openTrustLift} {tx("after review")}</strong>
             </div>
 
             <div className={`seller-proof-product-picker ${viewMode}`}>
@@ -190,9 +193,9 @@ export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, on
                     onClick={() => setSelectedProductIds((current) => toggleProductSelection(current, task.product_id))}
                   >
                     <ProofProductThumb task={task} imageById={productImageById} />
-                    <span>{task.product_id}</span>
-                    <strong>{task.product_title}</strong>
-                    <small>{task.buyer_demand} asks · +{task.trust_lift_points ?? proofTaskFallbackTrustLift(task)} trust</small>
+                    <span className="seller-proof-sku-badge">{task.product_id}</span>
+                    <strong className="seller-proof-title">{task.product_title}</strong>
+                    <small className="seller-proof-meta">{task.buyer_demand} asks · +{task.trust_lift_points ?? proofTaskFallbackTrustLift(task)} trust</small>
                   </button>
                 );
               })}
@@ -210,12 +213,12 @@ export function SellerProofsPage({ lanes, agent, automation, rows = [], copy, on
       </div>
 
       <section className="seller-proof-lane compact" role="tabpanel">
-        {lane === "action" && <CompactProofQueue tasks={taskRows} selectedTaskKey={selectedTaskKey} onOpenTask={onOpenTask} />}
+        {lane === "action" && <CompactProofQueue tasks={taskRows} selectedTaskKey={selectedTaskKey} language={language} onOpenTask={onOpenTask} />}
         {lane === "review" && (
-          lanes.inReview.length ? lanes.inReview.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<Clock3 size={18} />} />) : <ProofEmpty icon={<Clock3 size={21} />} title="Nothing is with the reviewer" detail="Submitted proof will appear here until a decision is made." />
+          lanes.inReview.length ? lanes.inReview.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<Clock3 size={18} />} />) : <ProofEmpty icon={<Clock3 size={21} />} title={tx("Nothing is with the reviewer")} detail={tx("Submitted proof will appear here until a decision is made.")} />
         )}
         {lane === "visible" && (
-          lanes.buyerVisible.length ? lanes.buyerVisible.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<CheckCircle2 size={18} />} />) : <ProofEmpty icon={<CheckCircle2 size={21} />} title="No buyer-visible proof yet" detail="Approved proof will appear here with its product and review date." />
+          lanes.buyerVisible.length ? lanes.buyerVisible.map((asset) => <ProofAssetRow key={asset.proof_id} asset={asset} icon={<CheckCircle2 size={18} />} />) : <ProofEmpty icon={<CheckCircle2 size={21} />} title={tx("No buyer-visible proof yet")} detail={tx("Approved proof will appear here with its product and review date.")} />
         )}
       </section>
 
@@ -240,7 +243,7 @@ function buildProofBatchCards(tasks: SellerEvidenceCoachTask[]): ProofBatchCard[
       const urgentCount = sorted.filter((task) => task.priority === "high" || task.sla_state === "breached" || task.sla_state === "due_today").length;
       return {
         key,
-        label: proofTypeLabel(first.recommended_proof_type).toUpperCase(),
+        label: proofTypeLabel(first.recommended_proof_type),
         title: shortProductTitle(first.product_title),
         detail: `${sorted.length} product${sorted.length === 1 ? "" : "s"} / ${buyerDemand} asks`,
         urgentCount,
@@ -300,14 +303,14 @@ function ProofProductThumb({
   );
 }
 
-function proofUploadInstruction(batch: ProofBatchCard) {
+function proofUploadInstruction(batch: ProofBatchCard, tx: (text: string) => string) {
   const first = batch.tasks[0];
   const proofType = proofTypeLabel(first.recommended_proof_type).toLowerCase();
   const attribute = prettyLabel(first.attribute).toLowerCase();
-  if (first.attribute === "color") return "Upload a daylight colour photo only for products that match this colour family.";
-  if (first.attribute === "size") return "Upload the measurement chart only for products using this exact size table.";
-  if (first.attribute === "fabric") return "Upload one fabric close-up only for products made from the same material.";
-  return `Upload one ${proofType} only for products with the same ${attribute} proof need.`;
+  if (first.attribute === "color") return tx("Upload a daylight colour photo only for products that match this colour family.");
+  if (first.attribute === "size") return tx("Upload the measurement chart only for products using this exact size table.");
+  if (first.attribute === "fabric") return tx("Upload one fabric close-up only for products made from the same material.");
+  return tx(`Upload one ${proofType} only for products with the same ${attribute} proof need.`);
 }
 
 function toggleProductSelection(current: string[], productId: string) {
@@ -319,14 +322,17 @@ function toggleProductSelection(current: string[], productId: string) {
 function CompactProofQueue({
   tasks,
   selectedTaskKey,
+  language,
   onOpenTask
 }: {
   tasks: SellerEvidenceCoachTask[];
   selectedTaskKey: string | null;
+  language: LanguageCode;
   onOpenTask: (task: SellerEvidenceCoachTask) => void;
 }) {
+  const tx = (text: string) => roleText(language, text);
   if (!tasks.length) {
-    return <ProofEmpty icon={<CheckCircle2 size={21} />} title="No proof action is waiting" detail="New buyer concerns will appear here when they need evidence." />;
+    return <ProofEmpty icon={<CheckCircle2 size={21} />} title={tx("No proof action is waiting")} detail={tx("New buyer concerns will appear here when they need evidence.")} />;
   }
 
   return (
@@ -336,9 +342,9 @@ function CompactProofQueue({
           <div>
             <span>{proofTypeLabel(task.recommended_proof_type)}</span>
             <strong>{task.product_title}</strong>
-            <p>{task.buyer_demand} buyer ask{task.buyer_demand === 1 ? "" : "s"} · +{task.trust_lift_points ?? proofTaskFallbackTrustLift(task)} after review</p>
+            <p>{task.buyer_demand} buyer ask{task.buyer_demand === 1 ? "" : "s"} / +{task.trust_lift_points ?? proofTaskFallbackTrustLift(task)} after review</p>
           </div>
-          <button type="button" className="seller-button seller-button-text" onClick={() => onOpenTask(task)}>Upload</button>
+          <button type="button" className="seller-button seller-button-text" onClick={() => onOpenTask(task)}>{tx("Upload")}</button>
         </article>
       ))}
     </div>
@@ -622,7 +628,7 @@ function ProofLoopNote({
     aggregate_demand: "Sarthi aggregates demands across similar items for bulk resolution.",
     seller_upload: "Seller uploads a single high-quality daylight photo or document.",
     seller_fix: "Seller provides clear catalog proof to resolve the expectation gap.",
-    admin_review: "Meesho's reviewer verifies authenticity before making it buyer-visible.",
+    admin_review: "A reviewer verifies authenticity before making it buyer-visible.",
     buyer_update: "Buyers get notified and see verified evidence on the product page.",
     score_update: "Product trust score updates dynamically and protects seller rating."
   };
@@ -655,7 +661,7 @@ function ProofLoopNote({
                 onMouseLeave={() => setHoveredKey(null)}
               >
                 <div className="step-circle">
-                  {isDone ? <span className="check-mark">✓</span> : <span className="step-num">{idx + 1}</span>}
+                  {isDone ? <span className="check-mark">{"\u2713"}</span> : <span className="step-num">{idx + 1}</span>}
                 </div>
                 <span className="step-label">{step.label}</span>
               </li>
@@ -752,3 +758,4 @@ function formatShortDate(iso: string | null | undefined) {
   if (Number.isNaN(date.getTime())) return "Not yet";
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(date);
 }
+

@@ -33,6 +33,7 @@ import {
   getFeed,
   getFitProfiles,
   markOrderDelivered,
+  prefetchProductDetail,
   runRegretFirewall
 } from "../api/client";
 import { t, type LanguageCode } from "../i18n";
@@ -55,6 +56,7 @@ import { AuditDrawer } from "./AuditDrawer";
 import { ProductDetailPanel } from "./ProductDetailPanel";
 import { SarthiSavedWorkspacePanel } from "./SarthiSavedWorkspacePanel";
 import { OutcomeScreen } from "./OutcomeScreen";
+import { fallbackProductImage, productImageSource, productImageSources } from "../utils/productMedia";
 
 type Props = {
   buyerId: string;
@@ -71,6 +73,10 @@ type AutoScanState =
 
 type BuyerShopStep = "feed" | "detail" | "saved" | "wishlist" | "orders" | "proofs";
 const BUYER_CHECK_TIMEOUT_MS = 22_000;
+
+function graphHydrationKey(productId: string, variantId?: string | null) {
+  return `${productId}:${variantId ?? "default"}`;
+}
 
 export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) {
   const navigate = useNavigate();
@@ -123,7 +129,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [priceMax, setPriceMax] = useState<number | "">("");
   const [proofProductIds, setProofProductIds] = useState<Set<string>>(new Set());
 
-  const safetyProgressOpen = autoScan.status === "scanning";
+  const safetyProgressOpen = autoScan.status === "scanning" && step !== "saved";
 
   useEffect(() => {
     if (!compareSheetOpen && !auditDrawerOpen && !safetyProgressOpen) return;
@@ -236,20 +242,26 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
 
   const activeClusterId = selectedClusterId || wishlistedProduct?.cluster_id || "";
 
-  const loadKnowledgeGraphForProduct = useCallback(async (product: Product) => {
+  const loadKnowledgeGraphForProduct = useCallback(async (product: Product, variantId?: string | null) => {
+    const requestKey = graphHydrationKey(product.product_id, variantId);
+    hydratedGraphProductRef.current = requestKey;
     setKnowledgeGraph(null);
     setGraphAnswer(null);
     setGraphQuery("");
     setGraphError(null);
     setGraphLoading(true);
     try {
-      const graph = await getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id);
+      const graph = await getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id, variantId);
+      if (hydratedGraphProductRef.current !== requestKey) return;
       setKnowledgeGraph(graph);
       setGraphQuery(graph.chat_suggestions[0] ?? "");
     } catch (err) {
+      if (hydratedGraphProductRef.current !== requestKey) return;
       setGraphError(err instanceof Error ? err.message : "Unable to build evidence map");
     } finally {
-      setGraphLoading(false);
+      if (hydratedGraphProductRef.current === requestKey) {
+        setGraphLoading(false);
+      }
     }
   }, [buyerId]);
 
@@ -268,7 +280,15 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       setStep("proofs");
       return;
     }
-    if (!routeProductId || products.length === 0) return;
+    if (!routeProductId) return;
+    if (products.length === 0) {
+      if (routeMode === "detail") {
+        setSelectedProductId(routeProductId);
+        setSelectedVariantId(routeVariantId);
+        setStep("detail");
+      }
+      return;
+    }
 
     const routeProduct = products.find((product) => product.product_id === routeProductId);
     if (!routeProduct) {
@@ -283,9 +303,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       setSelectedProductId(routeProduct.product_id);
       setSelectedVariantId(routeVariantId);
       setStep("detail");
-      if (hydratedGraphProductRef.current !== routeProduct.product_id) {
-        hydratedGraphProductRef.current = routeProduct.product_id;
-        void loadKnowledgeGraphForProduct(routeProduct);
+      const graphKey = graphHydrationKey(routeProduct.product_id, routeVariantId);
+      if (hydratedGraphProductRef.current !== graphKey) {
+        hydratedGraphProductRef.current = graphKey;
+        void loadKnowledgeGraphForProduct(routeProduct, routeVariantId);
       }
       return;
     }
@@ -300,10 +321,11 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   function handleViewProductDetail(prodId: string, varId?: string | null) {
     const product = products.find((item) => item.product_id === prodId);
     if (product) {
+      prefetchProductDetail(buyerId, product.product_id, varId ?? null);
       setWishlistedProduct(product);
       setSelectedClusterId(product.cluster_id);
-      hydratedGraphProductRef.current = product.product_id;
-      void loadKnowledgeGraphForProduct(product);
+      hydratedGraphProductRef.current = graphHydrationKey(product.product_id, varId);
+      void loadKnowledgeGraphForProduct(product, varId);
     }
     setSelectedProductId(prodId);
     setSelectedVariantId(varId ?? null);
@@ -321,19 +343,24 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
   }
 
-  const loadSellerComparison = useCallback((product: Product) => (
-    compareCluster(buyerId, product.cluster_id, product.product_id)
+  const loadSellerComparison = useCallback((product: Product, variantId?: string | null) => (
+    compareCluster(buyerId, product.cluster_id, product.product_id, variantId)
   ), [buyerId]);
 
-  const openSellerComparison = useCallback(async (product: Product) => {
+  const prefetchProductOpen = useCallback((product: Product, variantId?: string | null) => {
+    prefetchProductDetail(buyerId, product.product_id, variantId ?? null);
+  }, [buyerId]);
+
+  const openSellerComparison = useCallback(async (product: Product, variantId?: string | null) => {
     setError(null);
     setWishlistedProduct(product);
     setSelectedClusterId(product.cluster_id);
+    if (variantId) setSelectedVariantId(variantId);
     setCompareSheetOpen(true);
-    hydratedGraphProductRef.current = product.product_id;
-    void loadKnowledgeGraphForProduct(product);
+    hydratedGraphProductRef.current = graphHydrationKey(product.product_id, variantId);
+    void loadKnowledgeGraphForProduct(product, variantId);
     try {
-      const result = await compareCluster(buyerId, product.cluster_id, product.product_id);
+      const result = await compareCluster(buyerId, product.cluster_id, product.product_id, variantId);
       setComparison(result);
       setAutoScan({
         status: "ready",
@@ -347,7 +374,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     }
   }, [buyerId, loadKnowledgeGraphForProduct, products]);
 
-  async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean; openCompare?: boolean } = {}) {
+  async function handleWishlistProduct(product: Product, options: { syncRoute?: boolean; openCompare?: boolean; selectedVariantId?: string | null } = {}) {
     if (options.syncRoute === true) {
       navigate(`/shop/saved/${encodeURIComponent(product.product_id)}`);
     }
@@ -394,7 +421,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             setSafetyCheckingProduct(null);
             resolve();
           }
-        }, 400);
+        }, 240);
       });
     }
 
@@ -404,10 +431,14 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       query: "Is this safe to buy before ordering?",
       create_missing_proof_request: false
     })));
-    const graphTask = settleBuyerCheck(withBuyerCheckTimeout("Evidence map took too long. Try again.", getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id)));
+    const graphTask = settleBuyerCheck(withBuyerCheckTimeout(
+      "Evidence map took too long. Try again.",
+      getClusterKnowledgeGraph(buyerId, product.cluster_id, product.product_id, options.selectedVariantId)
+    ));
     const radarTask = settleBuyerCheck(withBuyerCheckTimeout("Wishlist signal took too long. Try again.", createWishlistIntent({
       buyer_id: buyerId,
       product_id: product.product_id,
+      selected_variant_id: options.selectedVariantId ?? undefined,
       profile_id: activeFitProfile?.profile_id,
       create_seller_signal: true
     })));
@@ -492,8 +523,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
   }
 
-  async function handleOpenProofForProduct(product: Product) {
-    await handleWishlistProduct(product);
+  function handleOpenProofForProduct(product: Product) {
     openSavedProofLayer(product);
   }
 
@@ -549,6 +579,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         buyer_id: buyerId,
         cluster_id: knowledgeGraph.cluster.cluster_id,
         product_id: wishlistedProduct?.product_id,
+        selected_variant_id: selectedVariantId,
         query: prompt
       });
       setGraphAnswer(response);
@@ -568,7 +599,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     setGraphLoading(true);
     setGraphError(null);
     try {
-      const graph = await getClusterKnowledgeGraph(buyerId, wishlistedProduct.cluster_id, wishlistedProduct.product_id);
+      const graph = await getClusterKnowledgeGraph(buyerId, wishlistedProduct.cluster_id, wishlistedProduct.product_id, selectedVariantId);
       setKnowledgeGraph(graph);
       setGraphQuery((current) => current || graph.chat_suggestions[0] || "");
     } catch (err) {
@@ -585,10 +616,26 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
   }
 
-  function openSavedProofLayer(product = wishlistedProduct) {
+  const handleDetailVariantChange = useCallback((variantId: string) => {
+    setSelectedVariantId(variantId);
+    const product = products.find((item) => item.product_id === selectedProductId) ?? wishlistedProduct;
     if (!product) return;
+    hydratedGraphProductRef.current = graphHydrationKey(product.product_id, variantId);
+    void loadKnowledgeGraphForProduct(product, variantId);
+  }, [loadKnowledgeGraphForProduct, products, selectedProductId, wishlistedProduct]);
+
+  function openSavedProofLayer(product = wishlistedProduct, options: { refresh?: boolean } = {}) {
+    if (!product) return;
+    setWishlistedProduct(product);
+    setSelectedClusterId(product.cluster_id);
+    setSelectedProductId(null);
+    setCompareSheetOpen(false);
+    hydratedSavedRouteRef.current = product.product_id;
     setStep("saved");
     navigate(`/shop/saved/${encodeURIComponent(product.product_id)}?proof=1`);
+    if (options.refresh ?? true) {
+      void handleWishlistProduct(product, { syncRoute: false });
+    }
   }
 
   return (
@@ -610,6 +657,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           language={language}
           onQuickSearch={setSearchTerm}
           onProductOpen={(product) => handleViewProductDetail(product.product_id, null)}
+          onProductPrefetch={prefetchProductOpen}
           onWishlistProduct={handleWishlistProduct}
           onSaveProduct={handleSaveToWishlist}
           onOpenSavedItem={(product) => openSavedProofLayer(product)}
@@ -627,7 +675,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           language={language}
           onBack={() => navigate("/shop")}
           onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
-          onCheckTrust={(product) => handleWishlistProduct(product, { openCompare: true })}
+          onCheckTrust={(product) => openSavedProofLayer(product)}
           onOpenProof={handleOpenProofForProduct}
         />
       ) : step === "orders" ? (
@@ -697,6 +745,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             }}
             onLoadSellerComparison={loadSellerComparison}
             onOpenSellerComparison={openSellerComparison}
+            onVariantChange={handleDetailVariantChange}
             onOpenCheckout={handleOpenCheckout}
             language={language}
             experienceMode={experienceMode}
@@ -714,7 +763,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         )
       )}
 
-      {autoScan.status === "scanning" && !safetyCheckingProduct && (
+      {safetyProgressOpen && !safetyCheckingProduct && (
         <div className="buyer-safety-progress-backdrop">
           <section className="buyer-safety-progress" role="status" aria-label="Checking product safety" aria-live="assertive">
             <span className="buyer-safety-spinner" aria-hidden="true" />
@@ -2494,6 +2543,7 @@ function MarketplaceHome({
   language,
   onQuickSearch,
   onProductOpen,
+  onProductPrefetch,
   onWishlistProduct,
   onSaveProduct,
   onOpenSavedItem,
@@ -2516,6 +2566,7 @@ function MarketplaceHome({
   language: LanguageCode;
   onQuickSearch: (value: string) => void;
   onProductOpen: (product: Product) => void;
+  onProductPrefetch: (product: Product) => void;
   onWishlistProduct: (product: Product, options?: { openCompare?: boolean }) => void;
   onSaveProduct: (product: Product) => void;
   onOpenSavedItem: (product: Product) => void;
@@ -2683,9 +2734,16 @@ function MarketplaceHome({
               <article
                 key={p.product_id}
                 className={`buyer-product-card ${isSaved ? "saved" : ""}`}
+                onMouseEnter={() => onProductPrefetch(p)}
+                onFocus={() => onProductPrefetch(p)}
               >
                 <div className="buyer-product-image">
-                  <BuyerProductImageGallery product={p} onOpen={() => onProductOpen(p)} viewLabel={t(language, "view")} />
+                  <BuyerProductImageGallery
+                    product={p}
+                    onOpen={() => onProductOpen(p)}
+                    onPrefetch={() => onProductPrefetch(p)}
+                    viewLabel={t(language, "view")}
+                  />
                   <button
                     type="button"
                     className={`product-trust-badge ${trustBadge.tone}`}
@@ -2724,6 +2782,8 @@ function MarketplaceHome({
                   <button
                     type="button"
                     className="buyer-product-title"
+                    onMouseEnter={() => onProductPrefetch(p)}
+                    onFocus={() => onProductPrefetch(p)}
                     onClick={() => onProductOpen(p)}
                   >
                     {p.title.split("-")[0].trim()}
@@ -2744,6 +2804,8 @@ function MarketplaceHome({
                     <button
                       type="button"
                       className="secondary"
+                      onMouseEnter={() => onProductPrefetch(p)}
+                      onFocus={() => onProductPrefetch(p)}
                       onClick={() => onProductOpen(p)}
                       aria-label={`${t(language, "viewItem")}: ${p.title}`}
                     >
@@ -2753,6 +2815,8 @@ function MarketplaceHome({
                     <button
                       type="button"
                       className="primary"
+                      onMouseEnter={() => onProductPrefetch(p)}
+                      onFocus={() => onProductPrefetch(p)}
                       onClick={() => {
                         if (trustBadge.action === "check") {
                           void onWishlistProduct(p, { openCompare: true });
@@ -2821,10 +2885,12 @@ function MarketplaceHome({
 function BuyerProductImageGallery({
   product,
   onOpen,
+  onPrefetch,
   viewLabel
 }: {
   product: Product;
   onOpen: () => void;
+  onPrefetch: () => void;
   viewLabel: string;
 }) {
   const images = productImageSources(product);
@@ -2845,7 +2911,15 @@ function BuyerProductImageGallery({
       role={showControls ? "group" : undefined}
       aria-label={showControls ? `Product images for ${product.title}` : undefined}
     >
-      <button type="button" className="buyer-product-open-area" onClick={onOpen} aria-label={`${viewLabel} ${product.title}`}>
+      <button
+        type="button"
+        className="buyer-product-open-area"
+        onMouseEnter={onPrefetch}
+        onFocus={onPrefetch}
+        onTouchStart={onPrefetch}
+        onClick={onOpen}
+        aria-label={`${viewLabel} ${product.title}`}
+      >
         <img
           src={images[activeImage]}
           alt={product.title}
@@ -3080,22 +3154,4 @@ function labelize(value: string) {
 
 function trustScorePercent(candidate: CompareResponse["ranking"]["candidates"][number]) {
   return candidate.score_percent ?? Math.floor(candidate.score * 100);
-}
-
-function fallbackProductImage(color: string) {
-  if (color === "pink") return "/product-pink.svg";
-  if (color === "maroon") return "/product-maroon.svg";
-  return "/product-blue.svg";
-}
-
-function productImageSources(product: Pick<Product, "image_url" | "image_urls" | "color_family">) {
-  const candidates = [...(product.image_urls ?? []), product.image_url]
-    .map((value) => value?.trim())
-    .filter((value): value is string => Boolean(value) && !value.includes("placehold.co") && !value.includes("text="));
-  const unique = Array.from(new Set(candidates));
-  return unique.length ? unique : [fallbackProductImage(product.color_family)];
-}
-
-function productImageSource(product: Pick<Product, "image_url" | "image_urls" | "color_family">) {
-  return productImageSources(product)[0];
 }

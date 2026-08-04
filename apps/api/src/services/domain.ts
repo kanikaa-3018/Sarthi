@@ -936,27 +936,185 @@ function sellerFairStartPolicy(verification: any, evidence: any, proofScore: num
   };
 }
 
-export async function rankCluster(db: Db, buyerId: string, clusterId: string, preferredFit = "comfort", options: { recordSnapshot?: boolean; intent?: string; productIds?: string[] } = {}) {
+type ScoreGuardReason = {
+  key: string;
+  label: string;
+  detail: string;
+  severity: "low" | "medium" | "high";
+  penalty: number;
+  score_cap?: number;
+  fact_ids?: string[];
+};
+
+type ScoreIntegrityGuardInput = {
+  variantId: string;
+  rawAdjustedScore: number;
+  evidence: any;
+  reviewCredibility: any;
+  sourceHealth: any;
+};
+
+async function scoreIntegrityGuard(db: Db, input: ScoreIntegrityGuardInput) {
+  const reasons: ScoreGuardReason[] = [];
+  const caps: number[] = [];
+  const addReason = (reason: ScoreGuardReason) => {
+    reasons.push({
+      ...reason,
+      penalty: Number(reason.penalty.toFixed(3)),
+      score_cap: reason.score_cap === undefined ? undefined : Number(reason.score_cap.toFixed(3))
+    });
+    if (reason.score_cap !== undefined) caps.push(reason.score_cap);
+  };
+
+  if (input.sourceHealth?.blocking) {
+    addReason({
+      key: "stale_sources",
+      label: "Freshness guard",
+      detail: "One or more evidence sources are stale, so Sarthi will not give a high-confidence recommendation.",
+      severity: "high",
+      penalty: 0.12,
+      score_cap: 0.49
+    });
+  }
+
+  if (input.reviewCredibility?.review_spike?.status === "watch") {
+    addReason({
+      key: "review_spike",
+      label: "Review spike guard",
+      detail: "A burst of recent or repeated reviews was detected, so review influence is capped until outcomes confirm it.",
+      severity: "medium",
+      penalty: 0.06,
+      score_cap: 0.72,
+      fact_ids: input.reviewCredibility.review_spike.fact_ids ?? []
+    });
+  }
+
+  if ((input.reviewCredibility?.review_count ?? 0) >= 3 && (input.reviewCredibility?.average_weight ?? 1) < 0.55) {
+    addReason({
+      key: "low_review_credibility",
+      label: "Reviewer quality guard",
+      detail: "Too many reviews came from weaker reviewer patterns, so ratings cannot dominate the score.",
+      severity: "medium",
+      penalty: 0.04,
+      score_cap: 0.74,
+      fact_ids: input.reviewCredibility.fact_ids ?? []
+    });
+  }
+
+  if ((input.evidence?.delivered_orders_90d ?? 0) >= 20 && (input.evidence?.return_rate ?? 0) > 0.22) {
+    addReason({
+      key: "return_spike",
+      label: "Return guard",
+      detail: "Recent return outcomes are high enough that Sarthi keeps the score conservative.",
+      severity: "high",
+      penalty: 0.08,
+      score_cap: 0.68,
+      fact_ids: input.evidence.fact_ids ?? []
+    });
+  }
+
+  const previous = await previousScoreSummary(db, input.variantId);
+  if (previous && input.rawAdjustedScore - previous.average >= 0.12) {
+    const cap = Math.min(0.82, previous.average + 0.1);
+    addReason({
+      key: "score_jump",
+      label: "Sudden score jump",
+      detail: "This SKU improved sharply from recent score history. Sarthi lets the score grow gradually until fresh outcomes confirm the change.",
+      severity: "medium",
+      penalty: 0.06,
+      score_cap: cap
+    });
+  } else if (previous && previous.average - input.rawAdjustedScore >= 0.12) {
+    addReason({
+      key: "score_drop",
+      label: "Score dropped",
+      detail: "The current evidence is weaker than recent history, so Sarthi shows the lower confidence immediately.",
+      severity: "medium",
+      penalty: 0
+    });
+  }
+
+  const appliedPenalty = Math.min(0.28, reasons.reduce((sum, reason) => sum + reason.penalty, 0));
+  const scoreCap = caps.length ? Math.min(...caps) : null;
+  const adjustedBeforeCap = input.rawAdjustedScore - appliedPenalty;
+  const adjustedScore = scoreCap === null
+    ? adjustedBeforeCap
+    : Math.min(scoreCap, adjustedBeforeCap);
+  return {
+    guard_version: "score_integrity_guard_v1",
+    status: input.sourceHealth?.blocking ? "blocked" : reasons.length ? "watch" : "clear",
+    applied_penalty: Number(appliedPenalty.toFixed(3)),
+    score_cap: scoreCap === null ? null : Number(scoreCap.toFixed(3)),
+    adjusted_score: Number(adjustedScore.toFixed(3)),
+    reasons,
+    previous_score: previous,
+    source_health_status: input.sourceHealth?.overall_status ?? "unknown"
+  };
+}
+
+async function previousScoreSummary(db: Db, variantId: string) {
+  const rows = await collections(db).trustScoreSnapshots
+    .find({ variant_id: variantId })
+    .sort({ created_at: -1 })
+    .limit(5)
+    .toArray();
+  const scores = rows
+    .map((row: any) => Number(row.score))
+    .filter((score: number) => Number.isFinite(score));
+  if (!scores.length) return null;
+  const average = scores.reduce((sum: number, score: number) => sum + score, 0) / scores.length;
+  return {
+    variant_id: variantId,
+    average: Number(average.toFixed(3)),
+    latest: Number(scores[0].toFixed(3)),
+    sample_size: scores.length,
+    last_seen_at: rows[0]?.created_at ?? null
+  };
+}
+
+type RankClusterOptions = {
+  recordSnapshot?: boolean;
+  intent?: string;
+  productIds?: string[];
+  selectedVariantId?: string;
+};
+
+export async function rankCluster(db: Db, buyerId: string, clusterId: string, preferredFit = "comfort", options: RankClusterOptions = {}) {
   const c = collections(db);
   const cluster = await c.clusters.findOne({ cluster_id: clusterId });
-  const weightConfig = await trustWeightConfig(db, cluster?.category);
+  const [weightConfig, health] = await Promise.all([
+    trustWeightConfig(db, cluster?.category),
+    sourceHealth(db)
+  ]);
   const productIds = [...new Set(options.productIds ?? [])];
   const products = productIds.length
     ? (await c.products.find({ product_id: { $in: productIds }, is_sarthi_eligible: 1 }).toArray())
       .sort((left: any, right: any) => productIds.indexOf(left.product_id) - productIds.indexOf(right.product_id))
     : await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
+  const selectedVariant = options.selectedVariantId
+    ? await c.variants.findOne({ variant_id: options.selectedVariantId })
+    : null;
+  const selectedSize = selectedVariant?.size ?? null;
   const candidates = [];
   const factIds = new Set<string>();
-  for (const product of products) {
+  const candidateResults = await Promise.all(products.map(async (product) => {
     const productVariants = await variantsForProduct(db, product.product_id);
-    const target = productVariants.find((variant: any) => variant.size === "XL") ?? productVariants[0];
-    if (!target) continue;
-    const evidence = await variantEvidence(db, target.variant_id);
-    const verification = await sellerVerification(db, product.seller_id);
-    const fit = await fitPrediction(db, buyerId, target.variant_id, preferredFit);
-    const reviewCredibility = await reviewCredibilitySummary(db, product.product_id);
-    const coverage = await proofCoverage(db, product.product_id, target.variant_id);
-    const offer = await verifyOffer(db, target.variant_id);
+    const target = selectComparableVariant(productVariants, product.product_id, selectedVariant, selectedSize);
+    if (!target) return null;
+    const [
+      evidence,
+      verification,
+      fit,
+      reviewCredibility,
+      offer
+    ] = await Promise.all([
+      variantEvidence(db, target.variant_id),
+      sellerVerification(db, product.seller_id),
+      fitPrediction(db, buyerId, target.variant_id, preferredFit),
+      reviewCredibilitySummary(db, product.product_id),
+      verifyOffer(db, target.variant_id)
+    ]);
+    const coverage = await proofCoverage(db, product.product_id, target.variant_id, { evidence });
     const sellerScore = verification.verification_status === "verified" ? 0.9 : 0.45;
     const outcomeQuality = 1 - Math.min(0.6, evidence.return_rate) / 0.6;
     const fitScore = fit.confidence === "medium" ? 0.75 : 0.55;
@@ -1012,56 +1170,79 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
     const rawAdjustedScore = confidenceBreakdown.score -
       uncertaintyPenalty +
       fairStartPolicy.boost;
-    const score = Number(Math.max(0.05, Math.min(fairStartPolicy.score_cap,
-      rawAdjustedScore
-    )).toFixed(3));
-    for (const id of evidence.fact_ids) factIds.add(id);
-    for (const id of reviewCredibility.fact_ids) factIds.add(id);
-    for (const id of offer.fact_ids) factIds.add(id);
-    candidates.push({
-      variant_id: target.variant_id,
-      product_id: product.product_id,
-      seller_id: product.seller_id,
-      score,
-      score_percent: Math.floor(score * 100),
-      factors: {
-        fit_match: Number(fitScore.toFixed(2)),
-        outcome_quality: Number(outcomeQuality.toFixed(2)),
-        expectation_match: evidence.return_rate < 0.18 ? 0.78 : 0.58,
-        fulfilment_reliability: Number(fulfilmentReliability.toFixed(2)),
-        seller_trust: Number(sellerScore.toFixed(2)),
-        review_signal: Number(reviewSignal.toFixed(2)),
-        review_credibility: reviewCredibility.average_weight,
-        rating_signal: Number(ratingSignal.toFixed(2)),
-        price_value: Number(priceValue.toFixed(2)),
-        proof_coverage: Number(proofScore.toFixed(2)),
-        offer_truth: Number(offerScore.toFixed(2)),
-        uncertainty_penalty: uncertaintyPenalty,
-        fair_start_boost: Number(fairStartPolicy.boost.toFixed(2))
-      },
-      fair_start_policy: fairStartPolicy,
-      score_breakdown: {
-        ...confidenceBreakdown,
-        confidence_source: confidenceAssignment.source,
-        prompt_version: "ai_confidence_assignment_v2",
-        raw_adjusted_score: Number(rawAdjustedScore.toFixed(3)),
-        adjusted_score: score,
-        adjusted_score_percent: Math.floor(score * 100),
-        adjustments: {
-          uncertainty_penalty: uncertaintyPenalty,
-          fair_start_boost: Number(fairStartPolicy.boost.toFixed(3)),
-          score_cap: fairStartPolicy.score_cap
-        },
-        scoring_context: {
-          item_category: product.category,
-          locality: verification.pickup_pincode ?? "unknown",
-          season_hint: currentSeasonHint(),
-          priority: "buyer_keep_confidence"
-        }
-      },
-      weight_version: weightConfig.version,
-      fact_ids: evidence.fact_ids.slice(0, 5)
+    const integrityGuard = await scoreIntegrityGuard(db, {
+      variantId: target.variant_id,
+      rawAdjustedScore,
+      evidence,
+      reviewCredibility,
+      sourceHealth: health
     });
+    const score = Number(Math.max(0.05, Math.min(
+      fairStartPolicy.score_cap,
+      integrityGuard.score_cap ?? 1,
+      rawAdjustedScore - integrityGuard.applied_penalty
+    )).toFixed(3));
+    return {
+      candidate: {
+        variant_id: target.variant_id,
+        product_id: product.product_id,
+        seller_id: product.seller_id,
+        score,
+        score_percent: Math.floor(score * 100),
+        factors: {
+          fit_match: Number(fitScore.toFixed(2)),
+          outcome_quality: Number(outcomeQuality.toFixed(2)),
+          expectation_match: evidence.return_rate < 0.18 ? 0.78 : 0.58,
+          fulfilment_reliability: Number(fulfilmentReliability.toFixed(2)),
+          seller_trust: Number(sellerScore.toFixed(2)),
+          review_signal: Number(reviewSignal.toFixed(2)),
+          review_credibility: reviewCredibility.average_weight,
+          rating_signal: Number(ratingSignal.toFixed(2)),
+          price_value: Number(priceValue.toFixed(2)),
+          proof_coverage: Number(proofScore.toFixed(2)),
+          offer_truth: Number(offerScore.toFixed(2)),
+          uncertainty_penalty: uncertaintyPenalty,
+          fair_start_boost: Number(fairStartPolicy.boost.toFixed(2)),
+          integrity_penalty: Number(integrityGuard.applied_penalty.toFixed(2))
+        },
+        fair_start_policy: fairStartPolicy,
+        score_integrity_guard: {
+          ...integrityGuard,
+          adjusted_score: score,
+          adjusted_score_percent: Math.floor(score * 100)
+        },
+        score_breakdown: {
+          ...confidenceBreakdown,
+          confidence_source: confidenceAssignment.source,
+          prompt_version: "ai_confidence_assignment_v2",
+          raw_adjusted_score: Number(rawAdjustedScore.toFixed(3)),
+          adjusted_score: score,
+          adjusted_score_percent: Math.floor(score * 100),
+          adjustments: {
+            uncertainty_penalty: uncertaintyPenalty,
+            fair_start_boost: Number(fairStartPolicy.boost.toFixed(3)),
+            score_cap: fairStartPolicy.score_cap,
+            integrity_penalty: integrityGuard.applied_penalty,
+            integrity_cap: integrityGuard.score_cap
+          },
+          guardrails: integrityGuard.reasons,
+          scoring_context: {
+            item_category: product.category,
+            locality: verification.pickup_pincode ?? "unknown",
+            season_hint: currentSeasonHint(),
+            priority: "buyer_keep_confidence"
+          }
+        },
+        weight_version: weightConfig.version,
+        fact_ids: evidence.fact_ids.slice(0, 5)
+      },
+      fact_ids: [...evidence.fact_ids, ...reviewCredibility.fact_ids, ...offer.fact_ids]
+    };
+  }));
+  for (const result of candidateResults) {
+    if (!result) continue;
+    candidates.push(result.candidate);
+    for (const id of result.fact_ids) factIds.add(id);
   }
   candidates.sort((a, b) => b.score - a.score);
   if (options.recordSnapshot && candidates.length) {
@@ -1077,6 +1258,7 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
       score_percent: candidate.score_percent,
       factors: candidate.factors,
       score_breakdown: candidate.score_breakdown,
+      score_integrity_guard: candidate.score_integrity_guard,
       weights: weightConfig.weights,
       weight_version: weightConfig.version,
       fact_ids: candidate.fact_ids,
@@ -1092,10 +1274,27 @@ export async function rankCluster(db: Db, buyerId: string, clusterId: string, pr
     winner_label: winnerProduct ? `${winnerProduct.seller_name} - ${winnerProduct.title.split("-")[0].trim()}` : "Sarthi pick",
     top_factors: ["seller trust", "SKU kept-order evidence", "fit consistency", "reviewer credibility"],
     uncertainty: winner?.score > 0.75 ? "low" : "medium",
+    selected_variant_id: selectedVariant?.variant_id ?? null,
+    selected_size: selectedSize,
     candidates,
     weighting: weightConfig,
     fact_ids: [...factIds].slice(0, 16)
   };
+}
+
+function selectComparableVariant(productVariants: any[], productId: string, selectedVariant: any | null, selectedSize: string | null) {
+  if (selectedVariant?.product_id === productId) {
+    return productVariants.find((variant: any) => variant.variant_id === selectedVariant.variant_id) ?? null;
+  }
+  if (selectedSize) {
+    const sameSize = productVariants.find((variant: any) => normalizeSkuSize(variant.size) === normalizeSkuSize(selectedSize));
+    if (sameSize) return sameSize;
+  }
+  return productVariants.find((variant: any) => variant.size === "XL") ?? productVariants[0] ?? null;
+}
+
+function normalizeSkuSize(value: unknown) {
+  return String(value ?? "").trim().toUpperCase().replace(/\s+/g, "_");
 }
 
 function currentSeasonHint() {
@@ -1391,7 +1590,7 @@ function priceHikeBeforeDiscount(events: any[]) {
   return null;
 }
 
-export async function proofCoverage(db: Db, productId: string, variantId?: string | null) {
+export async function proofCoverage(db: Db, productId: string, variantId?: string | null, options: { evidence?: any } = {}) {
   const assets = await collections(db).sellerEvidenceAssets.find({ product_id: productId, status: { $in: ["submitted", "verified"] } }).toArray();
   const attributes = ["transparency", "fabric", "color", "size", "packaging", "offer"] as const;
   const recommendations: Record<string, string> = {
@@ -1415,7 +1614,7 @@ export async function proofCoverage(db: Db, productId: string, variantId?: strin
     };
   }
   if (variantId) {
-    const ev = await variantEvidence(db, variantId);
+    const ev = options.evidence ?? await variantEvidence(db, variantId);
     if (ev.delivered_orders_90d > 10) {
       result.size.sufficient = true;
       result.size.evidence_count = ev.delivered_orders_90d;
@@ -1450,7 +1649,7 @@ export async function skuPassport(db: Db, buyerId: string, productId: string, va
   const issue = await avoidableIssue(db, variant.variant_id);
   const offer = await verifyOffer(db, variant.variant_id);
   const reviews = await reviewEvidence(db, productId);
-  const coverage = await proofCoverage(db, productId, variant.variant_id);
+  const coverage = await proofCoverage(db, productId, variant.variant_id, { evidence });
   const gaps = evidenceGaps(coverage);
   const trust = await trustState(db, product, evidence);
   const conflictRows = await conflicts(db, product, variant.variant_id);
@@ -2060,7 +2259,8 @@ export async function computeKeepConfidence(db: Db, buyerId: string, variantId: 
   }
 
   if (issue) {
-    const issueAction = ["too_small", "too_large"].includes(issue.reason) && recommendedVariant
+    const saferSizeIsDifferent = Boolean(recommendedVariant && selectedSize && selectedSize !== fit.recommended_size);
+    const issueAction = ["too_small", "too_large"].includes(issue.reason) && saferSizeIsDifferent
       ? "change_size"
       : "review_evidence";
     const issueType: KeepConfidenceIntervention["type"] = issueAction === "change_size" ? "change_size" : "check_proof";
@@ -2151,8 +2351,14 @@ export async function createOrIncrementProofRequest(db: Db, buyerId: string, pro
   const c = collections(db);
   const existing = await c.proofRequests.findOne({ seller_id: product.seller_id, product_id: product.product_id, attribute, status: "open" });
   if (existing) {
-    await c.proofRequests.updateOne({ _id: existing._id }, { $inc: { request_count: 1 }, $set: { updated_at: nowIso(), buyer_question: question } });
-    return publicProofRequest({ ...existing, request_count: existing.request_count + 1, updated_at: nowIso() });
+    const updatedAt = nowIso();
+    const requestCount = Number(existing.request_count ?? 0) + 1;
+    const selector = existing._id ? { _id: existing._id } : { request_id: existing.request_id };
+    await c.proofRequests.updateOne(selector, {
+      $inc: { request_count: 1 },
+      $set: { updated_at: updatedAt, buyer_question: question, variant_id: variantId ?? existing.variant_id ?? null }
+    });
+    return publicProofRequest({ ...existing, request_count: requestCount, updated_at: updatedAt, buyer_question: question, variant_id: variantId ?? existing.variant_id ?? null });
   }
   const request = {
     request_id: id("proof_req"),

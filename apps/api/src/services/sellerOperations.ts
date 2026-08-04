@@ -15,6 +15,8 @@ import type { GeneratedJson, StructuredGenerationInput } from "./aiTypes.js";
 import { suggestClusterFromSimilarListings } from "./similarListings.js";
 import { nowIso } from "./time.js";
 
+const MIN_ORDERS_FOR_STRONG_SELLER_DECISION = 30;
+
 export async function listSellers(db: Db) {
   const c = collections(db);
   const sellers = await c.sellers.find({}).toArray();
@@ -38,14 +40,15 @@ export async function sellerPanel(db: Db, sellerId: string, clusterId?: string) 
   const seller = await c.sellers.findOne({ seller_id: sellerId });
   const sellerProducts = await c.products.find({ seller_id: sellerId }).toArray();
   const firstProduct = sellerProducts[0];
-  const selectedCluster = clusterId ?? firstProduct?.cluster_id ?? "cluster_floral_blue";
-  const listings = await c.products.find({ cluster_id: selectedCluster }).toArray();
+  const selectedCluster = clusterId ?? firstProduct?.cluster_id ?? null;
+  const listings = selectedCluster ? await c.products.find({ cluster_id: selectedCluster }).toArray() : [];
   const clusterCards = rankClusterCards(await Promise.all(listings.map((product: any) => listingCard(db, product))));
   const allSellerCards = await Promise.all(sellerProducts.map((product: any) => listingCard(db, product)));
   const coachTasks = await sellerEvidenceTasks(db, sellerId);
   const own = clusterCards.filter((card) => card.seller.seller_id === sellerId);
   const competitors = clusterCards.filter((card) => card.seller.seller_id !== sellerId);
-  const cluster = await c.clusters.findOne({ cluster_id: selectedCluster });
+  const cluster = selectedCluster ? await c.clusters.findOne({ cluster_id: selectedCluster }) : null;
+  const representativeSize = clusterCards.find((card) => card.variant?.size)?.variant?.size ?? "mixed";
   const rating = sellerRating(sellerProducts);
   return {
     seller: {
@@ -60,9 +63,9 @@ export async function sellerPanel(db: Db, sellerId: string, clusterId?: string) 
     seller_verification: await sellerVerification(db, sellerId),
     data_freshness: await sourceHealth(db),
     cluster: {
-      cluster_id: selectedCluster,
-      label: cluster?.label ?? selectedCluster,
-      size: "XL",
+      cluster_id: selectedCluster ?? "none",
+      label: cluster?.label ?? (selectedCluster ?? "No active product cluster yet"),
+      size: representativeSize,
       listing_count: listings.length,
       seller_count: new Set(listings.map((item: any) => item.seller_id)).size,
       stats: {
@@ -70,7 +73,7 @@ export async function sellerPanel(db: Db, sellerId: string, clusterId?: string) 
         returns_90d: clusterCards.reduce((sum, card) => sum + card.metrics.returns_90d, 0),
         median_return_rate: median(clusterCards.map((card) => card.metrics.return_rate).filter((value) => value !== null) as number[]),
         median_dispatch_hours: median(clusterCards.map((card) => card.metrics.median_dispatch_hours)),
-        minimum_orders_for_strong_decision: 30
+        minimum_orders_for_strong_decision: MIN_ORDERS_FOR_STRONG_SELLER_DECISION
       }
     },
     decision_policy: {
@@ -106,10 +109,13 @@ export async function listingCard(db: Db, product: any) {
   const c = collections(db);
   const seller = await c.sellers.findOne({ seller_id: product.seller_id });
   const variants = await variantsForProduct(db, product.product_id);
-  const variant = variants.find((item: any) => item.size === "XL") ?? variants[0];
-  const evidence = await variantEvidence(db, variant.variant_id);
+  const { variant, evidence } = await representativeListingVariant(db, product, variants);
   const topIssue = await topIssueForCard(db, variant.variant_id);
-  const score = Math.round((1 - evidence.return_rate) * 55 + (product.rating / 5) * 25 + (seller?.median_dispatch_hours ? Math.max(0, 20 - seller.median_dispatch_hours / 4) : 8));
+  const hasOutcomes = Number(evidence.delivered_orders_90d ?? 0) > 0;
+  const outcomeScore = hasOutcomes ? (1 - evidence.return_rate) * 55 : 16;
+  const ratingScore = Number.isFinite(Number(product.rating)) ? (Number(product.rating) / 5) * 25 : 10;
+  const dispatchScore = seller?.median_dispatch_hours ? Math.max(0, 20 - seller.median_dispatch_hours / 4) : 8;
+  const score = Math.round(outcomeScore + ratingScore + dispatchScore);
   return {
     product: publicProduct({ ...product, seller_name: seller?.name, median_dispatch_hours: seller?.median_dispatch_hours }),
     variant,
@@ -137,6 +143,56 @@ export async function listingCard(db: Db, product: any) {
       fact_ids: topIssue.fact_ids
     }] : [],
     fact_ids: evidence.fact_ids
+  };
+}
+
+async function representativeListingVariant(db: Db, product: any, variants: any[]) {
+  const fallbackVariant = variants[0] ?? {
+    variant_id: `${product.product_id}_catalog`,
+    product_id: product.product_id,
+    size: "ONE_SIZE",
+    current_price: product.base_price ?? 0,
+    stock: product.stock ?? 0
+  };
+  if (!variants.length) {
+    return { variant: fallbackVariant, evidence: emptyListingEvidence(fallbackVariant.variant_id) };
+  }
+
+  const candidates = await Promise.all(variants.map(async (variant: any) => ({
+    variant,
+    evidence: await variantEvidence(db, variant.variant_id)
+  })));
+
+  return candidates.sort((left, right) =>
+    evidenceStrengthRank(right.evidence.evidence_strength) - evidenceStrengthRank(left.evidence.evidence_strength) ||
+    Number(right.evidence.delivered_orders_90d ?? 0) - Number(left.evidence.delivered_orders_90d ?? 0) ||
+    Number(left.evidence.return_rate ?? 1) - Number(right.evidence.return_rate ?? 1) ||
+    Number(right.variant.stock ?? 0) - Number(left.variant.stock ?? 0)
+  )[0] ?? { variant: fallbackVariant, evidence: emptyListingEvidence(fallbackVariant.variant_id) };
+}
+
+function evidenceStrengthRank(strength: string) {
+  if (strength === "strong") return 4;
+  if (strength === "medium") return 3;
+  if (strength === "weak") return 2;
+  if (strength === "unknown") return 1;
+  return 0;
+}
+
+function emptyListingEvidence(variantId: string) {
+  return {
+    sku_id: variantId,
+    variant_id: variantId,
+    delivered_orders_90d: 0,
+    returns_90d: 0,
+    return_rate: 0,
+    fit_feedback_count: 0,
+    fit_as_expected_rate: 0,
+    color_mismatch_returns: 0,
+    median_dispatch_hours: 48,
+    evidence_strength: "unknown",
+    fact_ids: [],
+    last_updated_at: nowIso()
   };
 }
 

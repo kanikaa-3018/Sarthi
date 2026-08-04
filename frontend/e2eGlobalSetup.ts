@@ -30,7 +30,10 @@ async function globalSetup() {
     DEMO_CONTROLS_ENABLED: "true",
     BEDROCK_ENABLED: "false",
     AI_PROVIDER_ORDER: "",
-    GEMINI_API_KEY: ""
+    GEMINI_API_KEY: "",
+    NEO4J_ENABLED: "false",
+    VECTOR_SEARCH_ENABLED: "false",
+    EXTERNAL_SERVICE_TIMEOUT_MS: "2000"
   }, repoRoot);
 
   try {
@@ -78,6 +81,7 @@ function startServer(name: string, args: string[], env: NodeJS.ProcessEnv, cwd: 
   });
 
   child.once("exit", (code, signal) => {
+    if (process.env.E2E_DEBUG_SERVER_EXIT !== "true") return;
     if (code !== null && code !== 0) {
       process.stderr.write(`[e2e] ${name} exited early with code ${code}\n`);
     } else if (signal) {

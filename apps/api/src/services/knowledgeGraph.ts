@@ -13,21 +13,60 @@ import {
   verifyOffer
 } from "./domain.js";
 import { withoutId } from "./format.js";
+import { readLlmCache, stableDataCacheKey, writeLlmCache } from "./llmCache.js";
 import { projectGraphToNeo4j } from "./neo4jGraph.js";
 import { topIssueForCard } from "./sellerOperations.js";
 import { resolveSimilarListingSet } from "./similarListings.js";
 
-export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: string, selectedProductId?: string) {
+const GRAPH_CACHE_VERSION = "cluster_knowledge_graph_v2";
+const GRAPH_CACHE_TTL_MS = 3 * 60 * 1000;
+
+export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: string, selectedProductId?: string, selectedVariantId?: string) {
+  const cachePlan = await clusterKnowledgeGraphCachePlan(db, buyerId, clusterId, selectedProductId, selectedVariantId);
+  const cached = await readLlmCache(db, cachePlan.cache_key);
+  if (isCachedGraphPayload(cached)) {
+    return withGraphCacheState(cached.graph, "hit", cachePlan);
+  }
+
+  const graph = await buildClusterKnowledgeGraph(db, buyerId, clusterId, selectedProductId, selectedVariantId, cachePlan);
+  const graphWithCache = withGraphCacheState(graph, "miss", cachePlan);
+  await writeLlmCache(
+    db,
+    cachePlan.cache_key,
+    "cluster_knowledge_graph",
+    {
+      cache_version: GRAPH_CACHE_VERSION,
+      evidence_version: cachePlan.evidence_version,
+      graph: graphWithCache
+    },
+    { ttlMs: GRAPH_CACHE_TTL_MS }
+  );
+  return graphWithCache;
+}
+
+async function buildClusterKnowledgeGraph(
+  db: Db,
+  buyerId: string,
+  clusterId: string,
+  selectedProductId?: string,
+  selectedVariantId?: string,
+  cachePlan?: GraphCachePlan
+) {
   const c = collections(db);
-  const cluster = await c.clusters.findOne({ cluster_id: clusterId });
-  const similarity = selectedProductId ? await resolveSimilarListingSet(db, selectedProductId) : null;
+  const cluster = cachePlan?.cluster ?? await c.clusters.findOne({ cluster_id: clusterId });
+  const selectedVariant = cachePlan?.selected_variant ?? (selectedVariantId
+    ? await c.variants.findOne({ variant_id: selectedVariantId })
+    : null);
+  const selectedSize = selectedVariant?.size ?? null;
+  const similarity = cachePlan?.similarity ?? (selectedProductId ? await resolveSimilarListingSet(db, selectedProductId) : null);
   const comparableProductIds = similarity?.comparable_product_ids ?? [];
-  const products = comparableProductIds.length
+  const products = cachePlan?.products ?? (comparableProductIds.length
     ? (await c.products.find({ product_id: { $in: comparableProductIds }, is_sarthi_eligible: 1 }).toArray())
       .sort((left: any, right: any) => comparableProductIds.indexOf(left.product_id) - comparableProductIds.indexOf(right.product_id))
-    : await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
+    : await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray());
   const ranking = await rankCluster(db, buyerId, clusterId, "comfort", {
-    productIds: comparableProductIds
+    productIds: comparableProductIds,
+    selectedVariantId: selectedVariant?.variant_id
   });
   const nodes: any[] = [{
     id: clusterId,
@@ -56,14 +95,15 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
     const seller = await c.sellers.findOne({ seller_id: product.seller_id });
     const publicP = publicProduct({ ...product, seller_name: seller?.name });
     const variants = await variantsForProduct(db, product.product_id);
-    const variant = variants.find((item: any) => item.size === "XL") ?? variants[0];
+    const variant = selectGraphVariant(variants, product.product_id, selectedVariant, selectedSize);
+    if (!variant) continue;
     const evidence = await variantEvidence(db, variant.variant_id);
     const fit = await fitPrediction(db, buyerId, variant.variant_id);
     const reviews = await c.reviews.find({ product_id: product.product_id }).limit(5).toArray();
     const candidate = ranking.candidates.find((item: any) => item.variant_id === variant.variant_id) ?? null;
     const verification = await sellerVerification(db, product.seller_id);
     const offer = await verifyOffer(db, variant.variant_id);
-    const coverage = await proofCoverage(db, product.product_id, variant.variant_id);
+    const coverage = await proofCoverage(db, product.product_id, variant.variant_id, { evidence });
     const proofItems = Object.values(coverage) as any[];
     const proofFactIds = proofItems.flatMap((item: any) => item.fact_ids ?? []);
     const missingProofCount = proofItems.filter((item: any) => !item.sufficient).length;
@@ -274,11 +314,13 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
         candidates: similarity.candidates.slice(0, 4),
         agent: similarity.agent
       } : null,
-      source_health: await sourceHealth(db),
+      source_health: cachePlan?.source_health ?? await sourceHealth(db),
       fact_count: factIds.size
     },
     ranking,
-    selected_product_id: (await productForVariant(db, ranking.winner))?.product_id ?? null,
+    selected_product_id: selectedProductId ?? (await productForVariant(db, ranking.winner))?.product_id ?? null,
+    selected_variant_id: selectedVariant?.variant_id ?? null,
+    selected_size: selectedSize,
     nodes: uniqueBy(nodes, "id"),
     edges,
     seller_context,
@@ -302,6 +344,166 @@ export async function clusterKnowledgeGraph(db: Db, buyerId: string, clusterId: 
       neo4j_projection: neo4j
     }
   };
+}
+
+type GraphCachePlan = {
+  cache_key: string;
+  cache_version: string;
+  ttl_seconds: number;
+  evidence_version: string;
+  source_health: any;
+  cluster: any;
+  selected_variant: any | null;
+  selected_size: string | null;
+  similarity: Awaited<ReturnType<typeof resolveSimilarListingSet>> | null;
+  products: any[];
+};
+
+async function clusterKnowledgeGraphCachePlan(
+  db: Db,
+  buyerId: string,
+  clusterId: string,
+  selectedProductId?: string,
+  selectedVariantId?: string
+): Promise<GraphCachePlan> {
+  const c = collections(db);
+  const [cluster, selectedVariant, sourceHealthValue] = await Promise.all([
+    c.clusters.findOne({ cluster_id: clusterId }),
+    selectedVariantId ? c.variants.findOne({ variant_id: selectedVariantId }) : Promise.resolve(null),
+    sourceHealth(db)
+  ]);
+  const selectedSize = selectedVariant?.size ?? null;
+  const similarity = selectedProductId ? await resolveSimilarListingSet(db, selectedProductId) : null;
+  const comparableProductIds = similarity?.comparable_product_ids ?? [];
+  const products = comparableProductIds.length
+    ? (await c.products.find({ product_id: { $in: comparableProductIds }, is_sarthi_eligible: 1 }).toArray())
+      .sort((left: any, right: any) => comparableProductIds.indexOf(left.product_id) - comparableProductIds.indexOf(right.product_id))
+    : await c.products.find({ cluster_id: clusterId, is_sarthi_eligible: 1 }).toArray();
+  const evidenceVersion = await graphEvidenceVersion(db, buyerId, products, sourceHealthValue);
+  const cacheKey = stableDataCacheKey("cluster_knowledge_graph", {
+    cache_version: GRAPH_CACHE_VERSION,
+    buyer_id: buyerId,
+    cluster_id: clusterId,
+    selected_product_id: selectedProductId ?? null,
+    selected_variant_id: selectedVariant?.variant_id ?? selectedVariantId ?? null,
+    selected_size: selectedSize,
+    comparable_product_ids: products.map((product: any) => product.product_id),
+    evidence_version: evidenceVersion
+  });
+
+  return {
+    cache_key: cacheKey,
+    cache_version: GRAPH_CACHE_VERSION,
+    ttl_seconds: Math.floor(GRAPH_CACHE_TTL_MS / 1000),
+    evidence_version: evidenceVersion,
+    source_health: sourceHealthValue,
+    cluster,
+    selected_variant: selectedVariant,
+    selected_size: selectedSize,
+    similarity,
+    products
+  };
+}
+
+async function graphEvidenceVersion(db: Db, buyerId: string, products: any[], health: any) {
+  const c = collections(db);
+  const productIds = products.map((product: any) => product.product_id).filter(Boolean);
+  const sellerIds = [...new Set(products.map((product: any) => product.seller_id).filter(Boolean))];
+  const variants = productIds.length
+    ? await c.variants.find({ product_id: { $in: productIds } }).toArray()
+    : [];
+  const variantIds = variants.map((variant: any) => variant.variant_id).filter(Boolean);
+  const [
+    outcomes,
+    reviews,
+    proofRequests,
+    proofAssets,
+    priceEvents,
+    campaigns,
+    inventory,
+    fitProfiles,
+    fitMemory,
+    sellerProfiles,
+    featureWeights
+  ] = await Promise.all([
+    variantIds.length ? c.outcomes.find({ variant_id: { $in: variantIds } }).toArray() : Promise.resolve([]),
+    productIds.length ? c.reviews.find({ product_id: { $in: productIds } }).toArray() : Promise.resolve([]),
+    productIds.length ? c.proofRequests.find({ product_id: { $in: productIds }, status: { $in: ["open", "submitted"] } }).toArray() : Promise.resolve([]),
+    productIds.length ? c.sellerEvidenceAssets.find({ product_id: { $in: productIds }, status: { $in: ["submitted", "verified"] } }).toArray() : Promise.resolve([]),
+    variantIds.length ? c.priceEvents.find({ variant_id: { $in: variantIds } }).toArray() : Promise.resolve([]),
+    variantIds.length ? c.campaigns.find({ variant_id: { $in: variantIds } }).toArray() : Promise.resolve([]),
+    variantIds.length ? c.inventorySnapshots.find({ variant_id: { $in: variantIds } }).toArray() : Promise.resolve([]),
+    c.buyerFitProfiles.find({ buyer_id: buyerId }).toArray(),
+    c.fitMemory.find({ buyer_id: buyerId }).toArray(),
+    sellerIds.length ? c.sellerProfiles.find({ seller_id: { $in: sellerIds } }).toArray() : Promise.resolve([]),
+    c.featureWeights.find({ active: { $ne: 0 } }).toArray()
+  ]);
+
+  return cacheDigest({
+    source_health: (health?.sources ?? []).map((source: any) => pickStable(source, ["source_id", "last_synced_at", "effective_status", "status"])),
+    products: rowsForVersion(products, ["product_id", "seller_id", "title", "category", "garment_type", "fabric", "color_family", "base_price", "rating", "rating_count", "source_refs", "quality_signals", "media_evidence", "fulfillment"]),
+    variants: rowsForVersion(variants, ["variant_id", "product_id", "size", "current_price", "stock"]),
+    outcomes: rowsForVersion(outcomes, ["order_id", "variant_id", "status", "return_reason", "fact_id", "created_at"]),
+    reviews: rowsForVersion(reviews, ["review_id", "product_id", "reviewer_buyer_id", "rating", "verified_purchase", "credibility_weight", "credibility_flags", "created_at", "fact_id"]),
+    proof_requests: rowsForVersion(proofRequests, ["request_id", "buyer_id", "seller_id", "product_id", "variant_id", "attribute", "status", "request_count", "updated_at", "created_at"]),
+    proof_assets: rowsForVersion(proofAssets, ["proof_id", "seller_id", "product_id", "attribute", "proof_type", "status", "fact_id", "reviewed_at", "submitted_at", "created_at"]),
+    price_events: rowsForVersion(priceEvents, ["price_event_id", "variant_id", "price", "event_type", "created_at", "fact_id"]),
+    campaigns: rowsForVersion(campaigns, ["campaign_id", "variant_id", "start_at", "end_at", "timer_reset_count", "fact_id"]),
+    inventory: rowsForVersion(inventory, ["snapshot_id", "variant_id", "available_to_promise", "sales_velocity_24h", "captured_at", "fact_id"]),
+    fit_profiles: rowsForVersion(fitProfiles, ["profile_id", "buyer_id", "active", "label", "relationship", "preferred_fit", "size_map", "updated_at"]),
+    fit_memory: rowsForVersion(fitMemory, ["memory_id", "buyer_id", "category", "anchor_variant_id", "retained_size", "preferred_fit", "confidence", "updated_at"]),
+    seller_profiles: rowsForVersion(sellerProfiles, ["seller_id", "verification_status", "gst_status", "kyc_status", "pickup_pincode", "data_access_level", "restricted_reason", "last_verified_at"]),
+    feature_weights: rowsForVersion(featureWeights, ["category", "version", "active", "weights"])
+  });
+}
+
+function withGraphCacheState(graph: any, status: "hit" | "miss", plan: GraphCachePlan) {
+  return {
+    ...graph,
+    summary: {
+      ...graph.summary,
+      cache: {
+        status,
+        cache_key: plan.cache_key,
+        cache_version: plan.cache_version,
+        evidence_version: plan.evidence_version,
+        ttl_seconds: plan.ttl_seconds
+      }
+    }
+  };
+}
+
+function isCachedGraphPayload(value: unknown): value is { graph: any } {
+  return Boolean(value && typeof value === "object" && (value as any).cache_version === GRAPH_CACHE_VERSION && (value as any).graph);
+}
+
+function cacheDigest(payload: Record<string, unknown>) {
+  return stableDataCacheKey("graph_evidence_version", payload).split(":")[1] ?? "unknown";
+}
+
+function rowsForVersion(rows: any[], fields: string[]) {
+  return rows
+    .map((row) => pickStable(row, fields))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+
+function pickStable(row: any, fields: string[]) {
+  return Object.fromEntries(fields.map((field) => [field, row?.[field] ?? null]));
+}
+
+function selectGraphVariant(variants: any[], productId: string, selectedVariant: any | null, selectedSize: string | null) {
+  if (selectedVariant?.product_id === productId) {
+    return variants.find((variant: any) => variant.variant_id === selectedVariant.variant_id) ?? null;
+  }
+  if (selectedSize) {
+    const sameSize = variants.find((variant: any) => normalizeGraphSize(variant.size) === normalizeGraphSize(selectedSize));
+    if (sameSize) return sameSize;
+  }
+  return variants.find((variant: any) => variant.size === "XL") ?? variants[0] ?? null;
+}
+
+function normalizeGraphSize(value: unknown) {
+  return String(value ?? "").trim().toUpperCase().replace(/\s+/g, "_");
 }
 
 export function matchedEvidencePaths(graph: any, query: string, matchedNodeIds: string[] = [], highlightedEdgeIds: string[] = []) {
