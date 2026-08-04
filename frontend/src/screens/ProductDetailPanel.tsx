@@ -34,11 +34,9 @@ import type {
   CartConfidenceResponse,
   CompareResponse,
   ExpectationContract,
-  FitConfidenceLayer,
   KeepConfidenceResponse,
   Product,
   ProductDetailResponse,
-  SkuTruthCard,
   Variant,
   EvidenceAnswerAction
 } from "../types/api";
@@ -96,6 +94,7 @@ export function ProductDetailPanel({
   onRetryGraph: () => void;
 }) {
   const [detail, setDetail] = useState<ProductDetailResponse | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState(initialVariantId ?? "");
   const [query, setQuery] = useState("Mera usual size L hai, chest tight toh nahi hoga?");
   const [answer, setAnswer] = useState<AgentResponse | null>(null);
@@ -130,22 +129,43 @@ export function ProductDetailPanel({
   const proofPanelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setContractError(null);
     setKeepConfidence(null);
     setCartConfidence(null);
+    setDetailError(null);
+
+    const applyPayload = (payload: ProductDetailResponse) => {
+      if (cancelled) return;
+      setDetail(payload);
+      const initialVariant = initialVariantId
+        ? payload.variants.find((variant) => variant.variant_id === initialVariantId)
+        : null;
+      const nextVariantId = initialVariant?.variant_id ?? payload.selected_variant.variant_id;
+      setSelectedVariantId(nextVariantId);
+      if (nextVariantId && nextVariantId !== initialVariantId) {
+        onVariantChange(nextVariantId);
+      }
+      setKeepConfidence(payload.keep_confidence.variant_id === nextVariantId ? payload.keep_confidence : null);
+    };
+
     getProductDetail(buyerId, productId, initialVariantId)
-      .then((payload) => {
-        setDetail(payload);
-        const initialVariant = initialVariantId
-          ? payload.variants.find((variant) => variant.variant_id === initialVariantId)
-          : null;
-        const nextVariantId = initialVariant?.variant_id ?? payload.selected_variant.variant_id;
-        setSelectedVariantId(nextVariantId);
-        if (nextVariantId && nextVariantId !== initialVariantId) {
-          onVariantChange(nextVariantId);
+      .then(applyPayload)
+      .catch(async (err: Error) => {
+        if (initialVariantId) {
+          try {
+            const fallbackPayload = await getProductDetail(buyerId, productId, null);
+            applyPayload(fallbackPayload);
+            return;
+          } catch {
+            // The original error is more useful because it contains the routed SKU.
+          }
         }
-        setKeepConfidence(payload.keep_confidence.variant_id === nextVariantId ? payload.keep_confidence : null);
+        if (!cancelled) setDetailError(err.message || "Unable to load this product.");
       });
+    return () => {
+      cancelled = true;
+    };
   }, [buyerId, productId, initialVariantId, onVariantChange]);
 
   useEffect(() => {
@@ -250,6 +270,21 @@ export function ProductDetailPanel({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [skuProofModalOpen]);
+
+  if (detailError) {
+    return (
+      <div className="product-detail-shell product-detail-error-state">
+        <button type="button" onClick={onBack} aria-label={t(language, "backToCatalog")}>
+          <ArrowLeft size={18} />
+          {t(language, "backToCatalog")}
+        </button>
+        <section className="notice error">
+          <strong>Product could not be opened</strong>
+          <span>{detailError}</span>
+        </section>
+      </div>
+    );
+  }
 
   if (!detail) {
     return (
@@ -373,6 +408,9 @@ export function ProductDetailPanel({
   const proofActionLabel = proofRequestActionLabel(language, proofRequested, proofRequesting);
   const shouldOfferProofRequest = detail.trust_state.missing_data.length > 0 || !detail.trust_state.can_recommend;
   const answerProofAction = answer?.answer.primary_action?.type === "ask_proof" ? answer.answer.primary_action : null;
+  const selectedAvoidableIssue = selectedKeepConfidence
+    ? avoidableIssueFromConfidence(selectedKeepConfidence)
+    : null;
 
   function handleSelectVariant(nextVariantId: string) {
     if (nextVariantId === selectedVariantId) return;
@@ -770,10 +808,10 @@ export function ProductDetailPanel({
               <span>{sizeSelectionHint(selectedVariant.size, selectedRecommendedSize, language)}</span>
             </div>
 
-            {detail.avoidable_issue && (
+            {selectedAvoidableIssue && (
               <div className="avoidable-issue-inline">
                 <AlertTriangle size={15} />
-                <span><strong>{detail.avoidable_issue.title}:</strong> {detail.avoidable_issue.action}</span>
+                <span><strong>{selectedAvoidableIssue.title}:</strong> {selectedAvoidableIssue.action}</span>
               </div>
             )}
 
@@ -990,14 +1028,15 @@ function ProductMediaGallery({ product }: { product: Product }) {
   }
 
   return (
-    <div className="detail-product-gallery" aria-label={`Product photos for ${product.title}`}>
+    <div className="detail-product-gallery" role="group" aria-label={`Product photos for ${product.title}`}>
       <div className="detail-gallery-thumbs" aria-label="Photo thumbnails">
         {images.map((image, index) => (
           <button
             key={`${image}-${index}`}
             type="button"
             className={index === safeIndex ? "active" : ""}
-            aria-label={`Show ${labels[index] ?? `photo ${index + 1}`}`}
+            aria-label={`View product photo ${index + 1}`}
+            title={labels[index] ?? `Photo ${index + 1}`}
             aria-pressed={index === safeIndex}
             onClick={() => setActiveImageIndex(index)}
           >
@@ -1022,7 +1061,7 @@ function ProductMediaGallery({ product }: { product: Product }) {
             <button type="button" onClick={() => shiftImage(-1)} aria-label="Previous product photo">
               <ChevronLeft size={16} />
             </button>
-            <span>{safeIndex + 1}/{images.length}</span>
+            <span>{safeIndex + 1} / {images.length}</span>
             <button type="button" onClick={() => shiftImage(1)} aria-label="Next product photo">
               <ChevronRight size={16} />
             </button>
@@ -1247,7 +1286,7 @@ function KeepConfidenceCard({
           className="btn-toggle-drivers"
           onClick={() => setShowDrivers(!showDrivers)}
         >
-          {showDrivers ? "Hide evidence signals ▲" : `View ${confidence.drivers.length} trust signals ▼`}
+          {showDrivers ? "Hide evidence signals" : `View ${confidence.drivers.length} trust signals`}
         </button>
         <button
           type="button"
@@ -1501,6 +1540,19 @@ function sizeSelectionHint(selectedSize: string, recommendedSize: string | null 
     return <>Selected size <strong>{selected}</strong> hai. Safer size <strong>{recommended}</strong> dikh raha hai.</>;
   }
   return <>Selected size <strong>{selected}</strong> differs. Safer size looks like <strong>{recommended}</strong>.</>;
+}
+
+function avoidableIssueFromConfidence(confidence: KeepConfidenceResponse) {
+  const issueDriver = confidence.drivers.find((driver) => driver.type === "avoidable_issue");
+  if (!issueDriver) return null;
+  const issueFacts = new Set(issueDriver.fact_ids ?? []);
+  const linkedAction = confidence.interventions.find((intervention) =>
+    (intervention.fact_ids ?? []).some((factId) => issueFacts.has(factId))
+  );
+  return {
+    title: issueDriver.label,
+    action: linkedAction?.reason ?? linkedAction?.label ?? "Check the selected size evidence before checkout."
+  };
 }
 
 function proofRequestActionLabel(language: LanguageCode, requested: boolean, requesting: boolean) {

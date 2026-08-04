@@ -129,7 +129,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [priceMax, setPriceMax] = useState<number | "">("");
   const [proofProductIds, setProofProductIds] = useState<Set<string>>(new Set());
 
-  const safetyProgressOpen = autoScan.status === "scanning";
+  const safetyProgressOpen = autoScan.status === "scanning" && step !== "saved";
 
   useEffect(() => {
     if (!compareSheetOpen && !auditDrawerOpen && !safetyProgressOpen) return;
@@ -280,7 +280,15 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       setStep("proofs");
       return;
     }
-    if (!routeProductId || products.length === 0) return;
+    if (!routeProductId) return;
+    if (products.length === 0) {
+      if (routeMode === "detail") {
+        setSelectedProductId(routeProductId);
+        setSelectedVariantId(routeVariantId);
+        setStep("detail");
+      }
+      return;
+    }
 
     const routeProduct = products.find((product) => product.product_id === routeProductId);
     if (!routeProduct) {
@@ -413,7 +421,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             setSafetyCheckingProduct(null);
             resolve();
           }
-        }, 400);
+        }, 240);
       });
     }
 
@@ -515,8 +523,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     });
   }
 
-  async function handleOpenProofForProduct(product: Product) {
-    await handleWishlistProduct(product);
+  function handleOpenProofForProduct(product: Product) {
     openSavedProofLayer(product);
   }
 
@@ -617,10 +624,18 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     void loadKnowledgeGraphForProduct(product, variantId);
   }, [loadKnowledgeGraphForProduct, products, selectedProductId, wishlistedProduct]);
 
-  function openSavedProofLayer(product = wishlistedProduct) {
+  function openSavedProofLayer(product = wishlistedProduct, options: { refresh?: boolean } = {}) {
     if (!product) return;
+    setWishlistedProduct(product);
+    setSelectedClusterId(product.cluster_id);
+    setSelectedProductId(null);
+    setCompareSheetOpen(false);
+    hydratedSavedRouteRef.current = product.product_id;
     setStep("saved");
     navigate(`/shop/saved/${encodeURIComponent(product.product_id)}?proof=1`);
+    if (options.refresh ?? true) {
+      void handleWishlistProduct(product, { syncRoute: false });
+    }
   }
 
   return (
@@ -660,7 +675,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           language={language}
           onBack={() => navigate("/shop")}
           onViewProduct={(product) => handleViewProductDetail(product.product_id, null)}
-          onCheckTrust={(product) => handleWishlistProduct(product, { openCompare: true })}
+          onCheckTrust={(product) => openSavedProofLayer(product)}
           onOpenProof={handleOpenProofForProduct}
         />
       ) : step === "orders" ? (
@@ -748,7 +763,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
         )
       )}
 
-      {autoScan.status === "scanning" && !safetyCheckingProduct && (
+      {safetyProgressOpen && !safetyCheckingProduct && (
         <div className="buyer-safety-progress-backdrop">
           <section className="buyer-safety-progress" role="status" aria-label="Checking product safety" aria-live="assertive">
             <span className="buyer-safety-spinner" aria-hidden="true" />

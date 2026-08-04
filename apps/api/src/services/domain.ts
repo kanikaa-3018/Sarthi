@@ -2259,7 +2259,8 @@ export async function computeKeepConfidence(db: Db, buyerId: string, variantId: 
   }
 
   if (issue) {
-    const issueAction = ["too_small", "too_large"].includes(issue.reason) && recommendedVariant
+    const saferSizeIsDifferent = Boolean(recommendedVariant && selectedSize && selectedSize !== fit.recommended_size);
+    const issueAction = ["too_small", "too_large"].includes(issue.reason) && saferSizeIsDifferent
       ? "change_size"
       : "review_evidence";
     const issueType: KeepConfidenceIntervention["type"] = issueAction === "change_size" ? "change_size" : "check_proof";

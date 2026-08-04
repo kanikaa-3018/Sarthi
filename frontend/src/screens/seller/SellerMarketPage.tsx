@@ -1,5 +1,6 @@
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { roleText, type LanguageCode } from "../../i18n";
 import type { SellerPanelListing } from "../../types/api";
 import { buildMarketComparison, type SellerActionItem } from "./sellerModel";
 import { SellerProductImage } from "./SellerProductImage";
@@ -9,11 +10,13 @@ type SellerMarketPageProps = {
   competitors: SellerPanelListing[];
   actions: SellerActionItem[];
   initialProductId?: string | null;
+  language: LanguageCode;
   onAction: (action: SellerActionItem) => void;
 };
 
-export function SellerMarketPage({ listings, competitors, actions, initialProductId, onAction }: SellerMarketPageProps) {
+export function SellerMarketPage({ listings, competitors, actions, initialProductId, language, onAction }: SellerMarketPageProps) {
   const [selectedId, setSelectedId] = useState(initialProductId ?? listings[0]?.product.product_id ?? "");
+  const tx = (text: string) => roleText(language, text);
   const selected = listings.find((listing) => listing.product.product_id === selectedId) ?? listings[0];
 
   useEffect(() => {
@@ -32,13 +35,13 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
     <div className="seller-page seller-market-page">
       <header className="seller-page-header">
         <div>
-          <p className="seller-kicker">Comparable listings</p>
-          <h2>Market Compare</h2>
-          <p>See where one product stands, the facts behind that position, and the improvement worth doing first.</p>
+          <p className="seller-kicker">{tx("Comparable listings")}</p>
+          <h2>{tx("Market Compare")}</h2>
+          <p>{tx("See where one product stands, the facts behind that position, and the improvement worth doing first.")}</p>
         </div>
         {listings.length > 0 && (
           <label className="seller-product-select">
-            <span className="seller-product-select-label">Product to compare</span>
+            <span className="seller-product-select-label">{tx("Product to compare")}</span>
             <span className="seller-product-select-control">
               <select value={selected?.product.product_id ?? ""} onChange={(event) => setSelectedId(event.target.value)}>
                 {listings.map((listing) => <option key={listing.product.product_id} value={listing.product.product_id}>{listing.product.title}</option>)}
@@ -50,13 +53,13 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
       </header>
 
       {!selected || !comparison ? (
-        <div className="seller-empty-state"><h3>No comparable product is available</h3><p>Add a listing before reviewing its market evidence.</p></div>
+        <div className="seller-empty-state"><h3>{tx("No comparable product is available")}</h3><p>{tx("Add a listing before reviewing its market evidence.")}</p></div>
       ) : (
         <>
           <section className="seller-market-position" aria-labelledby="seller-market-position-title">
             <div className="seller-market-recommendation seller-market-next" aria-labelledby="seller-market-recommendation-title">
               <div>
-                <p className="seller-kicker">Best next improvement</p>
+                <p className="seller-kicker">{tx("Best next improvement")}</p>
                 <h3 id="seller-market-recommendation-title">{comparison.recommendation.title}</h3>
                 <p>{comparison.recommendation.reason}</p>
                 <small>{comparison.recommendation.meta}</small>
@@ -65,20 +68,20 @@ export function SellerMarketPage({ listings, competitors, actions, initialProduc
             </div>
             <div className="seller-market-product">
               <SellerProductImage src={selected.product.image_url} title={selected.product.title} size="market" />
-              <div><span>Your listing</span><h3>{selected.product.title}</h3><p>{selected.seller.name}</p></div>
+              <div><span>{tx("Your listing")}</span><h3>{selected.product.title}</h3><p>{selected.seller.name}</p></div>
             </div>
             <div className="seller-market-position-copy">
-              <p className="seller-kicker">Current position</p>
+              <p className="seller-kicker">{tx("Current position")}</p>
               <h3 id="seller-market-position-title">{comparison.position}</h3>
               <p>{comparison.reason}</p>
             </div>
           </section>
 
           <section className="seller-market-evidence" aria-labelledby="seller-market-evidence-title">
-            <div className="seller-section-heading"><div><p className="seller-kicker">Why this position</p><h3 id="seller-market-evidence-title">Evidence comparison</h3></div></div>
+            <div className="seller-section-heading"><div><p className="seller-kicker">{tx("Why this position")}</p><h3 id="seller-market-evidence-title">{tx("Evidence comparison")}</h3></div></div>
             <div className="seller-market-table-wrap">
               <table aria-label="Market evidence comparison">
-                <thead><tr><th>Dimension</th><th>Your listing</th><th>Comparable listings</th></tr></thead>
+                <thead><tr><th>{tx("Dimension")}</th><th>{tx("Your listing")}</th><th>{tx("Comparable listings")}</th></tr></thead>
                 <tbody>{comparison.dimensions.map((dimension) => <tr key={dimension.label}><th>{dimension.label}</th><td className={`tone-${dimension.tone}`}>{dimension.yourValue}</td><td>{dimension.marketValue}</td></tr>)}</tbody>
               </table>
             </div>

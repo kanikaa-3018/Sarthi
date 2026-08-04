@@ -458,6 +458,104 @@
   margin: 0 !important;
 }
 
+/* Login handoff: covers role redirect and initial workspace fetch. */
+.auth-handoff-overlay {
+  align-items: center !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-canvas) 92%, transparent), var(--bg-canvas)),
+    color-mix(in srgb, var(--bg-canvas) 94%, var(--bg-surface)) !important;
+  display: flex !important;
+  inset: 0 !important;
+  justify-content: center !important;
+  padding: 24px !important;
+  position: fixed !important;
+  z-index: 80 !important;
+}
+
+.auth-handoff-card {
+  align-items: center !important;
+  background: var(--bg-surface) !important;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 22%, var(--border-subtle)) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--shadow-soft) 74%, transparent) !important;
+  display: grid !important;
+  gap: 14px !important;
+  justify-items: center !important;
+  max-width: 420px !important;
+  padding: 28px !important;
+  text-align: center !important;
+  width: min(100%, 420px) !important;
+}
+
+.auth-handoff-mark {
+  align-items: center !important;
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-subtle)) !important;
+  border-radius: 16px !important;
+  color: var(--accent-primary) !important;
+  display: inline-flex !important;
+  height: 52px !important;
+  justify-content: center !important;
+  position: relative !important;
+  width: 52px !important;
+}
+
+.auth-handoff-mark span {
+  border: 2px solid color-mix(in srgb, var(--accent-primary) 16%, transparent) !important;
+  border-radius: 999px !important;
+  border-top-color: var(--accent-primary) !important;
+  height: 36px !important;
+  inset: 7px !important;
+  position: absolute !important;
+  width: 36px !important;
+  animation: spin 900ms linear infinite !important;
+}
+
+.auth-handoff-copy {
+  display: grid !important;
+  gap: 6px !important;
+  max-width: 34ch !important;
+  min-width: 0 !important;
+}
+
+.auth-handoff-copy strong {
+  color: var(--text-primary) !important;
+  font-size: 20px !important;
+  font-weight: 880 !important;
+  line-height: 1.18 !important;
+}
+
+.auth-handoff-copy p {
+  color: var(--text-secondary) !important;
+  font-size: 13.5px !important;
+  line-height: 1.45 !important;
+  margin: 0 !important;
+}
+
+.auth-handoff-progress {
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-surface-muted)) !important;
+  border-radius: 999px !important;
+  height: 6px !important;
+  overflow: hidden !important;
+  width: 100% !important;
+}
+
+.auth-handoff-progress i {
+  background: var(--accent-primary) !important;
+  border-radius: inherit !important;
+  display: block !important;
+  height: 100% !important;
+  transform-origin: left center !important;
+  width: 100% !important;
+  animation: authHandoffProgress 1200ms var(--ease-out) infinite !important;
+}
+
+@keyframes authHandoffProgress {
+  0% { transform: scaleX(0.14); opacity: 0.76; }
+  55% { transform: scaleX(0.74); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0.72; }
+}
+
 /* ==========================================================================
    Responsive & Viewport Constraints
    ========================================================================== */

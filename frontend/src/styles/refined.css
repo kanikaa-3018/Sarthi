@@ -30985,23 +30985,6 @@ body .seller-app-route .seller-button-text {
 body .seller-app-route .seller-next-action,
 body .seller-app-route .seller-ops-workbench,
 body .seller-app-route .seller-queue-section,
-body .seller-app-route .seller-product-table-wrap,
-body .seller-app-route .seller-listing-agent-strip,
-body .seller-app-route .seller-proof-agent-brief,
-body .seller-app-route .seller-proof-agent,
-body .seller-app-route .seller-proof-queue-details {
-  border-radius: var(--radius-card) !important;
-  box-shadow: none !important;
-}
-
-body .seller-app-route .seller-next-action {
-  gap: var(--space-lg) !important;
-  padding: var(--space-lg) 0 var(--space-lg) var(--space-md) !important;
-}
-
-body .seller-app-route .seller-task-list li {
-  padding: var(--space-md) 0 !important;
-}
 
 body .seller-app-route .seller-product-table th {
   padding: var(--space-md) !important;
@@ -31177,6 +31160,7 @@ body .seller-app-route .seller-proof-studio-metrics {
   justify-content: flex-end !important;
   gap: var(--space-lg) !important;
 }
+
 
 body .seller-app-route .seller-proof-studio-metrics span {
   padding: 0 !important;

@@ -110,6 +110,13 @@ export function SarthiSavedWorkspacePanel({
   const recommendedSeller = recommendedProduct.seller_name;
   const recommendedVariantId = winnerCandidate?.variant_id ?? wishlistRadar?.recommended_variant_id ?? radarPick?.variant?.variant_id ?? null;
   const sellerOptions = uniqueProducts([recommendedProduct, savedProduct, ...similarProducts]);
+  const entryCopy = savedEntryCopy(language);
+  const hasComparableSellers = sellerOptions.length > 1;
+  const hasUsableEvidence = Boolean(result || radarPick || knowledgeGraph || regretDecision);
+  const savedCheckRefreshing = autoScan.status === "scanning" && hasUsableEvidence;
+  const sellerCountText = hasComparableSellers
+    ? `${sellerOptions.length} ${t(language, "similarSellers")}`
+    : entryCopy.oneSeller;
   const inspectedProduct = sellerOptions.find((product) => product.product_id === inspectedProductId) ?? recommendedProduct;
   const inspectedCandidate = result ? candidateForProduct(result, inspectedProduct) : null;
   const inspectedRadarCandidate = wishlistRadar?.candidates.find((candidate) => candidate.product.product_id === inspectedProduct.product_id) ?? null;
@@ -137,8 +144,9 @@ export function SarthiSavedWorkspacePanel({
       : 0;
   const inspectedIsRecommended = inspectedProduct.product_id === recommendedProduct.product_id;
   const inspectedIsSaved = inspectedProduct.product_id === savedProduct.product_id;
-  const entryCopy = savedEntryCopy(language);
-  const decisionTitle = wishlistRadar?.status === "better_option_found"
+  const decisionTitle = !hasComparableSellers
+    ? entryCopy.singleSellerDecision
+    : wishlistRadar?.status === "better_option_found"
     ? entryCopy.betterSeller
     : wishlistRadar?.status === "needs_one_check"
       ? entryCopy.askProofFirst
@@ -147,15 +155,21 @@ export function SarthiSavedWorkspacePanel({
         : autoScan.status === "scanning"
           ? entryCopy.checking
           : entryCopy.saved;
-  const decisionBody = radarPick
+  const decisionBody = !hasComparableSellers
+    ? entryCopy.singleSellerBody.replace("{seller}", savedProduct.seller_name)
+    : radarPick
     ? entryCopy.recommendReason.replace("{seller}", recommendedSeller)
     : `${t(language, "sellerChecked")}, ${t(language, "returnsChecked")}, ${t(language, "proof")}.`;
-  const inspectedDecisionTitle = inspectedIsRecommended
+  const inspectedDecisionTitle = !hasComparableSellers
+    ? entryCopy.singleSellerDecision
+    : inspectedIsRecommended
     ? entryCopy.chooseSeller.replace("{seller}", inspectedProduct.seller_name)
     : inspectedIsSaved && recommendedProduct.product_id !== savedProduct.product_id
       ? entryCopy.savedSellerNeedsCheck
       : entryCopy.inspectSeller.replace("{seller}", inspectedProduct.seller_name);
-  const inspectedDecisionBody = inspectedIsRecommended
+  const inspectedDecisionBody = !hasComparableSellers
+    ? entryCopy.singleSellerBody.replace("{seller}", inspectedProduct.seller_name)
+    : inspectedIsRecommended
     ? decisionBody
     : inspectedScore !== null
       ? entryCopy.inspectReason
@@ -192,17 +206,27 @@ export function SarthiSavedWorkspacePanel({
     {
       icon: <Store size={17} />,
       label: t(language, "sellerChecked"),
-      detail: `${inspectedProduct.seller_name} ${inspectedScore === null ? t(language, "checkingEllipsis").toLowerCase() : entryCopy.checked}`
+      detail: !hasComparableSellers
+        ? entryCopy.onlySellerAvailable.replace("{seller}", inspectedProduct.seller_name)
+        : `${inspectedProduct.seller_name} ${inspectedScore === null ? t(language, "checkingEllipsis").toLowerCase() : entryCopy.checked}`
     },
     {
       icon: <TrendingDown size={17} />,
       label: t(language, "returnsChecked"),
-      detail: returnSignal ? `${returnSignal} ${t(language, "returnRisk").toLowerCase()}` : t(language, "checkingEllipsis")
+      detail: returnSignal
+        ? `${returnSignal} ${t(language, "returnRisk").toLowerCase()}`
+        : graphLoading
+          ? t(language, "checkingEllipsis")
+          : entryCopy.returnDataThin
     },
     {
       icon: <FileSearch size={17} />,
       label: t(language, "proof"),
-      detail: inspectedProofCount > 0 ? `${inspectedProofCount} ${t(language, "facts")} ${t(language, "checked")}` : t(language, "checkingProof")
+      detail: inspectedProofCount > 0
+        ? `${inspectedProofCount} ${t(language, "facts")} ${t(language, "checked")}`
+        : graphLoading
+          ? t(language, "checkingProof")
+          : entryCopy.proofNotReady
     }
   ];
 
@@ -231,14 +255,15 @@ export function SarthiSavedWorkspacePanel({
             <p>
               <strong>{savedProduct.title.split("-")[0].trim()}</strong>
               <span>Rs {savedProduct.base_price}</span>
-              <span>{similarSellerCount} {t(language, "similarSellers")}</span>
+              <span>{sellerCountText}</span>
+              {savedCheckRefreshing && <span>{entryCopy.refreshingQuietly}</span>}
             </p>
           </div>
         </div>
 
         <div className="buyer-simple-score" aria-label={t(language, "trustReceipt")}>
           <strong>{score ?? "--"}</strong>
-          <span>{score === null ? t(language, "checkingEllipsis") : t(language, "trustReceipt")}</span>
+          <span>{score === null ? entryCopy.proofCheck : t(language, "trustReceipt")}</span>
         </div>
       </header>
 
@@ -251,7 +276,7 @@ export function SarthiSavedWorkspacePanel({
               : entryCopy.singleSeller}
           </strong>
           <small>
-            {sellerOptions.length > 1
+            {hasComparableSellers
               ? `${sellerOptions.length} ${t(language, "similarSellers")} ${entryCopy.mappedByEvidence}`
               : entryCopy.onlySellerCheck}
           </small>
@@ -280,7 +305,7 @@ export function SarthiSavedWorkspacePanel({
                   <small>{isRecommended ? entryCopy.recommendedSeller : isSaved ? entryCopy.savedSeller : entryCopy.otherSeller}</small>
                 </span>
                 <em className={optionScore === null ? "unknown" : scoreTone(optionScore)}>
-                  {optionScore ?? "--"}
+                  {optionScore ?? (hasComparableSellers ? "--" : entryCopy.proofCheck)}
                 </em>
               </button>
             );
@@ -331,17 +356,25 @@ export function SarthiSavedWorkspacePanel({
             >
               {inspectedIsRecommended ? entryCopy.continueWithPick : entryCopy.viewSeller}
             </button>
-            <button type="button" onClick={() => result && onOpenResult(result)} disabled={!result}>
-              {result ? entryCopy.compareSellers : t(language, "checkingEllipsis")}
+            <button
+              type="button"
+              onClick={() => hasComparableSellers ? result && onOpenResult(result) : setDetailsOpen((open) => !open)}
+              disabled={hasComparableSellers && !result}
+            >
+              {hasComparableSellers
+                ? result ? entryCopy.compareSellers : entryCopy.preparingCompare
+                : detailsOpen ? entryCopy.hideDetails : entryCopy.checkProof}
             </button>
             <button type="button" onClick={() => setGraphDrawerOpen(true)} disabled={!knowledgeGraph && graphLoading}>
               <FileSearch size={15} aria-hidden="true" />
               {!knowledgeGraph && graphLoading ? "Graph loading" : "Graph chat"}
             </button>
-            <button type="button" onClick={() => setDetailsOpen((open) => !open)}>
-              {detailsOpen ? entryCopy.hideDetails : entryCopy.showDetails}
-              <ChevronDown size={15} aria-hidden="true" />
-            </button>
+            {hasComparableSellers && (
+              <button type="button" onClick={() => setDetailsOpen((open) => !open)}>
+                {detailsOpen ? entryCopy.hideDetails : entryCopy.showDetails}
+                <ChevronDown size={15} aria-hidden="true" />
+              </button>
+            )}
           </div>
         </section>
 
@@ -754,6 +787,9 @@ type SavedEntryCopyKey =
   | "readyToCompare"
   | "checking"
   | "saved"
+  | "oneSeller"
+  | "proofCheck"
+  | "refreshingQuietly"
   | "recommendReason"
   | "chooseSeller"
   | "checked"
@@ -764,6 +800,8 @@ type SavedEntryCopyKey =
   | "continueWithPick"
   | "viewSeller"
   | "compareSellers"
+  | "preparingCompare"
+  | "checkProof"
   | "showDetails"
   | "hideDetails"
   | "sameItemOptions"
@@ -771,6 +809,11 @@ type SavedEntryCopyKey =
   | "singleSeller"
   | "mappedByEvidence"
   | "onlySellerCheck"
+  | "onlySellerAvailable"
+  | "singleSellerDecision"
+  | "singleSellerBody"
+  | "returnDataThin"
+  | "proofNotReady"
   | "savedSellerNeedsCheck"
   | "inspectSeller"
   | "inspectReason"
@@ -788,6 +831,9 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     readyToCompare: "Best seller is ready",
     checking: "Checking this product",
     saved: "Saved for trust check",
+    oneSeller: "1 seller",
+    proofCheck: "Proof check",
+    refreshingQuietly: "Refreshing proof quietly",
     recommendReason: "{seller} looks stronger on returns, proof, and price.",
     chooseSeller: "Choose {seller}",
     checked: "checked",
@@ -798,6 +844,8 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     continueWithPick: "Continue with pick",
     viewSeller: "View this seller",
     compareSellers: "Compare sellers",
+    preparingCompare: "Preparing comparison",
+    checkProof: "Check proof",
     showDetails: "Show proof details",
     hideDetails: "Hide details",
     sameItemOptions: "Same item options",
@@ -805,6 +853,11 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     singleSeller: "Only one seller found",
     mappedByEvidence: "mapped by catalog and proof evidence.",
     onlySellerCheck: "No comparable seller is available yet. Sarthi will focus on proof and returns.",
+    onlySellerAvailable: "{seller} is the only mapped seller for this catalog match.",
+    singleSellerDecision: "Check proof for this seller",
+    singleSellerBody: "{seller} is the only mapped seller right now, so Sarthi checks proof, returns, reviews, and fit risk instead of comparing sellers.",
+    returnDataThin: "Return history is still thin for this exact listing.",
+    proofNotReady: "Seller proof can be requested if a claim is unclear.",
     savedSellerNeedsCheck: "Saved seller needs one check",
     inspectSeller: "Inspect {seller}",
     inspectReason: "{seller} is scoring {score}/100. Check proof before you continue.",
@@ -821,6 +874,9 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     readyToCompare: "Best seller ready hai",
     checking: "Product check ho raha hai",
     saved: "Trust check ke liye saved",
+    oneSeller: "1 seller",
+    proofCheck: "Proof check",
+    refreshingQuietly: "Proof quietly refresh ho raha hai",
     recommendReason: "{seller} returns, proof, aur price me stronger lagta hai.",
     chooseSeller: "{seller} choose karo",
     checked: "checked",
@@ -831,6 +887,8 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     continueWithPick: "Pick continue karo",
     viewSeller: "Is seller ko dekho",
     compareSellers: "Sellers compare karo",
+    preparingCompare: "Comparison ready ho raha hai",
+    checkProof: "Proof check karo",
     showDetails: "Proof details dekho",
     hideDetails: "Details hide karo",
     sameItemOptions: "Same item options",
@@ -838,6 +896,11 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     singleSeller: "Sirf ek seller mila",
     mappedByEvidence: "catalog aur proof evidence se mapped.",
     onlySellerCheck: "Abhi comparable seller nahi hai. Sarthi proof aur returns check karega.",
+    onlySellerAvailable: "{seller} is catalog match ka only mapped seller hai.",
+    singleSellerDecision: "Is seller ka proof check karo",
+    singleSellerBody: "{seller} abhi only mapped seller hai, isliye Sarthi seller compare karne ke bajay proof, returns, reviews, aur fit risk check karta hai.",
+    returnDataThin: "Is listing ke liye return history abhi thin hai.",
+    proofNotReady: "Claim unclear ho to seller proof request kar sakte ho.",
     savedSellerNeedsCheck: "Saved seller ko ek check chahiye",
     inspectSeller: "{seller} inspect karo",
     inspectReason: "{seller} ka score {score}/100 hai. Continue se pehle proof check karo.",
@@ -854,6 +917,9 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     readyToCompare: "Best seller ready hai",
     checking: "Product check ho raha hai",
     saved: "Trust check ke liye saved",
+    oneSeller: "1 seller",
+    proofCheck: "Proof check",
+    refreshingQuietly: "Proof quietly refresh ho raha hai",
     recommendReason: "{seller} returns, proof, aur price me stronger lagta hai.",
     chooseSeller: "Choose {seller}",
     checked: "checked",
@@ -864,6 +930,8 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     continueWithPick: "Continue with pick",
     viewSeller: "View this seller",
     compareSellers: "Compare sellers",
+    preparingCompare: "Preparing comparison",
+    checkProof: "Check proof",
     showDetails: "Proof details dekho",
     hideDetails: "Hide details",
     sameItemOptions: "Same item options",
@@ -871,6 +939,11 @@ const SAVED_ENTRY_COPY: Record<LanguageCode, Record<SavedEntryCopyKey, string>> 
     singleSeller: "Only one seller found",
     mappedByEvidence: "catalog aur proof evidence se mapped.",
     onlySellerCheck: "Comparable seller nahi mila. Sarthi proof aur returns pe focus karega.",
+    onlySellerAvailable: "{seller} is catalog match ka only mapped seller hai.",
+    singleSellerDecision: "Check proof for this seller",
+    singleSellerBody: "{seller} abhi only mapped seller hai, so Sarthi seller compare ke bajay proof, returns, reviews, aur fit risk check karta hai.",
+    returnDataThin: "Return history is still thin for this listing.",
+    proofNotReady: "Claim unclear ho to seller proof request kar sakte ho.",
     savedSellerNeedsCheck: "Saved seller needs one check",
     inspectSeller: "Inspect {seller}",
     inspectReason: "{seller} score {score}/100 hai. Continue se pehle proof check karo.",

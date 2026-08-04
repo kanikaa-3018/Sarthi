@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, Check, ImageOff, PencilLine, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { parseListingWithAi } from "../../api/client";
+import { roleText, type LanguageCode } from "../../i18n";
 import type { ListingDraft, SellerOnboardingResponse } from "../../types/api";
 import { SellerVerificationPanel, type SellerVerificationSubmission } from "./SellerVerificationPanel";
 
@@ -20,6 +21,7 @@ type SellerListingFlowProps = {
   submitting: boolean;
   verificationSubmitting: boolean;
   verificationError: string | null;
+  language: LanguageCode;
   onCreateDraft: (draft: SellerListingDraftInput) => Promise<boolean>;
   onUpdateDraft: (draftId: string, draft: SellerListingDraftInput) => Promise<boolean>;
   onSubmitDraft: (draft: ListingDraft) => Promise<void>;
@@ -47,6 +49,7 @@ export function SellerListingFlow({
   submitting,
   verificationSubmitting,
   verificationError,
+  language,
   onCreateDraft,
   onUpdateDraft,
   onSubmitDraft,
@@ -54,6 +57,7 @@ export function SellerListingFlow({
   onEditDraft,
   onCancelEdit
 }: SellerListingFlowProps) {
+  const tx = (text: string) => roleText(language, text);
   const [stage, setStage] = useState(1);
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [errors, setErrors] = useState<DraftErrors>({});
@@ -67,7 +71,7 @@ export function SellerListingFlow({
 
   async function handleAgentFill() {
     if (!agentPrompt.trim() || agentPrompt.trim().length < 8) {
-      setAiError("Enter at least a short product description before parsing.");
+      setAiError(tx("Enter at least a short product description before parsing."));
       return;
     }
     setAiLoading(true);
@@ -78,19 +82,19 @@ export function SellerListingFlow({
       const updates: Partial<DraftState> = {};
       const notes: string[] = [];
       
-      if (result.title) { updates.title = result.title; notes.push("Title"); }
-      if (result.category) { updates.category = result.category; notes.push("Category"); }
-      if (result.garment_type) { updates.garment_type = result.garment_type; notes.push("Garment Type"); }
-      if (result.fabric) { updates.fabric = result.fabric; notes.push("Fabric"); }
-      if (result.color_family) { updates.color_family = result.color_family; notes.push("Colour"); }
-      if (result.base_price) { updates.base_price = String(result.base_price); notes.push("Price"); }
-      if (result.image_url) { updates.image_url = result.image_url; notes.push("Image Link"); }
+      if (result.title) { updates.title = result.title; notes.push(tx("Title")); }
+      if (result.category) { updates.category = result.category; notes.push(tx("Category")); }
+      if (result.garment_type) { updates.garment_type = result.garment_type; notes.push(tx("Garment Type")); }
+      if (result.fabric) { updates.fabric = result.fabric; notes.push(tx("Fabric")); }
+      if (result.color_family) { updates.color_family = result.color_family; notes.push(tx("Colour")); }
+      if (result.base_price) { updates.base_price = String(result.base_price); notes.push(tx("Price")); }
+      if (result.image_url) { updates.image_url = result.image_url; notes.push(tx("Image Link")); }
       
       setDraft((current) => ({ ...current, ...updates }));
-      setAgentNotes(notes.length ? [`Auto-filled: ${notes.join(", ")}`] : ["Extracted details successfully."]);
+      setAgentNotes(notes.length ? [`${tx("Auto-filled")}: ${notes.join(", ")}`] : [tx("Extracted details successfully.")]);
       setErrors({});
     } catch (err: any) {
-      setAiError(err.message || "Failed to extract product details using AI. Please fill fields manually.");
+      setAiError(err.message || tx("Failed to extract product details using AI. Please fill fields manually."));
     } finally {
       setAiLoading(false);
     }
@@ -118,7 +122,7 @@ export function SellerListingFlow({
   }
 
   function continueFromBasics() {
-    const nextErrors = validateBasics(draft);
+    const nextErrors = validateBasics(draft, tx);
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       focusFirstError(nextErrors, formRef.current);
@@ -129,7 +133,7 @@ export function SellerListingFlow({
 
   function continueFromImage() {
     if (!isAllowedImageReference(draft.image_url)) {
-      const nextErrors = { image_url: "Add a current product image or secure image link." };
+      const nextErrors = { image_url: tx("Add a current product image or secure image link.") };
       setErrors(nextErrors);
       focusFirstError(nextErrors, formRef.current);
       return;
@@ -168,7 +172,7 @@ export function SellerListingFlow({
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/") || file.size > 1_500_000) {
-      setErrors((current) => ({ ...current, image_url: "Use a JPG, PNG, or WebP image under 1.5 MB." }));
+      setErrors((current) => ({ ...current, image_url: tx("Use a JPG, PNG, or WebP image under 1.5 MB.") }));
       event.currentTarget.value = "";
       return;
     }
@@ -179,23 +183,23 @@ export function SellerListingFlow({
     <div className="seller-page seller-listing-page" ref={formRef}>
       <header className="seller-page-header seller-listing-header">
         <div>
-          <p className="seller-kicker">{isEditing ? "Listing revision" : "New product"}</p>
-          <h2>{isEditing ? "Fix listing details" : "Create a listing"}</h2>
-          <p>{isEditing ? "Update only the facts the reviewer flagged, then send the corrected draft back." : "Add facts in a clear order, check the product image, then review exactly what goes to the reviewer."}</p>
+          <p className="seller-kicker">{tx(isEditing ? "Listing revision" : "New product")}</p>
+          <h2>{tx(isEditing ? "Fix listing details" : "Create a listing")}</h2>
+          <p>{tx(isEditing ? "Update only the facts the reviewer flagged, then send the corrected draft back." : "Add facts in a clear order, check the product image, then review exactly what goes to the reviewer.")}</p>
         </div>
-        <span className={`seller-verification-note seller-verification-${verification}`}>{verificationLabel(verification)}</span>
+        <span className={`seller-verification-note seller-verification-${verification}`}>{verificationLabel(verification, language)}</span>
       </header>
 
       {editingDraft && (
         <section className="seller-listing-review-note" aria-label="Reviewer note">
-          <div><PencilLine size={17} aria-hidden="true" /><strong>Reviewer asked for correction</strong></div>
-          <p>{editingDraft.review_notes || "Review the product title, price, image, and catalog facts before sending this draft again."}</p>
-          <button type="button" className="seller-button seller-button-secondary" onClick={onCancelEdit}>Start new listing</button>
+          <div><PencilLine size={17} aria-hidden="true" /><strong>{tx("Reviewer asked for correction")}</strong></div>
+          <p>{editingDraft.review_notes || tx("Review the product title, price, image, and catalog facts before sending this draft again.")}</p>
+          <button type="button" className="seller-button seller-button-secondary" onClick={onCancelEdit}>{tx("Start new listing")}</button>
         </section>
       )}
 
       {onboarding && verification !== "verified" && (
-        <SellerVerificationPanel onboarding={onboarding} submitting={verificationSubmitting} apiError={verificationError} onSubmit={onSubmitVerification} />
+        <SellerVerificationPanel onboarding={onboarding} submitting={verificationSubmitting} apiError={verificationError} language={language} onSubmit={onSubmitVerification} />
       )}
 
       <ol className="seller-stepper" aria-label="Listing progress">
@@ -204,24 +208,24 @@ export function SellerListingFlow({
           return (
             <li key={label} className={number === stage ? "active" : number < stage ? "complete" : ""} aria-current={number === stage ? "step" : undefined}>
               <span>{number < stage ? <Check size={15} aria-hidden="true" /> : number}</span>
-              <div><strong>{label}</strong><small>Step {number} of 3</small></div>
+              <div><strong>{tx(label)}</strong><small>{tx("Step")} {number} {tx("of 3")}</small></div>
             </li>
           );
         })}
       </ol>
 
       <section className="seller-listing-stage" aria-labelledby={`seller-listing-stage-${stage}`}>
-        <p className="seller-step-count">Step {stage} of 3</p>
+        <p className="seller-step-count">{tx("Step")} {stage} {tx("of 3")}</p>
         {stage === 1 && (
           <div className="seller-form-grid">
             <div className="seller-field seller-field-wide seller-description-field">
-              <label htmlFor="seller-agent-prompt">Product description / Supplier notes</label>
+              <label htmlFor="seller-agent-prompt">{tx("Product description / Supplier notes")}</label>
               <div className="seller-description-input-wrapper">
                 <textarea
                   id="seller-agent-prompt"
                   value={agentPrompt}
                   onChange={(event) => { setAgentPrompt(event.target.value); setAiError(null); }}
-                  placeholder="e.g. Pink rayon kurti for daily wear, straight fit, Rs 449, photo at https://..."
+                  placeholder={tx("e.g. Pink rayon kurti for daily wear, straight fit, Rs 449, photo at https://...")}
                   rows={3}
                 />
                 <button
@@ -230,7 +234,7 @@ export function SellerListingFlow({
                   onClick={() => void handleAgentFill()}
                   disabled={aiLoading}
                 >
-                  {aiLoading ? "Extracting details..." : "Auto-fill with AI"}
+                  {aiLoading ? tx("Extracting details...") : tx("Auto-fill with AI")}
                 </button>
               </div>
               {aiError && (
@@ -244,16 +248,16 @@ export function SellerListingFlow({
             </div>
 
             <div className="seller-field seller-field-wide seller-field-title">
-              <label htmlFor="seller-title">Product title</label>
+              <label htmlFor="seller-title">{tx("Product title")}</label>
               <input id="seller-title" name="title" value={draft.title} onChange={(event) => update("title", event.target.value)} aria-invalid={Boolean(errors.title)} aria-describedby={errors.title ? "seller-title-error" : undefined} />
               {errors.title && <span id="seller-title-error" className="seller-field-error">{errors.title}</span>}
             </div>
-            <SellerTextField label="Category" name="category" value={draft.category} error={errors.category} onChange={(value) => update("category", value)} />
-            <SellerTextField label="Garment type" name="garment_type" value={draft.garment_type} error={errors.garment_type} onChange={(value) => update("garment_type", value)} />
-            <SellerTextField label="Fabric" name="fabric" value={draft.fabric} error={errors.fabric} onChange={(value) => update("fabric", value)} />
-            <SellerTextField label="Colour family" name="color_family" value={draft.color_family} error={errors.color_family} onChange={(value) => update("color_family", value)} />
+            <SellerTextField label={tx("Category")} name="category" value={draft.category} error={errors.category} onChange={(value) => update("category", value)} />
+            <SellerTextField label={tx("Garment type")} name="garment_type" value={draft.garment_type} error={errors.garment_type} onChange={(value) => update("garment_type", value)} />
+            <SellerTextField label={tx("Fabric")} name="fabric" value={draft.fabric} error={errors.fabric} onChange={(value) => update("fabric", value)} />
+            <SellerTextField label={tx("Colour family")} name="color_family" value={draft.color_family} error={errors.color_family} onChange={(value) => update("color_family", value)} />
             <div className="seller-field seller-field-wide seller-field-price">
-              <label htmlFor="seller-base-price">Base price</label>
+              <label htmlFor="seller-base-price">{tx("Base price")}</label>
               <div className="seller-money-input"><span>₹</span><input id="seller-base-price" name="base_price" type="number" min="1" value={draft.base_price} onChange={(event) => update("base_price", event.target.value)} aria-invalid={Boolean(errors.base_price)} aria-describedby={errors.base_price ? "seller-base-price-error" : undefined} /></div>
               {errors.base_price && <span id="seller-base-price-error" className="seller-field-error">{errors.base_price}</span>}
             </div>
@@ -263,47 +267,47 @@ export function SellerListingFlow({
         {stage === 2 && (
           <div className="seller-image-stage">
             <div className="seller-image-preview">
-              {draft.image_url ? <SellerListingImage src={draft.image_url} title={draft.title || "Selected listing"} /> : <div><Upload size={24} aria-hidden="true" /><strong>Add the actual product image</strong><p>Use a clear front view. Avoid promotional banners or unrelated catalog art.</p></div>}
+              {draft.image_url ? <SellerListingImage src={draft.image_url} title={draft.title || tx("Selected listing")} language={language} /> : <div><Upload size={24} aria-hidden="true" /><strong>{tx("Add the actual product image")}</strong><p>{tx("Use a clear front view. Avoid promotional banners or unrelated catalog art.")}</p></div>}
             </div>
             <div className="seller-image-controls">
               <label className="seller-upload-control">
                 <Upload size={17} aria-hidden="true" />
-                <span>{draft.image_url ? "Replace image" : "Choose image"}</span>
+                <span>{tx(draft.image_url ? "Replace image" : "Choose image")}</span>
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleImageFile(event)} />
               </label>
               <div className="seller-field">
-                <label htmlFor="seller-image-url">Or use a secure image link</label>
+                <label htmlFor="seller-image-url">{tx("Or use a secure image link")}</label>
                 <input id="seller-image-url" name="image_url" value={draft.image_url.startsWith("data:") ? "" : draft.image_url} onChange={(event) => update("image_url", event.target.value)} placeholder="https://..." aria-invalid={Boolean(errors.image_url)} aria-describedby={errors.image_url ? "seller-image-url-error" : undefined} />
                 {errors.image_url && <span id="seller-image-url-error" className="seller-field-error">{errors.image_url}</span>}
               </div>
-              <p className="seller-field-help">The current listing API stores one primary image. Additional-image support needs a separate catalog change.</p>
+              <p className="seller-field-help">{tx("The current listing API stores one primary image. Additional-image support needs a separate catalog change.")}</p>
             </div>
           </div>
         )}
 
         {stage === 3 && (
           <div className="seller-review-layout">
-            <SellerListingImage src={draft.image_url} title={draft.title} />
+            <SellerListingImage src={draft.image_url} title={draft.title} language={language} />
             <dl>
-              <div><dt>Title</dt><dd>{draft.title}</dd></div>
-              <div><dt>Category</dt><dd>{draft.category}</dd></div>
-              <div><dt>Product facts</dt><dd>{draft.color_family} / {draft.fabric} / {draft.garment_type}</dd></div>
-              <div><dt>Base price</dt><dd>Rs {Number(draft.base_price).toLocaleString("en-IN")}</dd></div>
-              <div><dt>Review path</dt><dd>{verification === "verified" ? "Save the draft, then send it to reviewer." : "You can save the draft, but seller verification blocks buyer visibility."}</dd></div>
+              <div><dt>{tx("Title")}</dt><dd>{draft.title}</dd></div>
+              <div><dt>{tx("Category")}</dt><dd>{draft.category}</dd></div>
+              <div><dt>{tx("Product facts")}</dt><dd>{draft.color_family} / {draft.fabric} / {draft.garment_type}</dd></div>
+              <div><dt>{tx("Base price")}</dt><dd>Rs {Number(draft.base_price).toLocaleString("en-IN")}</dd></div>
+              <div><dt>{tx("Review path")}</dt><dd>{tx(verification === "verified" ? "Save the draft, then send it to reviewer." : "You can save the draft, but seller verification blocks buyer visibility.")}</dd></div>
             </dl>
           </div>
         )}
 
         <footer className="seller-stage-actions">
-          {stage > 1 ? <button type="button" className="seller-button seller-button-secondary" onClick={() => setStage((current) => current - 1)}><ArrowLeft size={16} aria-hidden="true" />Back</button> : <span />}
-          {stage === 1 && <button type="button" className="seller-button seller-button-primary" onClick={continueFromBasics}>Continue to image<ArrowRight size={16} aria-hidden="true" /></button>}
-          {stage === 2 && <button type="button" className="seller-button seller-button-primary" onClick={continueFromImage}>Review listing<ArrowRight size={16} aria-hidden="true" /></button>}
-          {stage === 3 && !editingDraft && <button type="button" className="seller-button seller-button-primary" disabled={submitting} onClick={() => void handleSave()}>{submitting ? "Saving draft" : "Save draft"}</button>}
+          {stage > 1 ? <button type="button" className="seller-button seller-button-secondary" onClick={() => setStage((current) => current - 1)}><ArrowLeft size={16} aria-hidden="true" />{tx("Back")}</button> : <span />}
+          {stage === 1 && <button type="button" className="seller-button seller-button-primary" onClick={continueFromBasics}>{tx("Continue to image")}<ArrowRight size={16} aria-hidden="true" /></button>}
+          {stage === 2 && <button type="button" className="seller-button seller-button-primary" onClick={continueFromImage}>{tx("Review listing")}<ArrowRight size={16} aria-hidden="true" /></button>}
+          {stage === 3 && !editingDraft && <button type="button" className="seller-button seller-button-primary" disabled={submitting} onClick={() => void handleSave()}>{submitting ? tx("Saving draft") : tx("Save draft")}</button>}
           {stage === 3 && editingDraft && (
             <div className="seller-stage-submit-group">
-              <button type="button" className="seller-button seller-button-secondary" disabled={submitting} onClick={() => void handleSave()}>{submitting ? "Saving" : "Save changes"}</button>
-              <button type="button" className="seller-button seller-button-primary" disabled={submitting || verification !== "verified"} title={verification === "verified" ? undefined : "Complete verification before sending to reviewer"} onClick={() => void handleSaveAndSubmit()}>
-                {submitting ? "Sending" : "Save and send"}
+              <button type="button" className="seller-button seller-button-secondary" disabled={submitting} onClick={() => void handleSave()}>{submitting ? tx("Saving") : tx("Save changes")}</button>
+              <button type="button" className="seller-button seller-button-primary" disabled={submitting || verification !== "verified"} title={verification === "verified" ? undefined : tx("Complete verification before sending to reviewer")} onClick={() => void handleSaveAndSubmit()}>
+                {submitting ? tx("Sending") : tx("Save and send")}
               </button>
             </div>
           )}
@@ -311,7 +315,7 @@ export function SellerListingFlow({
       </section>
 
       <section className="seller-drafts" aria-labelledby="seller-drafts-heading">
-        <div className="seller-section-heading"><div><p className="seller-kicker">Saved work</p><h3 id="seller-drafts-heading">Listing drafts</h3></div><span>{onboarding?.listing_drafts.length ?? 0}</span></div>
+        <div className="seller-section-heading"><div><p className="seller-kicker">{tx("Saved work")}</p><h3 id="seller-drafts-heading">{tx("Listing drafts")}</h3></div><span>{onboarding?.listing_drafts.length ?? 0}</span></div>
         {onboarding?.listing_drafts.length ? (
           <ul>
             {onboarding.listing_drafts.map((item) => (
@@ -319,16 +323,16 @@ export function SellerListingFlow({
                 <div>
                   <strong>{item.title}</strong>
                   <span>Rs {item.base_price.toLocaleString("en-IN")} / {item.status.replace(/_/g, " ")}</span>
-                  {item.status === "needs_revision" && <small>{item.review_notes || "Reviewer requested changes before approval."}</small>}
+                  {item.status === "needs_revision" && <small>{item.review_notes || tx("Reviewer requested changes before approval.")}</small>}
                 </div>
                 <div className="seller-draft-actions">
-                  {canEditDraft(item) && <button type="button" className="seller-button seller-button-secondary" disabled={submitting} onClick={() => onEditDraft(item)}>{item.status === "needs_revision" ? "Fix" : "Edit"}</button>}
-                  <button type="button" className="seller-button seller-button-primary" disabled={submitting || !canEditDraft(item) || verification !== "verified"} onClick={() => void onSubmitDraft(item)}>{draftActionLabel(item)}</button>
+                  {canEditDraft(item) && <button type="button" className="seller-button seller-button-secondary" disabled={submitting} onClick={() => onEditDraft(item)}>{tx(item.status === "needs_revision" ? "Fix" : "Edit")}</button>}
+                  <button type="button" className="seller-button seller-button-primary" disabled={submitting || !canEditDraft(item) || verification !== "verified"} onClick={() => void onSubmitDraft(item)}>{draftActionLabel(item, language)}</button>
                 </div>
               </li>
             ))}
           </ul>
-        ) : <p className="seller-empty-line">No saved drafts yet.</p>}
+        ) : <p className="seller-empty-line">{tx("No saved drafts yet.")}</p>}
       </section>
     </div>
   );
@@ -338,15 +342,21 @@ function canEditDraft(draft: ListingDraft) {
   return draft.status === "draft" || draft.status === "needs_revision";
 }
 
-function draftActionLabel(draft: ListingDraft) {
-  if (draft.status === "draft") return "Send for review";
-  if (draft.status === "needs_revision") return "Send revised";
-  if (draft.status === "submitted") return "With reviewer";
-  if (draft.status === "approved") return "Approved";
-  return "Unavailable";
+function draftActionLabel(draft: ListingDraft, language: LanguageCode) {
+  const text = draft.status === "draft"
+    ? "Send for review"
+    : draft.status === "needs_revision"
+      ? "Send revised"
+      : draft.status === "submitted"
+        ? "With reviewer"
+        : draft.status === "approved"
+          ? "Approved"
+          : "Unavailable";
+  return roleText(language, text);
 }
 
-function SellerListingImage({ src, title }: { src: string; title: string }) {
+function SellerListingImage({ src, title, language }: { src: string; title: string; language: LanguageCode }) {
+  const tx = (text: string) => roleText(language, text);
   const [failed, setFailed] = useState(!isBrowserPreviewableImage(src));
 
   useEffect(() => {
@@ -358,8 +368,8 @@ function SellerListingImage({ src, title }: { src: string; title: string }) {
       {failed ? (
         <div className="seller-listing-image-fallback" role="img" aria-label={`${title} image preview unavailable`}>
           <ImageOff size={22} aria-hidden="true" />
-          <strong>Preview unavailable</strong>
-          <span>Check the image link before sending this listing.</span>
+          <strong>{tx("Preview unavailable")}</strong>
+          <span>{tx("Check the image link before sending this listing.")}</span>
         </div>
       ) : (
         <img src={src} alt="" onError={() => setFailed(true)} />
@@ -383,14 +393,14 @@ function SellerTextField({ label, name, value, error, onChange }: { label: strin
   );
 }
 
-function validateBasics(draft: DraftState): DraftErrors {
+function validateBasics(draft: DraftState, tx: (text: string) => string): DraftErrors {
   const errors: DraftErrors = {};
-  if (draft.title.trim().length < 5) errors.title = "Use a specific product title.";
-  if (!draft.category.trim()) errors.category = "Enter a category.";
-  if (!draft.garment_type.trim()) errors.garment_type = "Enter the garment type.";
-  if (!draft.fabric.trim()) errors.fabric = "Enter the fabric.";
-  if (!draft.color_family.trim()) errors.color_family = "Enter the colour family.";
-  if (!(Number(draft.base_price) > 0)) errors.base_price = "Enter a valid base price.";
+  if (draft.title.trim().length < 5) errors.title = tx("Use a specific product title.");
+  if (!draft.category.trim()) errors.category = tx("Enter a category.");
+  if (!draft.garment_type.trim()) errors.garment_type = tx("Enter the garment type.");
+  if (!draft.fabric.trim()) errors.fabric = tx("Enter the fabric.");
+  if (!draft.color_family.trim()) errors.color_family = tx("Enter the colour family.");
+  if (!(Number(draft.base_price) > 0)) errors.base_price = tx("Enter a valid base price.");
   return errors;
 }
 
@@ -404,8 +414,9 @@ function isAllowedImageReference(value: string): boolean {
   return /^data:image\/(jpeg|png|webp);base64,/i.test(value) || value.startsWith("https://") || value.startsWith("seeded://") || value.startsWith("seller-asset://");
 }
 
-function verificationLabel(status: string): string {
-  return status === "verified" ? "Seller verified" : status === "restricted" ? "Seller restricted" : "Verification pending";
+function verificationLabel(status: string, language: LanguageCode): string {
+  const text = status === "verified" ? "Seller verified" : status === "restricted" ? "Seller restricted" : "Verification pending";
+  return roleText(language, text);
 }
 
 function readFile(file: File): Promise<string> {

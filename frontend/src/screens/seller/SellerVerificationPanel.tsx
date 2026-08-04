@@ -1,5 +1,6 @@
 import { FileCheck2, Upload } from "lucide-react";
 import { useState } from "react";
+import { roleText, type LanguageCode } from "../../i18n";
 import type { SellerOnboardingResponse, SellerVerificationDocument } from "../../types/api";
 import { labelize } from "./sellerModel";
 
@@ -15,10 +16,12 @@ type SellerVerificationPanelProps = {
   onboarding: SellerOnboardingResponse;
   submitting: boolean;
   apiError: string | null;
+  language: LanguageCode;
   onSubmit: (submission: SellerVerificationSubmission) => Promise<boolean>;
 };
 
-export function SellerVerificationPanel({ onboarding, submitting, apiError, onSubmit }: SellerVerificationPanelProps) {
+export function SellerVerificationPanel({ onboarding, submitting, apiError, language, onSubmit }: SellerVerificationPanelProps) {
+  const tx = (text: string) => roleText(language, text);
   const [documentType, setDocumentType] = useState<SellerVerificationDocument["document_type"]>("gst_certificate");
   const [reference, setReference] = useState("");
   const [file, setFile] = useState<{ name: string; mimeType: string; contentBase64: string } | null>(null);
@@ -30,7 +33,7 @@ export function SellerVerificationPanel({ onboarding, submitting, apiError, onSu
     const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(selected.type) || selected.size > 2_500_000) {
       setFile(null);
-      setFileError("Use a PDF, JPG, PNG, or WebP file under 2.5 MB.");
+      setFileError(tx("Use a PDF, JPG, PNG, or WebP file under 2.5 MB."));
       event.currentTarget.value = "";
       return;
     }
@@ -45,7 +48,7 @@ export function SellerVerificationPanel({ onboarding, submitting, apiError, onSu
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!file) {
-      setFileError("Attach the document you want the reviewer to check.");
+      setFileError(tx("Attach the document you want the reviewer to check."));
       return;
     }
     const submitted = await onSubmit({
@@ -68,37 +71,37 @@ export function SellerVerificationPanel({ onboarding, submitting, apiError, onSu
       <div className="seller-verification-intro">
         <FileCheck2 size={21} aria-hidden="true" />
         <div>
-          <p className="seller-kicker">Visibility blocker</p>
-          <h3 id="seller-verification-heading">Complete seller verification</h3>
-          <p>{onboarding.seller_verification.restricted_reason || "Listings can be saved, but they cannot become buyer-visible until the required business documents are approved."}</p>
-          <span>{reviewedDocuments} approved · {onboarding.documents.length} documents on file</span>
+          <p className="seller-kicker">{tx("Visibility blocker")}</p>
+          <h3 id="seller-verification-heading">{tx("Complete seller verification")}</h3>
+          <p>{onboarding.seller_verification.restricted_reason || tx("Listings can be saved, but they cannot become buyer-visible until the required business documents are approved.")}</p>
+          <span>{reviewedDocuments} {tx("approved")} / {onboarding.documents.length} {tx("documents on file")}</span>
         </div>
       </div>
 
       <form className="seller-verification-form" onSubmit={handleSubmit}>
         {apiError && <div className="seller-form-error-summary" role="alert">{apiError}</div>}
         <div className="seller-field">
-          <label htmlFor="seller-document-type">Document type</label>
+          <label htmlFor="seller-document-type">{tx("Document type")}</label>
           <select id="seller-document-type" value={documentType} onChange={(event) => setDocumentType(event.target.value as SellerVerificationDocument["document_type"])}>
-            <option value="gst_certificate">GST certificate</option>
-            <option value="pan_card">PAN card</option>
-            <option value="address_proof">Address proof</option>
-            <option value="bank_proof">Bank proof</option>
+            <option value="gst_certificate">{tx("GST certificate")}</option>
+            <option value="pan_card">{tx("PAN card")}</option>
+            <option value="address_proof">{tx("Address proof")}</option>
+            <option value="bank_proof">{tx("Bank proof")}</option>
           </select>
         </div>
         <div className="seller-field">
-          <label htmlFor="seller-document-reference">Reference number</label>
+          <label htmlFor="seller-document-reference">{tx("Reference number")}</label>
           <input id="seller-document-reference" value={reference} onChange={(event) => setReference(event.target.value)} required />
         </div>
         <div className="seller-field seller-field-wide">
           <label className="seller-upload-control seller-document-upload">
             <Upload size={17} aria-hidden="true" />
-            <span>{file?.name || `Choose ${labelize(documentType).toLowerCase()} file`}</span>
-            <input aria-label="Document file" type="file" accept=".pdf,image/png,image/jpeg,image/webp" onChange={(event) => void handleFile(event)} />
+            <span>{file?.name || `${tx("Choose")} ${tx(labelize(documentType)).toLowerCase()} ${tx("file")}`}</span>
+            <input aria-label={tx("Document file")} type="file" accept=".pdf,image/png,image/jpeg,image/webp" onChange={(event) => void handleFile(event)} />
           </label>
           {fileError && <span className="seller-field-error" role="alert">{fileError}</span>}
         </div>
-        <button type="submit" className="seller-button seller-button-primary" disabled={submitting || !reference.trim() || !file}>{submitting ? "Submitting document" : "Submit document"}</button>
+        <button type="submit" className="seller-button seller-button-primary" disabled={submitting || !reference.trim() || !file}>{submitting ? tx("Submitting document") : tx("Submit document")}</button>
       </form>
     </section>
   );

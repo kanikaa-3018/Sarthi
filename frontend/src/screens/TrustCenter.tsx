@@ -1211,7 +1211,7 @@ function reviewBandLabel(band: BuyerDashboardResponse["review_credibility"]["ris
 
 function orderTone(order: BuyerOrderItem): Tone {
   if (order.status === "delivered_kept") return "safe";
-  if (order.status === "returned" || order.status === "exchanged") return "watch";
+  if (order.status === "returned" || order.status === "exchanged" || order.status === "rto") return "watch";
   return "neutral";
 }
 
@@ -1220,6 +1220,7 @@ function orderStatusLabel(order: BuyerOrderItem) {
   if (order.status === "delivered_kept") return "Kept";
   if (order.status === "returned") return "Returned";
   if (order.status === "exchanged") return "Exchanged";
+  if (order.status === "rto") return "RTO";
   return labelize(order.status);
 }
 
@@ -1235,6 +1236,9 @@ function orderLearningTitle(order: BuyerOrderItem) {
   }
   if (order.status === "exchanged") {
     return "Exchange reason saved";
+  }
+  if (order.status === "rto") {
+    return "Delivery was not completed";
   }
   return "Waiting for delivery feedback";
 }
@@ -1252,6 +1256,9 @@ function payoffLine(order: BuyerOrderItem) {
   }
   if (order.status === "returned") {
     return `${labelize(order.corrected_return_reason ?? order.return_reason ?? "Return")} can prevent the same mistake later.`;
+  }
+  if (order.status === "rto") {
+    return "Not used for size advice; only delivery completion risk is noted.";
   }
   return "This order can improve future checks after feedback.";
 }

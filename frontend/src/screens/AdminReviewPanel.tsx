@@ -34,7 +34,7 @@ import {
   runAdminAiHealthTest,
   requestListingRevision
 } from "../api/client";
-import type { LanguageCode } from "../i18n";
+import { roleText, type LanguageCode } from "../i18n";
 import type {
   AdminAiHealth,
   AdminAiHealthTest,
@@ -643,6 +643,7 @@ export function AdminReviewPanel({ language }: { language: LanguageCode }) {
           {activeMode === "agent" && (
             <AgentRoomView
               queue={queue}
+              language={language}
               aiHealth={aiHealth}
               aiTest={aiTest}
               aiLoading={aiLoading}
@@ -695,6 +696,7 @@ function readableQueueSubtitle(item: AdminReviewQueue["active_queue"][number]) {
 
 function AgentRoomView({
   queue,
+  language,
   aiHealth,
   aiTest,
   aiLoading,
@@ -704,6 +706,7 @@ function AgentRoomView({
   onOpenSeller
 }: {
   queue: AdminReviewQueue;
+  language: LanguageCode;
   aiHealth: AdminAiHealth | null;
   aiTest: AdminAiHealthTest | null;
   aiLoading: boolean;
@@ -712,6 +715,7 @@ function AgentRoomView({
   onRunAiHealthCheck: () => void;
   onOpenSeller: (sellerId: string) => void;
 }) {
+  const tx = (text: string) => roleText(language, text);
   const providerKicker = queue.automation_plan.agent_provider === "bedrock"
     ? "Bedrock assisted triage"
     : queue.automation_plan.agent_provider === "gemini"
@@ -721,6 +725,8 @@ function AgentRoomView({
         : "Rules fallback triage";
   const triage = adminTriageView(queue);
   const storedRows = storedEvidenceRows(queue);
+  const autoRows = storedRows.filter((item) => item.review_visibility === "auto_reviewed").length;
+  const heldRows = storedRows.filter((item) => item.review_visibility === "ai_bypassed").length;
 
   return (
     <section className="admin-agent-room-view admin-clean-mode">
@@ -728,14 +734,25 @@ function AgentRoomView({
         <div className="admin-mode-hero-icon">
           <Bot size={18} />
         </div>
-        <div>
+        <div className="admin-agent-hero-copy">
           <span>{providerKicker}</span>
-          <h3>Sarthi checked {storedRows.length} uploads. {triage.reviewer_queue_count} still need a person.</h3>
+          <h3>{triage.reviewer_queue_count} {tx("uploads need review")}</h3>
+          <p>{tx("Sarthi checked uploads and kept clean or incomplete work out of this queue.").replace("{count}", String(storedRows.length))}</p>
+        </div>
+        <div className="admin-agent-hero-metrics" aria-label="AI queue summary">
+          <span>
+            <strong>{autoRows}</strong>
+            <em>{tx("Auto cleared")}</em>
+          </span>
+          <span>
+            <strong>{heldRows}</strong>
+            <em>{tx("Seller fixes")}</em>
+          </span>
         </div>
         <ProviderPill provider={queue.automation_plan.agent_provider} />
       </div>
 
-      <AgentRoutingBoard queue={queue} onOpenSeller={onOpenSeller} />
+      <AgentRoutingBoard queue={queue} language={language} onOpenSeller={onOpenSeller} />
 
       <div className="reviewer-simple-footer">
         {queue.automation_plan.caution && (
@@ -752,6 +769,7 @@ function AgentRoomView({
             testLoading={aiTestLoading}
             onRefresh={onRefreshAiHealth}
             onRunTest={onRunAiHealthCheck}
+            language={language}
           />
         </aside>
       </div>
@@ -765,7 +783,8 @@ function AiAssistStatusPanel({
   loading,
   testLoading,
   onRefresh,
-  onRunTest
+  onRunTest,
+  language
 }: {
   health: AdminAiHealth | null;
   test: AdminAiHealthTest | null;
@@ -773,7 +792,9 @@ function AiAssistStatusPanel({
   testLoading: boolean;
   onRefresh: () => void;
   onRunTest: () => void;
+  language: LanguageCode;
 }) {
+  const tx = (text: string) => roleText(language, text);
   const primaryProvider = health?.ai.primary_provider;
   const providerStatus = primaryProvider === "bedrock"
     ? health?.bedrock.status
@@ -781,22 +802,22 @@ function AiAssistStatusPanel({
       ? health?.gemini.status
       : undefined;
   const status = providerStatus ?? (loading ? "checking" : "unavailable");
-  const fallbackText = health?.fallback.active ? "Safety fallback is active" : "Auto-suggestions are active";
+  const fallbackText = health?.fallback.active ? tx("Safety fallback is active") : tx("Auto-suggestions are active");
 
   return (
-    <section className="admin-ai-assist-panel" aria-label="Reviewer assistant status">
+    <section className="admin-ai-assist-panel" aria-label={tx("Reviewer assistant status")}>
       <div className="admin-ai-assist-head">
         <Cpu size={16} />
         <div>
-          <span>Reviewer assistant</span>
+          <span>{tx("Reviewer assistant")}</span>
           <strong>{labelize(status)}</strong>
         </div>
       </div>
-      <p>{health ? fallbackText : "Checking assistant status."}</p>
+      <p>{health ? fallbackText : tx("Checking assistant status.")}</p>
       {health && (
         <div className="admin-ai-assist-inline" aria-label="Assistant checks">
-          <span>Sources {health.source_health.checked_sources}</span>
-          <span>Contracts {health.contracts.length}</span>
+          <span>{tx("Sources")} {health.source_health.checked_sources}</span>
+          <span>{tx("Contracts")} {health.contracts.length}</span>
         </div>
       )}
       {test && (
@@ -808,11 +829,11 @@ function AiAssistStatusPanel({
       <div className="admin-ai-assist-actions">
         <button type="button" onClick={onRunTest} disabled={testLoading}>
           <Sparkles size={13} />
-          {testLoading ? "Verifying..." : "Verify Assistant"}
+          {testLoading ? tx("Verifying...") : tx("Verify Assistant")}
         </button>
         <button type="button" onClick={onRefresh} disabled={loading}>
           <RefreshCcw size={13} className={loading ? "spin-icon" : ""} />
-          Refresh
+          {tx("Refresh")}
         </button>
       </div>
     </section>
@@ -866,11 +887,14 @@ function AdminQueueLine({
 
 function AgentRoutingBoard({
   queue,
+  language,
   onOpenSeller
 }: {
   queue: AdminReviewQueue;
+  language: LanguageCode;
   onOpenSeller: (sellerId: string) => void;
 }) {
+  const tx = (text: string) => roleText(language, text);
   const storedRows = storedEvidenceRows(queue);
   const reviewRows = queue.active_queue.slice(0, 2);
   const autoRowsAll = storedRows.filter((item) => item.review_visibility === "auto_reviewed");
@@ -878,40 +902,40 @@ function AgentRoutingBoard({
   const handledExamples = [...autoRowsAll.slice(0, 1), ...heldRowsAll.slice(0, 1)];
 
   return (
-    <section className="reviewer-agent-explainer" aria-label="AI routed reviewer work">
+    <section className="reviewer-agent-explainer" aria-label={tx("AI routed reviewer work")}>
       <section className="reviewer-focus-panel">
         <div className="reviewer-plain-head">
           <div>
-            <span>Needs your decision</span>
-            <h3>{queue.active_queue.length} seller request{queue.active_queue.length === 1 ? "" : "s"} are waiting</h3>
-            <p>Open these first. Each one has a clear blocker, weak proof, or required human decision.</p>
+            <span>{tx("Needs your decision")}</span>
+            <h3>{queue.active_queue.length} {tx(queue.active_queue.length === 1 ? "seller request is waiting" : "seller requests are waiting")}</h3>
+            <p>{tx("Open these first. Each one has a clear blocker, weak proof, or required human decision.")}</p>
           </div>
           <b>{queue.active_queue.length}</b>
         </div>
 
         <div className="reviewer-plain-card-list">
           {reviewRows.length ? reviewRows.map((item) => (
-            <ReviewerDecisionCard key={item.queue_item_id} item={item} onOpenSeller={onOpenSeller} />
-          )) : <EmptyPanel message="No manual decisions are waiting." compact />}
+            <ReviewerDecisionCard key={item.queue_item_id} item={item} language={language} onOpenSeller={onOpenSeller} />
+          )) : <EmptyPanel message={tx("No manual decisions are waiting.")} compact />}
         </div>
 
         {queue.active_queue.length > reviewRows.length && (
-          <div className="admin-section-more">{queue.active_queue.length - reviewRows.length} more cases are in the reviewer desk.</div>
+          <div className="admin-section-more">{queue.active_queue.length - reviewRows.length} {tx("more cases are in the reviewer desk.")}</div>
         )}
       </section>
 
       <aside className="reviewer-ai-done-panel">
         <div className="reviewer-plain-head compact">
           <div>
-            <span>Already handled by Sarthi</span>
-            <h3>{autoRowsAll.length + heldRowsAll.length} requests stayed out of the manual queue</h3>
-            <p>Clean evidence stays saved. Weak uploads go back to the seller with a correction.</p>
+            <span>{tx("Already handled by Sarthi")}</span>
+            <h3>{autoRowsAll.length + heldRowsAll.length} {tx("requests stayed out of the manual queue")}</h3>
+            <p>{tx("Clean evidence stays saved. Weak uploads go back to the seller with a correction.")}</p>
           </div>
         </div>
 
         <div className="reviewer-ai-outcome-grid">
-          <ReviewerOutcomeStat label="Clean records" value={autoRowsAll.length} detail="saved with evidence" />
-          <ReviewerOutcomeStat label="Seller fixes" value={heldRowsAll.length} detail="needs better upload" />
+          <ReviewerOutcomeStat label={tx("Clean records")} value={autoRowsAll.length} detail={tx("saved with evidence")} />
+          <ReviewerOutcomeStat label={tx("Seller fixes")} value={heldRowsAll.length} detail={tx("needs better upload")} />
         </div>
 
         <div className="reviewer-handled-examples">
@@ -926,23 +950,26 @@ function AgentRoutingBoard({
 
 function ReviewerDecisionCard({
   item,
+  language,
   onOpenSeller
 }: {
   item: AdminReviewQueue["active_queue"][number];
+  language: LanguageCode;
   onOpenSeller: (sellerId: string) => void;
 }) {
+  const tx = (text: string) => roleText(language, text);
   return (
     <article className={`reviewer-decision-card ${item.risk_level}`}>
       <div className="reviewer-decision-card-main">
-        <span>{plainQueueType(item.item_type)} | {item.seller_name}</span>
+        <span>{tx(plainQueueType(item.item_type))} | {item.seller_name}</span>
         <strong>{readableQueueTitle(item)}</strong>
         <p>{plainQueueReason(item)}</p>
       </div>
       <div className="reviewer-decision-card-side">
         <b>{decisionActionLabel(item.suggested_action)}</b>
-        <small>{item.risk_level} risk</small>
+        <small>{labelize(item.risk_level)} {tx("risk")}</small>
         <button className="admin-ai-row-action" type="button" onClick={() => onOpenSeller(item.seller_id)}>
-          Open
+          {tx("Open")}
         </button>
       </div>
     </article>
@@ -5163,9 +5190,11 @@ function ListingDraftCard({
   const canRequestRevision = submitted && note.trim().length >= MIN_REJECT_NOTE_LENGTH;
   const publishActionKey = `publish-draft-${draft.draft_id}`;
   const revisionActionKey = `revision-draft-${draft.draft_id}`;
+  const passedChecks = draft.prescreen.checks.filter((check) => check.status === "pass").length;
+  const totalChecks = draft.prescreen.checks.length;
 
   return (
-    <article className="seller-review-card">
+    <article className={`seller-review-card ${hideHeader ? "seller-draft-final-card" : ""}`}>
       {!hideHeader && (
         <CardHeader
           icon={<Store size={16} />}
@@ -5176,13 +5205,35 @@ function ListingDraftCard({
           prescreen={draft.prescreen}
         />
       )}
-      {hideHeader && <FinalActionHeader title="Final action" subtitle="Publish only if the seller is verified and the listing is safe." />}
+      {hideHeader && (
+        <FinalActionHeader
+          title="Decision"
+          subtitle={canPublish ? "Ready to publish after the reviewer note is correct." : "Clear the blocked checks before this listing goes live."}
+        />
+      )}
 
       {!sellerVerified && <BlockerNotice text={`Seller verification is ${labelize(draft.verification_status ?? "missing")}. Publish is blocked.`} />}
       {!submitted && <BlockerNotice text={`Seller has not submitted this draft for review yet. Current status: ${labelize(draft.status)}.`} />}
 
+      {hideHeader && (
+        <div className="seller-draft-decision-strip" aria-label="Draft decision summary">
+          <div>
+            <span>Seller</span>
+            <strong>{sellerVerified ? "Verified" : "Blocked"}</strong>
+          </div>
+          <div>
+            <span>AI checks</span>
+            <strong>{passedChecks}/{totalChecks || 0} passed</strong>
+          </div>
+          <div>
+            <span>Reviewer action</span>
+            <strong>{canPublish ? "Publish or revise" : "Resolve blocker"}</strong>
+          </div>
+        </div>
+      )}
+
       {showDetails && (
-        <ReviewFoldout title="Product facts" subtitle={`${draft.garment_type} | ${draft.fabric} | ${formatPrice(draft.base_price)}`} resetKey={draft.draft_id}>
+        <ReviewFoldout title="Listing facts" subtitle={`${draft.garment_type} | ${draft.fabric} | ${formatPrice(draft.base_price)}`} resetKey={draft.draft_id}>
           <div className="seller-media-detail">
             {isRenderableImage(draft.image_url) ? (
               <img src={evidenceAssetUrl(draft.image_url) ?? draft.image_url} alt={draft.title} />
