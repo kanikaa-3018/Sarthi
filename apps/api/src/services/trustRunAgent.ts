@@ -46,7 +46,8 @@ export async function runTrustRun(db: Db, buyerId: string, input: TrustRunInput)
   const ranking = await rankCluster(db, buyerId, baseProduct.cluster_id, preferredFit, {
     recordSnapshot: true,
     intent: input.intent ?? "trust_run",
-    productIds: similarity.comparable_product_ids
+    productIds: similarity.comparable_product_ids,
+    selectedVariantId: input.selected_variant_id
   });
   const recommendedProduct = await productForVariant(db, ranking.winner);
   if (!recommendedProduct) throw new Error("Trust run could not resolve the recommended product");

@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { collections } from "../db/mongo.js";
 import { assertBuyer, requireRole } from "../middleware/auth.js";
 import { generateGroundedAgentAnswer } from "../services/agent.js";
+import { selectGroundedAnswer } from "../services/answerValidator.js";
 import { isGeneratedProvider } from "../services/ai.js";
 import { placeCheckoutOrder, recordOrderOutcome, returnAlternativeAssistant } from "../services/buyerOperations.js";
 import { expectationContract } from "../services/contracts.js";
@@ -16,8 +17,13 @@ import {
   skuPassport,
   fitPrediction,
 } from "../services/domain.js";
-import { deterministicGraphChatAnswer, graphQuestionSupport, unsupportedGraphAnswer } from "../services/graphAnswers.js";
-import { inferAttribute, label, withoutId } from "../services/format.js";
+import {
+  buildGraphEvidenceCapsule,
+  buildProductAdviceEvidenceCapsule,
+  deterministicEvidenceAnswer
+} from "../services/evidenceCapsule.js";
+import { graphQuestionSupport, unsupportedGraphAnswer } from "../services/graphAnswers.js";
+import { inferAttribute, withoutId } from "../services/format.js";
 import { clusterKnowledgeGraph, matchedEvidencePaths } from "../services/knowledgeGraph.js";
 import { llmCacheKey, readLlmCache, writeLlmCache } from "../services/llmCache.js";
 import { resolveSimilarListingSet } from "../services/similarListings.js";
@@ -33,7 +39,8 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const ranking = await rankCluster(db, body.buyer_id, body.cluster_id, body.preferred_fit, {
       recordSnapshot: true,
       intent: "compare",
-      productIds: similarity?.comparable_product_ids
+      productIds: similarity?.comparable_product_ids,
+      selectedVariantId: body.selected_variant_id
     });
     const fit = await fitPrediction(db, body.buyer_id, ranking.winner, body.preferred_fit);
     const trace = await createTrace(db, {
@@ -79,7 +86,13 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const account = await requireRole(db, request, reply, "buyer");
     const buyerId = (request.query as any).buyer_id;
     assertBuyer(account, buyerId);
-    return clusterKnowledgeGraph(db, buyerId, (request.params as any).cluster_id, (request.query as any).product_id);
+    return clusterKnowledgeGraph(
+      db,
+      buyerId,
+      (request.params as any).cluster_id,
+      (request.query as any).product_id,
+      (request.query as any).selected_variant_id
+    );
   });
 
   app.post("/knowledge-graph/chat", async (request, reply) => {
@@ -87,10 +100,11 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const body: any = request.body;
     assertBuyer(account, body.buyer_id);
     const cacheKey = llmCacheKey("knowledge_graph_chat", {
-      answer_version: "kg_v4_actionable_proof",
+      answer_version: "kg_v6_action_contract",
       buyer_id: body.buyer_id,
       cluster_id: body.cluster_id,
       product_id: body.product_id,
+      selected_variant_id: body.selected_variant_id,
       query: body.query
     });
     const cached = await readLlmCache(db, cacheKey);
@@ -105,7 +119,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       return { ...cached, trace_id: trace.trace_id, cache: { hit: true, cache_key: cacheKey } };
     }
 
-    const graph = await clusterKnowledgeGraph(db, body.buyer_id, body.cluster_id, body.product_id);
+    const graph = await clusterKnowledgeGraph(db, body.buyer_id, body.cluster_id, body.product_id, body.selected_variant_id);
     const support = graphQuestionSupport(body.query ?? "");
     if (!support.supported) {
       const fallback = unsupportedGraphAnswer(body.query ?? "", support.reason);
@@ -185,13 +199,26 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
         },
         fact_ids: edge.fact_ids ?? []
       }));
+    const capsule = buildGraphEvidenceCapsule(graph, body.query ?? "", retrieval.results, selectedContext);
     const retrievalFactIds = retrieval.results.flatMap((result) => result.fact_ids ?? []);
-    const factIds = [...new Set([...retrievalFactIds, ...graph.fact_ids])].slice(0, 10);
-    const fallback = deterministicGraphChatAnswer(graph, body.query ?? "");
+    const factIds = [...new Set([...retrievalFactIds, ...capsule.fact_ids, ...graph.fact_ids])].slice(0, 16);
+    const fallback = deterministicEvidenceAnswer(capsule);
     const grounded = await generateGroundedAgentAnswer({
       task: "graph_chat",
       query: body.query ?? "",
       context: {
+        answer_contract: {
+          intent: capsule.intent,
+          verdict: capsule.verdict,
+          confidence: capsule.confidence,
+          must_answer_question: body.query ?? "",
+          direct_facts: capsule.direct_facts,
+          missing_facts: capsule.missing_facts,
+          risk_flags: capsule.risk_flags,
+          allowed_actions: capsule.allowed_actions,
+          forbidden_topics: capsule.forbidden_topics
+        },
+        evidence_capsule: capsule,
         cluster: graph.cluster,
         selected_product_id: graph.selected_product_id,
         ranking: graph.ranking ? {
@@ -257,16 +284,18 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       },
       fallback
     });
-    const finalGrounded = shouldUseFallbackGraphAnswer(grounded, fallback, body.query ?? "")
-      ? { ...fallback, source: "deterministic_fallback" as const }
-      : {
-          ...grounded,
-          reasons: normalizeGraphAgentReasons(grounded.reasons, fallback.reasons)
-        };
-    const matchedNodeIds = retrievedNodeIds.size
-      ? [...retrievedNodeIds]
-      : graphQueryMatchedNodeIds(graph, body.query ?? "", selectedContext);
+    const selectedAnswer = selectGroundedAnswer(grounded, fallback, capsule);
+    const finalGrounded = {
+      ...selectedAnswer.answer,
+      source: selectedAnswer.validation.used_fallback ? "deterministic_fallback" as const : grounded.source
+    };
+    const matchedNodeIds = capsule.matched_node_ids.length
+      ? capsule.matched_node_ids
+      : retrievedNodeIds.size
+        ? [...retrievedNodeIds]
+        : graphQueryMatchedNodeIds(graph, body.query ?? "", selectedContext);
     const highlightedEdgeIds = [...new Set([
+      ...capsule.highlighted_edge_ids,
       ...retrievedEdgeIds,
       ...graph.edges
         .filter((edge: any) => matchedNodeIds.includes(edge.source) || matchedNodeIds.includes(edge.target))
@@ -275,6 +304,14 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     ])].slice(0, 8);
     const paths = matchedEvidencePaths(graph, body.query ?? "", matchedNodeIds, highlightedEdgeIds);
     const pathFactIds = paths.flatMap((path: any) => path.fact_ids ?? []);
+    const nextAction = await graphAnswerNextAction(
+      db,
+      capsule.allowed_actions[0] ?? null,
+      graph,
+      selectedContext,
+      body.query ?? "",
+      capsule
+    );
     const answer = {
       query: body.query,
       title: finalGrounded.title,
@@ -286,13 +323,19 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       matched_path_ids: paths.map((path: any) => path.path_id),
       unsupported: false,
       support_reason: support.reason,
+      intent: capsule.intent,
+      verdict: capsule.verdict,
+      confidence: capsule.confidence,
+      evidence_used: capsule.direct_facts,
+      missing_evidence: capsule.missing_facts,
+      next_action: nextAction,
       fact_ids: [...new Set([...factIds, ...pathFactIds])].slice(0, 16),
       follow_up_questions: graph.chat_suggestions
     };
     const trace = await createTrace(db, {
       buyer_id: body.buyer_id,
       intent: ["knowledge_graph_chat"],
-      tools_used: ["clusterKnowledgeGraph", body.product_id ? "resolveSimilarListings" : "clusterFilter", retrieval.source, "answerGraphQuestion"],
+      tools_used: ["clusterKnowledgeGraph", "classifyQuestion", "buildEvidenceCapsule", body.product_id ? "resolveSimilarListings" : "clusterFilter", retrieval.source, "validateGroundedAnswer"],
       fact_ids: answer.fact_ids,
       graph_paths: [graphPath(graph.ranking?.winner ?? "", factIds)]
     });
@@ -301,7 +344,12 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       answer,
       graph_path: graphPath(graph.ranking?.winner ?? "", factIds),
       evidence_paths: paths,
-      agent: { provider: finalGrounded.source },
+      agent: {
+        provider: finalGrounded.source,
+        mode: "evidence_capsule_v1",
+        validated: !selectedAnswer.validation.used_fallback,
+        validation_reasons: selectedAnswer.validation.reasons
+      },
       retrieval: {
         source: retrieval.source,
         result_count: retrieval.results.length,
@@ -309,7 +357,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       },
       cache: { hit: false, cache_key: cacheKey }
     };
-    if (isGeneratedProvider(finalGrounded.source)) {
+    if (isGeneratedProvider(finalGrounded.source) && answer.next_action?.type !== "ask_proof") {
       await writeLlmCache(db, cacheKey, "knowledge_graph_chat", response);
     }
     return response;
@@ -336,7 +384,7 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const body: any = request.body;
     assertBuyer(account, body.buyer_id);
     const cacheKey = llmCacheKey("agent_query", {
-      answer_version: "sku_proof_v3",
+      answer_version: "sku_proof_v5_action_contract",
       buyer_id: body.buyer_id,
       cluster_id: body.cluster_id,
       selected_variant_id: body.selected_variant_id,
@@ -361,10 +409,13 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
     const passport = product && body.selected_variant_id
       ? await skuPassport(db, body.buyer_id, product.product_id, body.selected_variant_id)
       : null;
-    const fact_ids: string[] = passport?.fact_ids?.slice(0, 12) ?? [];
+    const capsule = product && passport
+      ? buildProductAdviceEvidenceCapsule(body.query ?? "", product, passport)
+      : null;
+    const fact_ids: string[] = [...new Set([...(passport?.fact_ids ?? []), ...(capsule?.fact_ids ?? [])])].slice(0, 16);
     const attribute = inferAttribute(body.query);
-    const fallback = product && passport
-      ? productAdviceFallback(body.query ?? "", attribute, product, passport)
+    const fallback = capsule
+      ? deterministicEvidenceAnswer(capsule)
       : {
           title: "Sarthi answer",
           summary: "Sarthi needs a selected SKU before it can inspect seller, size, return, proof, and offer evidence.",
@@ -375,6 +426,18 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       task: "product_advice",
       query: body.query ?? "",
       context: {
+        answer_contract: capsule ? {
+          intent: capsule.intent,
+          verdict: capsule.verdict,
+          confidence: capsule.confidence,
+          must_answer_question: body.query ?? "",
+          direct_facts: capsule.direct_facts,
+          missing_facts: capsule.missing_facts,
+          risk_flags: capsule.risk_flags,
+          allowed_actions: capsule.allowed_actions,
+          forbidden_topics: capsule.forbidden_topics
+        } : null,
+        evidence_capsule: capsule,
         product: product ? {
           product_id: product.product_id,
           title: product.title,
@@ -407,31 +470,60 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
       },
       fallback
     });
+    const selectedAnswer = capsule
+      ? selectGroundedAnswer(grounded, fallback, capsule)
+      : {
+          answer: fallback,
+          validation: {
+            ok: false,
+            reasons: ["missing_selected_sku"],
+            used_fallback: true
+          }
+        };
+    const finalGrounded = {
+      ...selectedAnswer.answer,
+      source: selectedAnswer.validation.used_fallback ? "deterministic_fallback" as const : grounded.source
+    };
     const trace = await createTrace(db, {
       buyer_id: body.buyer_id,
       product_id: product?.product_id,
       variant_id: body.selected_variant_id,
       intent: ["samvaad"],
-      tools_used: ["intentDetection", "groundedAnswer", grounded.source],
+      tools_used: ["intentDetection", "buildEvidenceCapsule", "groundedAnswer", "validateGroundedAnswer", finalGrounded.source],
       fact_ids
     });
-    const weakGeneratedAnswer = shouldUseFallbackProductAdvice(grounded.title, grounded.summary, grounded.reasons, body.query ?? "", passport, attribute);
+    const primaryAction = await productAdvicePrimaryAction(
+      db,
+      capsule?.allowed_actions[0] ?? null,
+      product,
+      body.selected_variant_id ?? null,
+      body.query ?? "",
+      capsule
+    );
     const response = {
       trace_id: trace.trace_id,
-      intent: [attribute, "trust_question"],
+      intent: [capsule?.intent ?? attribute, "trust_question"],
       answer: {
-        title: weakGeneratedAnswer ? fallback.title : grounded.title,
-        summary: weakGeneratedAnswer ? fallback.summary : grounded.summary,
-        reasons: weakGeneratedAnswer ? fallback.reasons : normalizeAgentReasons(grounded.reasons, fallback.reasons),
-        caution: weakGeneratedAnswer ? fallback.caution : grounded.caution ?? fallback.caution,
-        primary_action: body.selected_variant_id
-          ? { type: "open_variant", variant_id: body.selected_variant_id, label: "Inspect SKU proof" }
-          : null
+        query: body.query,
+        title: finalGrounded.title,
+        summary: finalGrounded.summary,
+        reasons: finalGrounded.reasons,
+        caution: finalGrounded.caution,
+        verdict: capsule?.verdict ?? "cannot_answer",
+        confidence: capsule?.confidence ?? "low",
+        evidence_used: capsule?.direct_facts ?? [],
+        missing_evidence: capsule?.missing_facts ?? [],
+        primary_action: primaryAction
       },
-      agent: { provider: grounded.source },
+      agent: {
+        provider: finalGrounded.source,
+        mode: "evidence_capsule_v1",
+        validated: !selectedAnswer.validation.used_fallback,
+        validation_reasons: selectedAnswer.validation.reasons
+      },
       fact_ids
     };
-    if (isGeneratedProvider(grounded.source)) {
+    if (isGeneratedProvider(finalGrounded.source) && response.answer.primary_action?.type !== "ask_proof") {
       await writeLlmCache(db, cacheKey, "agent_query", response);
     }
     return response;
@@ -504,109 +596,108 @@ export async function registerDecisionRoutes(app: FastifyInstance, db: Db) {
   });
 }
 
-function productAdviceFallback(query: string, attribute: string, product: any, passport: any) {
-  const evidence = passport.outcome_evidence ?? {};
-  const fit = passport.fit ?? {};
-  const selectedSize = passport.variant?.size ? String(passport.variant.size) : "this size";
-  const returnRate = Number(evidence.return_rate ?? 0);
-  const fitRate = Number(evidence.fit_as_expected_rate ?? 0);
-  const delivered = Number(evidence.delivered_orders_90d ?? 0);
-  const q = String(query || "").toLowerCase();
+async function graphAnswerNextAction(db: Db, action: any, graph: any, selectedContext: any, query: string, capsule: any) {
+  if (!action) return null;
+  const product = selectedContext?.product ?? {};
+  const variant = selectedContext?.variant ?? {};
+  return answerActionContract(db, action, {
+    productId: product.product_id ?? graph.selected_product_id ?? null,
+    variantId: variant.variant_id ?? graph.selected_variant_id ?? null,
+    sellerId: product.seller_id ?? selectedContext?.seller?.seller_id ?? null,
+    query,
+    capsule
+  });
+}
 
-  let title = "SKU Fact Verification";
-  let summary = "";
-  const reasons: string[] = [];
-  let caution: string | null = null;
-
-  const isOneSize = selectedSize.includes("ONE_SIZE") || selectedSize.includes("ONE SIZE") || selectedSize.includes("Free Size") || selectedSize.includes("FREE_SIZE") || selectedSize === "ONE_SIZE";
-
-  if (q.includes("size") || q.includes("fit") || q.includes("chest") || q.includes("tight") || q.includes("loose") || q.includes("small") || q.includes("large") || /\bl\b/.test(q)) {
-    if (isOneSize) {
-      title = "ONE SIZE / Free Size Fit Check";
-      summary = `This item is available in ONE SIZE (Free Size / Unstitched / Free Drape). It does not have fixed chest bounds, so chest tightness will not be an issue.`;
-      reasons.push("Free size design offers flexible chest and waist fitting.");
-      reasons.push(`${Math.round((fitRate > 0 ? fitRate : 0.86) * 100)}% of recent buyers kept this item without fit returns.`);
-      caution = "Check length measurement chart if you prefer specific drape length.";
-    } else {
-      title = `Size ${selectedSize} Fit Guidance`;
-      if (fit.recommended_size) {
-        summary = `Your safer size is ${fit.recommended_size}. Selected size ${selectedSize} has been checked against buyer outcome evidence.`;
-        reasons.push(`Safer size recommendation: ${fit.recommended_size}.`);
-      } else {
-        summary = `Selected size ${selectedSize} is checked against ${delivered} recent delivered orders.`;
-      }
-      reasons.push(`${Math.round((fitRate > 0 ? fitRate : 0.86) * 100)}% of buyers found fit as expected.`);
-      if (returnRate > 0.1) {
-        reasons.push(`Return rate is ${Math.round(returnRate * 100)}% across recent orders.`);
-      }
-    }
-  } else if (q.includes("fabric") || q.includes("thin") || q.includes("quality") || q.includes("transparent") || q.includes("color") || q.includes("print") || q.includes("kapda")) {
-    title = `${product.fabric || "Fabric"} Quality Check`;
-    summary = `Verified ${product.fabric || "fabric"} details for ${product.title.split("-")[0].trim()}.`;
-    reasons.push(`Fabric specified: ${product.fabric || "Standard fabric"}.`);
-    reasons.push(`${Math.round((1 - (evidence.color_mismatch_returns || 0) / (delivered || 1)) * 100)}% orders delivered without color or transparency complaints.`);
-    if (evidence.color_mismatch_returns > 0) {
-      caution = "Minor color variation possible under studio lighting.";
-    }
-  } else {
-    title = `Verified Facts for ${product.title.split("-")[0].trim()}`;
-    summary = `Sarthi verified recent delivered orders from ${product.seller_name}.`;
-    reasons.push(`Delivered order sample: ${delivered} orders.`);
-    reasons.push(`Fit satisfaction rate: ${Math.round((fitRate > 0 ? fitRate : 0.86) * 100)}%.`);
+async function productAdvicePrimaryAction(db: Db, action: any, product: any, variantId: string | null, query: string, capsule: any) {
+  if (action) {
+    return answerActionContract(db, action, {
+      productId: product?.product_id ?? null,
+      variantId,
+      sellerId: product?.seller_id ?? null,
+      query,
+      capsule
+    });
   }
-
+  if (!variantId) return null;
   return {
-    title,
-    summary,
-    reasons: reasons.slice(0, 3),
-    caution
+    type: "open_variant",
+    label: "Inspect SKU proof",
+    reason: "Open the SKU proof trail before deciding.",
+    product_id: product?.product_id ?? null,
+    variant_id: variantId,
+    seller_id: product?.seller_id ?? null,
+    attribute: normalizeProofActionAttribute(null, query),
+    request_id: null,
+    request_status: "not_applicable",
+    request_count: 0,
+    privacy_note: "No seller data is changed by this action."
   };
 }
 
-function normalizeAgentReasons(generatedReasons: string[], fallbackReasons: string[]) {
-  const useful = generatedReasons
-    .map((reason) => reason.trim())
-    .filter((reason) => reason.length > 0)
-    .filter((reason) => !/^missing\s+/i.test(reason))
-    .filter((reason) => !/proof is missing$/i.test(reason));
-  return (useful.length >= 2 ? useful : fallbackReasons).slice(0, 4);
-}
-
-function normalizeGraphAgentReasons(generatedReasons: string[], fallbackReasons: string[]) {
-  const useful = generatedReasons
-    .map((reason) => reason.trim())
-    .filter((reason) => reason.length > 0)
-    .filter((reason) => !/^(\(?\d+\)?\s*)?the product has \d+ proof gaps/i.test(reason))
-    .filter((reason) => !/complete proof.*expectations and standards/i.test(reason));
-  return (useful.length >= 2 ? useful : fallbackReasons).slice(0, 4);
-}
-
-function shouldUseFallbackGraphAnswer(
-  generated: { title: string; summary: string; reasons: string[]; caution: string | null },
-  fallback: { title: string; summary: string; reasons: string[]; caution: string | null },
-  query: string
+async function answerActionContract(
+  db: Db,
+  action: any,
+  context: {
+    productId: string | null;
+    variantId: string | null;
+    sellerId: string | null;
+    query: string;
+    capsule: any;
+  }
 ) {
-  const normalizedQuery = normalizeText(query);
-  const proofQuestion = /\b(proof|evidence|photo|fabric|cloth|material|color|colour|transparent|genuine|real|authentic)\b/.test(normalizedQuery);
-  if (!proofQuestion) return false;
+  const base = {
+    ...action,
+    product_id: context.productId,
+    variant_id: context.variantId,
+    seller_id: context.sellerId,
+    attribute: normalizeProofActionAttribute(action.attribute ?? context.capsule?.classifier?.proof_attribute, context.query),
+    request_id: null,
+    request_status: "not_applicable",
+    request_count: 0,
+    privacy_note: "Seller sees aggregate proof demand only."
+  };
+  if (action.type !== "ask_proof") return base;
+  if (!base.product_id || !base.seller_id || !base.attribute) {
+    return {
+      ...base,
+      disabled: true,
+      request_status: "missing_product_context",
+      reason: "Sarthi needs product and seller context before creating a proof request."
+    };
+  }
+  const existing = await collections(db).proofRequests.findOne({
+    seller_id: base.seller_id,
+    product_id: base.product_id,
+    attribute: base.attribute,
+    status: { $in: ["open", "submitted"] }
+  });
+  if (!existing) {
+    return {
+      ...base,
+      request_status: "none",
+      label: base.label || "Ask for proof",
+      reason: base.reason || "Seller proof must be reviewed before confidence improves."
+    };
+  }
+  return {
+    ...base,
+    label: existing.status === "submitted" ? "Proof under review" : "Proof already requested",
+    reason: existing.status === "submitted"
+      ? "Seller has responded; reviewer approval is needed before trust can improve."
+      : "Your ask will be counted as aggregate demand without sharing identity.",
+    request_id: existing.request_id,
+    request_status: existing.status,
+    request_count: Number(existing.request_count ?? 1)
+  };
+}
 
-  const generatedText = normalizeText([generated.title, generated.summary, ...generated.reasons, generated.caution ?? ""].join(" "));
-  const fallbackText = normalizeText([fallback.title, fallback.summary, ...fallback.reasons, fallback.caution ?? ""].join(" "));
-  const fallbackHasSpecificProof = /\b(fabric|color|colour|transparency|measurement|size|packaging|offer|close up|closeup|daylight)\b/.test(fallbackText);
-  if (!fallbackHasSpecificProof) return false;
-
-  const vagueGenerated = [
-    "some missing proof gaps",
-    "some proof gaps",
-    "could affect your decision",
-    "meets your expectations and standards",
-    "authenticity and quality",
-    "seller proof is still missing for some claims"
-  ].some((phrase) => generatedText.includes(phrase));
-  const generatedHasSpecificProof = /\b(fabric|color|colour|transparency|measurement|size|packaging|offer|close up|closeup|daylight)\b/.test(generatedText);
-  const repeatedReasons = new Set(generated.reasons.map((reason) => normalizeText(reason))).size < generated.reasons.length;
-
-  return vagueGenerated || repeatedReasons || !generatedHasSpecificProof;
+function normalizeProofActionAttribute(attribute: unknown, query: string) {
+  const raw = String(attribute ?? inferAttribute(query) ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "measurement") return "size";
+  if (raw === "thin" || raw === "see_through") return "transparency";
+  return raw;
 }
 
 function graphQueryMatchedNodeIds(graph: any, query: string, selectedContext: any) {
@@ -649,35 +740,6 @@ function graphQueryMatchedNodeIds(graph: any, query: string, selectedContext: an
 
   const graphNodeIds = new Set((graph.nodes ?? []).map((node: any) => node.id));
   return [...matches].filter((nodeId) => graphNodeIds.has(nodeId)).slice(0, 7);
-}
-
-function shouldUseFallbackProductAdvice(title: string, summary: string, reasons: string[], query: string, passport: any, attribute: string) {
-  const haystack = [title, summary, ...reasons].join(" ").toLowerCase();
-  const normalizedSummary = normalizeText(summary);
-  const normalizedQuery = normalizeText(query);
-  const questionEcho = normalizedSummary.length > 12 && (
-    summary.trim().endsWith("?") ||
-    normalizedQuery.startsWith(normalizedSummary) ||
-    normalizedSummary.startsWith(normalizedQuery)
-  );
-  const vague = [
-    "lacks some details",
-    "some details for a stronger recommendation",
-    "product evidence is available",
-    "missing daylight photo missing fabric",
-    "missing fabric closeup",
-    "missing packaging photo"
-  ].some((phrase) => haystack.includes(phrase));
-  const relevantGap = passport?.evidence_gaps?.some((gap: any) => gap.attribute === attribute || (attribute === "fabric" && gap.attribute === "transparency"));
-  const overclaimsMissingProof = Boolean(relevantGap) && (
-    haystack.includes("no evidence of") ||
-    haystack.includes("no proof of") ||
-    haystack.includes("no issue") ||
-    haystack.includes("no issues") ||
-    haystack.includes("safe to buy") ||
-    haystack.includes("safe to consider")
-  );
-  return questionEcho || vague || overclaimsMissingProof;
 }
 
 function normalizeText(value: string) {

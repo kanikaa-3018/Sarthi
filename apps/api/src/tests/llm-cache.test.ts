@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { env } from "../config/env.js";
-import { llmCacheKey } from "../services/llmCache.js";
+import { llmCacheKey, stableDataCacheKey } from "../services/llmCache.js";
 import { aiRuntimeStatus } from "../services/ai.js";
 
 describe("AI cache isolation", () => {
@@ -24,6 +24,20 @@ describe("AI cache isolation", () => {
       llmCacheKey("answer", { query: "same", product_id: "p1" }),
       llmCacheKey("answer", { product_id: "p1", query: "same" })
     );
+  });
+
+  it("keeps data cache keys independent from provider order", () => {
+    const previousOrder = env.providerOrder;
+    try {
+      env.providerOrder = ["bedrock", "gemini"];
+      const first = stableDataCacheKey("graph", { product_id: "p1", selected_variant_id: "p1_l" });
+      env.providerOrder = ["gemini"];
+      const second = stableDataCacheKey("graph", { selected_variant_id: "p1_l", product_id: "p1" });
+
+      assert.equal(first, second);
+    } finally {
+      env.providerOrder = previousOrder;
+    }
   });
 
   it("reports Bedrock and legacy Gemini health without exposing secrets", () => {

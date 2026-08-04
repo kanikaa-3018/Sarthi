@@ -2,13 +2,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import type { Db } from "mongodb";
+import { buildApp } from "../app.js";
 import { assertBuyer, assertSeller, requireRole } from "../middleware/auth.js";
 import { aggregateConfidenceScore } from "../services/confidenceScoring.js";
 import { tokenHash } from "../services/crypto.js";
 import { trustState } from "../services/domain.js";
 import { approveListingDraft, approveSellerEvidenceAsset } from "../services/adminOperations.js";
 import { markCheckoutOrderDelivered, recordOrderOutcome } from "../services/buyerOperations.js";
-import { assertSellerOwnsProduct, correctSellerMeasurement, createListingDraft, submitListingDraft, submitSellerDocument, submitSellerEvidence, updateListingDraft } from "../services/sellerOperations.js";
+import { assertSellerOwnsProduct, correctSellerMeasurement, createListingDraft, listingCard, sellerPanel, submitListingDraft, submitSellerDocument, submitSellerEvidence, updateListingDraft } from "../services/sellerOperations.js";
 
 function dbWith(tables: Record<string, any[]>): Db {
   return {
@@ -47,6 +48,11 @@ function dbWith(tables: Record<string, any[]>): Db {
           const row = rows.find((item) => matches(item, query));
           if (row && update.$set) {
             Object.assign(row, update.$set);
+          }
+          if (row && update.$inc) {
+            Object.entries(update.$inc).forEach(([key, value]) => {
+              row[key] = Number(row[key] ?? 0) + Number(value);
+            });
           }
           return Promise.resolve({ acknowledged: true, matchedCount: row ? 1 : 0, modifiedCount: row ? 1 : 0 });
         },
@@ -632,6 +638,128 @@ describe("RBAC ownership checks", () => {
     assert.equal(tables.order_outcomes.length, 1);
   });
 
+  it("creates aggregate buyer proof demand through the route without exposing buyer identity", async () => {
+    const token = "buyer-token";
+    const tables: Record<string, any[]> = {
+      auth_sessions: [{
+        token_hash: tokenHash(token),
+        revoked_at: null,
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        account_id: "acct_buyer"
+      }],
+      accounts: [{
+        account_id: "acct_buyer",
+        username: "asha",
+        display_name: "Asha",
+        role: "buyer",
+        buyer_id: "buyer_a",
+        seller_id: null,
+        disabled: 0
+      }],
+      sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions" }],
+      products: [{ product_id: "product_a", seller_id: "seller_a", title: "Blue cotton kurti" }],
+      skus: [{ variant_id: "variant_l", product_id: "product_a", size: "L" }],
+      proof_requests: [],
+      fact_records: [],
+      agent_traces: []
+    };
+    const app = await buildApp(dbWith(tables));
+
+    try {
+      const first = await app.inject({
+        method: "POST",
+        url: "/buyers/buyer_a/proof-requests",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          product_id: "product_a",
+          variant_id: "variant_l",
+          attribute: "measurement",
+          question: "Will size L chest be tight?"
+        }
+      });
+
+      assert.equal(first.statusCode, 200);
+      const firstBody = first.json();
+      assert.equal(firstBody.request.attribute, "size");
+      assert.equal(firstBody.action.attribute, "size");
+      assert.equal(firstBody.action.request_count, 1);
+      assert.equal(firstBody.action.privacy_note, "Seller sees aggregate proof demand, not buyer identity.");
+      assert.equal(firstBody.privacy.buyer_profile_shared_with_seller, false);
+      assert.equal(firstBody.request.buyer_id, undefined);
+
+      const second = await app.inject({
+        method: "POST",
+        url: "/buyers/buyer_a/proof-requests",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          product_id: "product_a",
+          variant_id: "variant_l",
+          attribute: "size",
+          question: "Please show the size chart before I buy."
+        }
+      });
+
+      assert.equal(second.statusCode, 200);
+      const secondBody = second.json();
+      assert.equal(secondBody.request.request_id, firstBody.request.request_id);
+      assert.equal(secondBody.action.request_count, 2);
+      assert.equal(tables.proof_requests.length, 1);
+      assert.equal(tables.proof_requests[0].request_count, 2);
+      assert.equal(tables.fact_records.length, 1);
+      assert.equal(tables.agent_traces.length, 2);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects proof requests when the selected variant belongs to another product", async () => {
+    const token = "buyer-token";
+    const tables: Record<string, any[]> = {
+      auth_sessions: [{
+        token_hash: tokenHash(token),
+        revoked_at: null,
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        account_id: "acct_buyer"
+      }],
+      accounts: [{
+        account_id: "acct_buyer",
+        username: "asha",
+        display_name: "Asha",
+        role: "buyer",
+        buyer_id: "buyer_a",
+        seller_id: null,
+        disabled: 0
+      }],
+      sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions" }],
+      products: [{ product_id: "product_a", seller_id: "seller_a", title: "Blue cotton kurti" }],
+      skus: [{ variant_id: "variant_other", product_id: "product_b", size: "L" }],
+      proof_requests: [],
+      fact_records: [],
+      agent_traces: []
+    };
+    const app = await buildApp(dbWith(tables));
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/buyers/buyer_a/proof-requests",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          product_id: "product_a",
+          variant_id: "variant_other",
+          attribute: "size",
+          question: "Can seller prove this size?"
+        }
+      });
+
+      assert.equal(response.statusCode, 400);
+      assert.match(response.json().detail, /Variant does not belong/);
+      assert.equal(tables.proof_requests.length, 0);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("does not publish listing drafts from unverified sellers", async () => {
     const tables: Record<string, any[]> = listingReviewTables({
       seller_profiles: [{ seller_id: "seller_a", verification_status: "pending" }]
@@ -741,6 +869,67 @@ describe("RBAC ownership checks", () => {
       () => updateListingDraft(db, "seller_a", "draft_revision", { title: "Late edit" }),
       (error: any) => error.statusCode === 400 && /Only draft/.test(error.message)
     );
+  });
+
+  it("uses the SKU with strongest real evidence for seller listing cards instead of a fixed size", async () => {
+    const tables: Record<string, any[]> = {
+      sellers: [{ seller_id: "seller_a", name: "NayiDisha Fashions", median_dispatch_hours: 24 }],
+      products: [{
+        product_id: "product_a",
+        seller_id: "seller_a",
+        title: "Blue cotton kurti",
+        category: "women_kurtis",
+        color_family: "blue",
+        base_price: 459,
+        rating: 4.1,
+        rating_count: 80,
+        image_url: "seeded://products/blue-kurti.jpg"
+      }],
+      skus: [
+        { variant_id: "product_a_xl", product_id: "product_a", size: "XL", current_price: 459, stock: 30 },
+        { variant_id: "product_a_l", product_id: "product_a", size: "L", current_price: 459, stock: 12 }
+      ],
+      order_outcomes: Array.from({ length: 16 }, (_, index) => ({
+        order_id: `order_l_${index}`,
+        buyer_id: `buyer_${index}`,
+        variant_id: "product_a_l",
+        status: index < 14 ? "delivered_kept" : "returned",
+        return_reason: index < 14 ? null : "too_small",
+        fact_id: `fact_l_${index}`,
+        created_at: new Date(Date.now() - index * 3600000).toISOString()
+      }))
+    };
+
+    const card = await listingCard(dbWith(tables), tables.products[0]);
+
+    assert.equal(card.variant.variant_id, "product_a_l");
+    assert.equal(card.variant.size, "L");
+    assert.equal(card.metrics.delivered_orders_90d, 16);
+    assert.notEqual(card.variant.variant_id, "product_a_xl");
+  });
+
+  it("does not attach a new seller panel to a hardcoded marketplace cluster", async () => {
+    const tables: Record<string, any[]> = {
+      sellers: [{ seller_id: "seller_new", name: "New Seller", median_dispatch_hours: 48 }],
+      seller_profiles: [{ seller_id: "seller_new", verification_status: "verified" }],
+      products: [],
+      product_clusters: [{ cluster_id: "cluster_floral_blue", label: "Blue kurtis" }],
+      proof_requests: [],
+      seller_root_cause_tasks: [],
+      data_sources: [{
+        source_id: "orders",
+        status: "operational",
+        last_synced_at: new Date().toISOString(),
+        freshness_sla_hours: 24
+      }]
+    };
+
+    const panel = await sellerPanel(dbWith(tables), "seller_new");
+
+    assert.equal(panel.cluster.cluster_id, "none");
+    assert.equal(panel.cluster.listing_count, 0);
+    assert.equal(panel.seller_listings.length, 0);
+    assert.equal(panel.competing_listings.length, 0);
   });
 });
 

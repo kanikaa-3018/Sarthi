@@ -74,11 +74,14 @@ export async function registerSystemRoutes(app: FastifyInstance, db: Db) {
     return { ok: true, counts: await resetMongoSeed(db) };
   });
 
-  app.get("/scenarios", async () => ({ scenarios: defaultScenarios() }));
+  app.get("/scenarios", async () => ({ scenarios: await defaultScenarios(db) }));
 
-  app.post("/scenarios/:scenario_id/activate", async (request) => ({
-    scenario: defaultScenarios().find((item) => item.scenario_id === (request.params as any).scenario_id) ?? defaultScenarios()[0]
-  }));
+  app.post("/scenarios/:scenario_id/activate", async (request, reply) => {
+    const scenarios = await defaultScenarios(db);
+    const scenario = scenarios.find((item) => item.scenario_id === (request.params as any).scenario_id) ?? scenarios[0];
+    if (!scenario) return reply.code(404).send({ detail: "No runnable scenario found from current evidence records" });
+    return { scenario };
+  });
 
   app.get("/data-sources", async (request, reply) => {
     const account = await requireAccount(db, request, reply);

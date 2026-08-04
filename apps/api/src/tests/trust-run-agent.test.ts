@@ -3,16 +3,18 @@ import assert from "node:assert/strict";
 import type { Db } from "mongodb";
 import { env } from "../config/env.js";
 import { buildSeedDocuments } from "../data/seed.js";
-import { computeKeepConfidence, rankCluster, reviewCredibilitySummary, skuPassport, verifyOffer } from "../services/domain.js";
+import { computeKeepConfidence, createOrIncrementProofRequest, productWithSeller, rankCluster, reviewCredibilitySummary, skuPassport, verifyOffer } from "../services/domain.js";
 import { buyerProofLedger, recordOrderOutcome } from "../services/buyerOperations.js";
 import { computeCartConfidence } from "../services/decisionEngine.js";
 import { sellerEvidenceCoach } from "../services/sellerOperations.js";
 import { runTrustRun } from "../services/trustRunAgent.js";
+import { clusterKnowledgeGraph } from "../services/knowledgeGraph.js";
 
 const collectionMap: Record<string, keyof ReturnType<typeof buildSeedDocuments>> = {
   buyers: "buyers",
   buyer_review_profiles: "buyerReviewProfiles",
   buyer_fit_profiles: "buyerFitProfiles",
+  data_sources: "dataSources",
   sellers: "sellers",
   seller_profiles: "sellerProfiles",
   product_clusters: "clusters",
@@ -207,6 +209,19 @@ describe("trust run agent", () => {
     assert.ok(item.proof_loop.timeline.length >= 5);
   });
 
+  it("aggregates repeated buyer proof asks by seller, product, and attribute", async () => {
+    const db = seededDb();
+    const product = await productWithSeller(db, "kurti_1_1");
+    assert.ok(product);
+
+    const first = await createOrIncrementProofRequest(db, "buyer_asha", product, "kurti_1_1_l", "fabric", "Is the fabric thin?");
+    const second = await createOrIncrementProofRequest(db, "buyer_neha", product, "kurti_1_1_l", "fabric", "Need fabric close-up before buying.");
+
+    assert.equal(second.request_id, first.request_id);
+    assert.equal(second.request_count, first.request_count + 1);
+    assert.equal(second.buyer_question, "Need fabric close-up before buying.");
+  });
+
   it("turns offer checks into a dark pattern disruptor shield", async () => {
     const offer = await verifyOffer(seededDb(), "kurti_1_2_xl");
     const shield = offer.dark_pattern_shield;
@@ -280,6 +295,140 @@ describe("trust run agent", () => {
     assert.ok(candidate.score_breakdown.adjustments.score_cap);
     assert.ok(candidate.fair_start_policy.buyer_label.includes("limited evidence"));
   });
+
+  it("scores comparable sellers against the selected SKU size instead of defaulting to XL", async () => {
+    const ranking = await rankCluster(seededDb(), "buyer_asha", "cluster_floral_blue", "comfort", {
+      productIds: ["kurti_1_1", "kurti_1_2", "kurti_1_3"],
+      selectedVariantId: "kurti_1_1_l"
+    });
+
+    assert.equal(ranking.selected_variant_id, "kurti_1_1_l");
+    assert.equal(ranking.selected_size, "L");
+    assert.ok(ranking.candidates.length >= 3);
+    assert.ok(ranking.candidates.every((candidate: any) => candidate.variant_id.endsWith("_l")));
+  });
+
+  it("keeps review bursts from silently inflating the seller score", async () => {
+    const db = seededDb();
+    await (db as any).collection("reviews").insertMany(
+      Array.from({ length: 5 }, (_, index) => ({
+        review_id: `review_spike_guard_${index}`,
+        product_id: "kurti_1_2",
+        variant_id: "kurti_1_2_xl",
+        reviewer_buyer_id: `buyer_spike_${index}`,
+        attribute: "quality",
+        sentiment: "positive",
+        text: "Good product, nice, same as shown.",
+        rating: 5,
+        verified_purchase: 0,
+        reviewer_age_days: 8,
+        reviewer_return_rate: 0.52,
+        credibility_weight: 0.25,
+        credibility_flags: ["new_account", "high_return_rate", "repeated_text_pattern"],
+        fact_id: `fact_review_spike_guard_${index}`,
+        created_at: `2026-07-20T09:0${index}:00.000Z`
+      }))
+    );
+
+    const ranking = await rankCluster(db, "buyer_asha", "cluster_floral_blue", "comfort", {
+      productIds: ["kurti_1_2"],
+      selectedVariantId: "kurti_1_2_xl"
+    });
+    const candidate = ranking.candidates[0] as any;
+
+    assert.equal(candidate.score_integrity_guard.status, "watch");
+    assert.ok(candidate.score_integrity_guard.reasons.some((reason: any) => reason.key === "review_spike"));
+    assert.ok(candidate.score_integrity_guard.applied_penalty > 0);
+    assert.ok(candidate.factors.integrity_penalty > 0);
+    assert.ok(candidate.score_breakdown.adjustments.integrity_penalty > 0);
+  });
+
+  it("caps sudden score jumps until new outcomes confirm the improvement", async () => {
+    const db = seededDb();
+    await (db as any).collection("trust_score_snapshots").insertMany(
+      Array.from({ length: 3 }, (_, index) => ({
+        snapshot_id: `trust_score_guard_${index}`,
+        buyer_id: "buyer_asha",
+        cluster_id: "cluster_floral_blue",
+        product_id: "kurti_1_2",
+        variant_id: "kurti_1_2_xl",
+        seller_id: "seller_b",
+        decision_intent: "wishlist_radar",
+        score: 0.24 + index * 0.01,
+        score_percent: 24 + index,
+        created_at: `2026-07-19T0${index}:00:00.000Z`
+      }))
+    );
+
+    const ranking = await rankCluster(db, "buyer_asha", "cluster_floral_blue", "comfort", {
+      productIds: ["kurti_1_2"],
+      selectedVariantId: "kurti_1_2_xl"
+    });
+    const candidate = ranking.candidates[0] as any;
+
+    assert.equal(candidate.score_integrity_guard.status, "watch");
+    assert.ok(candidate.score_integrity_guard.reasons.some((reason: any) => reason.key === "score_jump"));
+    assert.ok(candidate.score_integrity_guard.previous_score.sample_size >= 3);
+    assert.ok(candidate.score <= candidate.score_integrity_guard.score_cap);
+  });
+
+  it("blocks high confidence when an evidence source is unavailable", async () => {
+    const db = seededDb();
+    await (db as any).collection("data_sources").updateOne(
+      { source_id: "reviews" },
+      { $set: { status: "unavailable" } }
+    );
+
+    const ranking = await rankCluster(db, "buyer_asha", "cluster_floral_blue", "comfort", {
+      productIds: ["kurti_1_2"],
+      selectedVariantId: "kurti_1_2_xl"
+    });
+    const candidate = ranking.candidates[0] as any;
+
+    assert.equal(candidate.score_integrity_guard.status, "blocked");
+    assert.ok(candidate.score_integrity_guard.reasons.some((reason: any) => reason.key === "stale_sources"));
+    assert.ok(candidate.score <= 0.49);
+  });
+
+  it("builds the knowledge graph from the selected SKU and same-size seller context", async () => {
+    const graph = await clusterKnowledgeGraph(seededDb(), "buyer_asha", "cluster_floral_blue", "kurti_1_1", "kurti_1_1_l");
+    const selectedContext = graph.seller_context.find((context: any) => context.product.product_id === "kurti_1_1");
+
+    assert.equal(graph.selected_product_id, "kurti_1_1");
+    assert.equal(graph.selected_variant_id, "kurti_1_1_l");
+    assert.equal(graph.selected_size, "L");
+    assert.equal(selectedContext?.variant.variant_id, "kurti_1_1_l");
+    assert.ok(graph.seller_context.slice(0, 3).every((context: any) => context.variant.size === "L"));
+    assert.ok(graph.nodes.some((node: any) => node.id === "sku:kurti_1_1_l"));
+    assert.equal(graph.nodes.some((node: any) => node.id === "sku:kurti_1_1_xl"), false);
+  });
+
+  it("reuses a materialized graph until seller proof evidence changes", async () => {
+    const db = seededDb();
+    const first = await clusterKnowledgeGraph(db, "buyer_asha", "cluster_floral_blue", "kurti_1_1", "kurti_1_1_l");
+    const second = await clusterKnowledgeGraph(db, "buyer_asha", "cluster_floral_blue", "kurti_1_1", "kurti_1_1_l");
+
+    assert.equal(first.summary.cache?.status, "miss");
+    assert.equal(second.summary.cache?.status, "hit");
+    assert.equal(second.summary.cache?.evidence_version, first.summary.cache?.evidence_version);
+
+    await (db as any).collection("seller_evidence_assets").insertOne({
+      proof_id: "proof_cache_invalidation_1",
+      seller_id: "seller_a",
+      product_id: "kurti_1_1",
+      attribute: "fabric",
+      proof_type: "fabric_closeup",
+      status: "verified",
+      fact_id: "fact_cache_invalidation_1",
+      submitted_at: "2026-07-20T08:00:00.000Z",
+      reviewed_at: "2026-07-20T09:00:00.000Z",
+      created_at: "2026-07-20T08:00:00.000Z"
+    });
+
+    const refreshed = await clusterKnowledgeGraph(db, "buyer_asha", "cluster_floral_blue", "kurti_1_1", "kurti_1_1_l");
+    assert.equal(refreshed.summary.cache?.status, "miss");
+    assert.notEqual(refreshed.summary.cache?.evidence_version, first.summary.cache?.evidence_version);
+  });
 });
 
 function matches(row: Record<string, any>, query: Record<string, any>) {
@@ -287,6 +436,7 @@ function matches(row: Record<string, any>, query: Record<string, any>) {
     const actual = row[key];
     if (expected && typeof expected === "object" && "$in" in expected) return expected.$in.includes(actual);
     if (expected && typeof expected === "object" && "$ne" in expected) return actual !== expected.$ne;
+    if (expected && typeof expected === "object" && "$gt" in expected) return actual > expected.$gt;
     if (expected && typeof expected === "object" && "$exists" in expected) return expected.$exists ? actual !== undefined : actual === undefined;
     return actual === expected;
   });
