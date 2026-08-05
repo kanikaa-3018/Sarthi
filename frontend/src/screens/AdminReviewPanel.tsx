@@ -424,6 +424,18 @@ export function AdminReviewPanel({ language }: { language: LanguageCode }) {
   }, [location.pathname]);
 
   useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [success]);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
     if (!queue?.seller_dossiers.length) return;
     const currentStillExists =
       selectedSellerId && queue.seller_dossiers.some((seller) => seller.seller_id === selectedSellerId);
@@ -574,8 +586,26 @@ export function AdminReviewPanel({ language }: { language: LanguageCode }) {
         </button>
       </section>
 
-      {error && <div className="notice error">{error}</div>}
-      {success && <div className="notice success">{success}</div>}
+      <div className="reviewer-toast-container" aria-live="polite">
+        {success && (
+          <div className="reviewer-toast reviewer-toast-success">
+            <CheckCircle2 size={16} />
+            <span>{success}</span>
+            <button type="button" onClick={() => setSuccess(null)} aria-label="Close notification">
+              <XCircle size={14} />
+            </button>
+          </div>
+        )}
+        {error && (
+          <div className="reviewer-toast reviewer-toast-error">
+            <AlertTriangle size={16} />
+            <span>{error}</span>
+            <button type="button" onClick={() => setError(null)} aria-label="Close notification">
+              <XCircle size={14} />
+            </button>
+          </div>
+        )}
+      </div>
 
       {queue ? (
         <>
@@ -739,18 +769,20 @@ function AgentRoomView({
           <span>{providerKicker}</span>
           <h3>{triage.reviewer_queue_count} {tx("uploads need review")}</h3>
           <p>{tx("Sarthi checked uploads and kept clean or incomplete work out of this queue.").replace("{count}", String(storedRows.length))}</p>
+          <div className="admin-provider-badge-wrapper">
+            <ProviderPill provider={queue.automation_plan.agent_provider} />
+          </div>
         </div>
         <div className="admin-agent-hero-metrics" aria-label="AI queue summary">
-          <span>
+          <div className="hero-metric-item">
             <strong>{autoRows}</strong>
-            <em>{tx("Auto cleared")}</em>
-          </span>
-          <span>
+            <span>{tx("Auto cleared")}</span>
+          </div>
+          <div className="hero-metric-item">
             <strong>{heldRows}</strong>
-            <em>{tx("Seller fixes")}</em>
-          </span>
+            <span>{tx("Seller fixes")}</span>
+          </div>
         </div>
-        <ProviderPill provider={queue.automation_plan.agent_provider} />
       </div>
 
       <AgentRoutingBoard queue={queue} language={language} onOpenSeller={onOpenSeller} />
@@ -6049,13 +6081,17 @@ function EmptyPanel({ message, compact = false }: { message: string; compact?: b
 function ReviewerLoadingState({ message, subtext }: { message: string; subtext: string }) {
   return (
     <section className="reviewer-loading-state" role="status" aria-live="polite" aria-busy="true">
-      <div className="reviewer-loading-card">
-        <div className="reviewer-loading-logo">
-          <SarthiMark />
+      <div className="reviewer-loading-banner">
+        <div className="reviewer-loading-icon">
+          <ShieldCheck size={20} />
         </div>
-        <div className="reviewer-loading-spinner" />
-        <h3>{message}</h3>
-        <p>{subtext}</p>
+        <div className="reviewer-loading-copy">
+          <div className="reviewer-loading-title-row">
+            <h3>{message}</h3>
+            <div className="reviewer-loading-spinner" />
+          </div>
+          <p>{subtext}</p>
+        </div>
       </div>
     </section>
   );
