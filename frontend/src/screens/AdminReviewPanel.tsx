@@ -5217,17 +5217,25 @@ function ListingDraftCard({
 
       {hideHeader && (
         <div className="seller-draft-decision-strip" aria-label="Draft decision summary">
-          <div>
-            <span>Seller</span>
-            <strong>{sellerVerified ? "Verified" : "Blocked"}</strong>
+          <div className="strip-item">
+            <span className="strip-label">Seller status</span>
+            <strong className={`strip-pill ${sellerVerified ? "pill-pass" : "pill-fail"}`}>
+              {sellerVerified ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+              {sellerVerified ? "Verified" : "Blocked"}
+            </strong>
           </div>
-          <div>
-            <span>AI checks</span>
-            <strong>{passedChecks}/{totalChecks || 0} passed</strong>
+          <div className="strip-item">
+            <span className="strip-label">AI checks</span>
+            <strong className={`strip-pill ${passedChecks === totalChecks ? "pill-pass" : "pill-warn"}`}>
+              <Sparkles size={13} />
+              {passedChecks}/{totalChecks || 0} passed
+            </strong>
           </div>
-          <div>
-            <span>Reviewer action</span>
-            <strong>{canPublish ? "Publish or revise" : "Resolve blocker"}</strong>
+          <div className="strip-item">
+            <span className="strip-label">Reviewer action</span>
+            <strong className={`strip-pill ${canPublish ? "pill-action" : "pill-warn"}`}>
+              {canPublish ? "Publish or revise" : "Resolve blocker"}
+            </strong>
           </div>
         </div>
       )}
