@@ -134,6 +134,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     decisionLoading || manualDecisionLoading ||
     (graphLoading && !knowledgeGraph) ||
     (radarLoading && !wishlistRadar);
+  const isSavedWorkspaceInitialLoading = step === "saved" && autoScan.status === "scanning";
 
   useEffect(() => {
     if (!compareSheetOpen && !auditDrawerOpen && !safetyProgressOpen) return;
@@ -698,42 +699,55 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           onOpenProductProof={(product) => handleOpenProofForProduct(product)}
         />
       ) : step === "saved" && wishlistedProduct ? (
-        <SarthiSavedWorkspacePanel
-          buyerId={buyerId}
-          savedProduct={wishlistedProduct}
-          products={products}
-          autoScan={autoScan}
-          knowledgeGraph={knowledgeGraph}
-          graphLoading={graphLoading}
-          graphError={graphError}
-          regretDecision={regretDecision}
-          decisionQuestion={decisionQuestion}
-          decisionLoading={savedWorkspaceLoading}
-          graphAnswer={graphAnswer}
-          graphQuery={graphQuery}
-          graphAsking={graphAsking}
-          wishlistRadar={wishlistRadar}
-          radarLoading={radarLoading}
-          radarError={radarError}
-          activeFitProfile={activeFitProfile}
-          openProofDetails={routeProofOpen}
-          language={language}
-          onBack={() => navigate("/shop")}
-          onOpenProduct={(product, variantId) => handleViewProductDetail(product.product_id, variantId ?? null)}
-          onOpenResult={(res) => {
-            setComparison(res);
-            setCompareSheetOpen(true);
-          }}
-          onOpenProof={(traceId) => {
-            setAuditTraceId(traceId);
-            setAuditDrawerOpen(true);
-          }}
-          onDecisionQuestionChange={setDecisionQuestion}
-          onAskDecision={handleAskDecision}
-          onQueryChange={setGraphQuery}
-          onAskGraph={handleAskKnowledgeGraph}
-          onRetryGraph={handleRetryKnowledgeGraph}
-        />
+        isSavedWorkspaceInitialLoading ? (
+          <section className="buyer-safety-progress-backdrop">
+            <section className="buyer-safety-progress" role="status" aria-label="Checking product trust" aria-live="assertive">
+              <span className="buyer-safety-spinner" aria-hidden="true" />
+              <div>
+                <span className="eyebrow">{t(language, "trustReceipt")}</span>
+                <h2>{t(language, "awaitingScanTitle")}</h2>
+                <p>{t(language, "awaitingScanBody")}</p>
+              </div>
+            </section>
+          </section>
+        ) : (
+          <SarthiSavedWorkspacePanel
+            buyerId={buyerId}
+            savedProduct={wishlistedProduct}
+            products={products}
+            autoScan={autoScan}
+            knowledgeGraph={knowledgeGraph}
+            graphLoading={graphLoading}
+            graphError={graphError}
+            regretDecision={regretDecision}
+            decisionQuestion={decisionQuestion}
+            decisionLoading={savedWorkspaceLoading}
+            graphAnswer={graphAnswer}
+            graphQuery={graphQuery}
+            graphAsking={graphAsking}
+            wishlistRadar={wishlistRadar}
+            radarLoading={radarLoading}
+            radarError={radarError}
+            activeFitProfile={activeFitProfile}
+            openProofDetails={routeProofOpen}
+            language={language}
+            onBack={() => navigate("/shop")}
+            onOpenProduct={(product, variantId) => handleViewProductDetail(product.product_id, variantId ?? null)}
+            onOpenResult={(res) => {
+              setComparison(res);
+              setCompareSheetOpen(true);
+            }}
+            onOpenProof={(traceId) => {
+              setAuditTraceId(traceId);
+              setAuditDrawerOpen(true);
+            }}
+            onDecisionQuestionChange={setDecisionQuestion}
+            onAskDecision={handleAskDecision}
+            onQueryChange={setGraphQuery}
+            onAskGraph={handleAskKnowledgeGraph}
+            onRetryGraph={handleRetryKnowledgeGraph}
+          />
+        )
       ) : (
         selectedProductId && (
           <ProductDetailPanel
