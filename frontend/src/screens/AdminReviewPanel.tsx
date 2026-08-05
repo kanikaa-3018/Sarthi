@@ -764,26 +764,28 @@ function AgentRoomView({
   return (
     <section className="admin-agent-room-view admin-clean-mode">
       <div className="admin-mode-hero admin-clean-hero">
-        <div className="admin-mode-hero-icon">
-          <Bot size={18} />
-        </div>
-        <div className="admin-agent-hero-copy">
-          <span>{providerKicker}</span>
-          <h3>{triage.reviewer_queue_count} {tx("uploads need review")}</h3>
-          <p>{tx("Sarthi checked uploads and kept clean or incomplete work out of this queue.").replace("{count}", String(storedRows.length))}</p>
-          <div className="admin-provider-badge-wrapper">
+        <div className="admin-hero-top-bar">
+          <div className="admin-hero-badge-group">
+            <div className="admin-mode-hero-icon">
+              <Bot size={16} />
+            </div>
+            <span className="admin-hero-kicker">{providerKicker}</span>
             <ProviderPill provider={queue.automation_plan.agent_provider} />
           </div>
+          <div className="admin-agent-hero-metrics" aria-label="AI queue summary">
+            <div className="hero-metric-item">
+              <strong>{autoRows}</strong>
+              <span>{tx("Auto cleared")}</span>
+            </div>
+            <div className="hero-metric-item">
+              <strong>{heldRows}</strong>
+              <span>{tx("Seller fixes")}</span>
+            </div>
+          </div>
         </div>
-        <div className="admin-agent-hero-metrics" aria-label="AI queue summary">
-          <div className="hero-metric-item">
-            <strong>{autoRows}</strong>
-            <span>{tx("Auto cleared")}</span>
-          </div>
-          <div className="hero-metric-item">
-            <strong>{heldRows}</strong>
-            <span>{tx("Seller fixes")}</span>
-          </div>
+        <div className="admin-agent-hero-copy">
+          <h3>{triage.reviewer_queue_count} {tx("uploads need review")}</h3>
+          <p>{tx("Sarthi checked uploads and kept clean or incomplete work out of this queue.").replace("{count}", String(storedRows.length))}</p>
         </div>
       </div>
 

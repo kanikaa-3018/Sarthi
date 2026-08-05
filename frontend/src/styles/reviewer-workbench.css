@@ -4819,34 +4819,60 @@
 /* AI Queue Hero Banner Polish */
 .admin-clean-hero {
   display: flex !important;
-  align-items: flex-start !important;
-  justify-content: space-between !important;
-  gap: 24px !important;
-  padding: 24px 28px !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  padding: 24px 32px !important;
   background: var(--bg-surface, #ffffff) !important;
   border: 1px solid var(--border-subtle, #e2e8f0) !important;
   border-radius: 16px !important;
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04) !important;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.03) !important;
   margin-bottom: 24px !important;
+  overflow: hidden !important;
+}
+
+.admin-hero-top-bar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 20px !important;
+  width: 100% !important;
+}
+
+.admin-hero-badge-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+
+.admin-hero-badge-group .admin-mode-hero-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 8px !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  margin: 0 !important;
+}
+
+.admin-hero-kicker {
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: #64748b !important;
 }
 
 .admin-agent-hero-copy {
   display: flex !important;
   flex-direction: column !important;
-  gap: 6px !important;
-  flex: 1 1 auto !important;
-}
-
-.admin-agent-hero-copy span {
-  font-size: 0.76rem !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.06em !important;
-  color: #64748b !important;
+  gap: 4px !important;
 }
 
 .admin-agent-hero-copy h3 {
-  font-size: 1.5rem !important;
+  font-size: 1.6rem !important;
   font-weight: 800 !important;
   color: #0f172a !important;
   margin: 0 !important;
@@ -4854,14 +4880,9 @@
 }
 
 .admin-agent-hero-copy p {
-  font-size: 0.90rem !important;
+  font-size: 0.92rem !important;
   color: #64748b !important;
   margin: 0 !important;
-}
-
-.admin-provider-badge-wrapper {
-  margin-top: 10px !important;
-  display: inline-flex !important;
 }
 
 .admin-agent-hero-metrics {
@@ -4877,9 +4898,9 @@
 .admin-agent-hero-metrics .hero-metric-item {
   display: flex !important;
   flex-direction: column !important;
-  align-items: center !important;
+  align-items: flex-end !important;
   gap: 2px !important;
-  text-align: center !important;
+  text-align: right !important;
 }
 
 .admin-agent-hero-metrics .hero-metric-item strong {
@@ -4890,7 +4911,7 @@
 }
 
 .admin-agent-hero-metrics .hero-metric-item span {
-  font-size: 0.75rem !important;
+  font-size: 0.78rem !important;
   font-weight: 600 !important;
   color: #64748b !important;
   white-space: nowrap !important;
