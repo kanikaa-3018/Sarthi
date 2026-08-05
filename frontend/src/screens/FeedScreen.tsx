@@ -135,6 +135,11 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
     (graphLoading && !knowledgeGraph) ||
     (radarLoading && !wishlistRadar);
   const isSavedWorkspaceInitialLoading = step === "saved" && autoScan.status === "scanning";
+  const savedWorkspaceLoadingProductName = autoScan.status === "scanning" || autoScan.status === "ready"
+    ? autoScan.title
+    : wishlistedProduct
+      ? wishlistedProduct.title.split("-")[0].trim()
+      : "this item";
 
   useEffect(() => {
     if (!compareSheetOpen && !auditDrawerOpen && !safetyProgressOpen) return;
@@ -704,10 +709,15 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
             <section className="buyer-safety-progress" role="status" aria-label="Checking product trust" aria-live="assertive">
               <span className="buyer-safety-spinner" aria-hidden="true" />
               <div>
-                <span className="eyebrow">{t(language, "trustReceipt")}</span>
-                <h2>{t(language, "awaitingScanTitle")}</h2>
-                <p>{t(language, "awaitingScanBody")}</p>
+                <span className="eyebrow">Safety check in progress</span>
+                <h2>Checking seller and proof records</h2>
+                <p>Comparing fit, returns, offer, and seller evidence for {savedWorkspaceLoadingProductName}.</p>
               </div>
+              <ol aria-label="Safety check steps">
+                <li className="complete">Product identified</li>
+                <li className="active">Evidence being checked</li>
+                <li>Safer choice next</li>
+              </ol>
             </section>
           </section>
         ) : (
