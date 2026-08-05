@@ -16,7 +16,9 @@ import {
   Search,
   RefreshCcw,
   Send,
+  ShieldAlert,
   ShieldCheck,
+  Clock,
   Sparkles,
   Store,
   XCircle
@@ -1953,10 +1955,34 @@ function SavedHumanWorkList({ queue }: { queue: AdminReviewQueue }) {
 
 function SavedGuardrailList({ queue }: { queue: AdminReviewQueue }) {
   const rows = [
-    { label: "Senior review", value: queue.summary.senior_routed, detail: "High-risk cases cannot auto-clear." },
-    { label: "Blocked items", value: queue.summary.blocked_items, detail: "Missing or conflicting evidence stays visible." },
-    { label: "Buyer proof waits", value: queue.summary.buyer_requests_waiting, detail: "Open buyer doubts stay attached to the product." },
-    { label: "SLA misses", value: queue.summary.breached_sla_count, detail: "Overdue cases remain easy to spot." }
+    {
+      label: "Senior review",
+      value: queue.summary.senior_routed,
+      detail: "High-risk cases cannot auto-clear.",
+      icon: <ShieldAlert size={18} />,
+      tone: "red"
+    },
+    {
+      label: "Blocked items",
+      value: queue.summary.blocked_items,
+      detail: "Missing or conflicting evidence stays visible.",
+      icon: <AlertTriangle size={18} />,
+      tone: "amber"
+    },
+    {
+      label: "Buyer proof waits",
+      value: queue.summary.buyer_requests_waiting,
+      detail: "Open buyer doubts stay attached to the product.",
+      icon: <FileText size={18} />,
+      tone: "indigo"
+    },
+    {
+      label: "SLA misses",
+      value: queue.summary.breached_sla_count,
+      detail: "Overdue cases remain easy to spot.",
+      icon: <Clock size={18} />,
+      tone: "rose"
+    }
   ];
 
   return (
@@ -1967,14 +1993,15 @@ function SavedGuardrailList({ queue }: { queue: AdminReviewQueue }) {
           <p>Sarthi can assist, but these cases remain accountable.</p>
         </div>
       </div>
-      <div className="reviewer-saved-guardrail-list">
+      <div className="reviewer-saved-guardrail-grid">
         {rows.map((row) => (
-          <article key={row.label} className={row.value > 0 ? "attention" : "clear"}>
-            <strong>{row.value}</strong>
-            <div>
-              <span>{row.label}</span>
+          <article key={row.label} className={`reviewer-saved-guardrail-card ${row.tone} ${row.value > 0 ? "has-count" : "zero-count"}`}>
+            <div className="guardrail-card-icon">{row.icon}</div>
+            <div className="guardrail-card-body">
+              <strong>{row.label}</strong>
               <p>{row.detail}</p>
             </div>
+            <span className="guardrail-card-badge">{row.value}</span>
           </article>
         ))}
       </div>
