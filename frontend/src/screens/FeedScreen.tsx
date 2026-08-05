@@ -130,6 +130,10 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
   const [proofProductIds, setProofProductIds] = useState<Set<string>>(new Set());
 
   const safetyProgressOpen = autoScan.status === "scanning" && step !== "saved";
+  const savedWorkspaceLoading =
+    decisionLoading || manualDecisionLoading ||
+    (graphLoading && !knowledgeGraph) ||
+    (radarLoading && !wishlistRadar);
 
   useEffect(() => {
     if (!compareSheetOpen && !auditDrawerOpen && !safetyProgressOpen) return;
@@ -704,7 +708,7 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
           graphError={graphError}
           regretDecision={regretDecision}
           decisionQuestion={decisionQuestion}
-          decisionLoading={manualDecisionLoading}
+          decisionLoading={savedWorkspaceLoading}
           graphAnswer={graphAnswer}
           graphQuery={graphQuery}
           graphAsking={graphAsking}
