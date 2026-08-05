@@ -35,6 +35,7 @@ import {
   requestListingRevision
 } from "../api/client";
 import { roleText, type LanguageCode } from "../i18n";
+import { SarthiMark } from "../components/SarthiMark";
 import type {
   AdminAiHealth,
   AdminAiHealthTest,
@@ -6046,58 +6047,15 @@ function EmptyPanel({ message, compact = false }: { message: string; compact?: b
 }
 
 function ReviewerLoadingState({ message, subtext }: { message: string; subtext: string }) {
-  const lanes = ["Needs review", "Auto-reviewed", "Escalated"];
-  const rows = [
-    { icon: <ImageIcon size={15} />, label: "Proof" },
-    { icon: <FileCheck2 size={15} />, label: "Document" },
-    { icon: <Store size={15} />, label: "Listing" }
-  ];
-
   return (
     <section className="reviewer-loading-state" role="status" aria-live="polite" aria-busy="true">
-      <div className="reviewer-loading-banner">
-        <div className="reviewer-loading-mark">
-          <Bot size={17} />
-          <span />
+      <div className="reviewer-loading-card">
+        <div className="reviewer-loading-logo">
+          <SarthiMark />
         </div>
-        <div>
-          <strong>{message}</strong>
-          <p>{subtext}</p>
-        </div>
-      </div>
-
-      <div className="reviewer-loading-tabs" aria-hidden="true">
-        {lanes.map((lane) => (
-          <span key={lane}>
-            <strong>{lane}</strong>
-            <em />
-          </span>
-        ))}
-      </div>
-
-      <div className="reviewer-loading-workbench" aria-hidden="true">
-        <div className="reviewer-loading-list">
-          {rows.map((row) => (
-            <article key={row.label}>
-              <span>{row.icon}</span>
-              <div>
-                <strong>{row.label}</strong>
-                <i />
-                <i />
-              </div>
-              <em />
-            </article>
-          ))}
-        </div>
-        <div className="reviewer-loading-evidence">
-          <span />
-          <strong />
-          <i />
-          <div>
-            <b />
-            <b />
-          </div>
-        </div>
+        <div className="reviewer-loading-spinner" />
+        <h3>{message}</h3>
+        <p>{subtext}</p>
       </div>
     </section>
   );
