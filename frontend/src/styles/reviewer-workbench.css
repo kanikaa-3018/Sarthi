@@ -4867,11 +4867,10 @@
 .admin-agent-hero-metrics {
   display: flex !important;
   align-items: center !important;
-  gap: 20px !important;
-  background: #f8fafc !important;
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 12px !important;
-  padding: 14px 20px !important;
+  gap: 24px !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
   flex-shrink: 0 !important;
 }
 
@@ -4897,104 +4896,62 @@
   white-space: nowrap !important;
 }
 
-/* Safety Rules Kept Grid Polish */
-.reviewer-saved-guardrail-grid {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
-  gap: 14px !important;
-  margin-top: 16px !important;
-}
-
-.reviewer-saved-guardrail-card {
-  display: flex !important;
-  align-items: center !important;
-  gap: 14px !important;
-  padding: 16px 20px !important;
-  background: var(--bg-surface, #ffffff) !important;
-  border: 1px solid var(--border-subtle, #e2e8f0) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03) !important;
-  transition: all 0.15s ease !important;
-}
-
-.reviewer-saved-guardrail-card:hover {
-  border-color: #cbd5e1 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06) !important;
-}
-
-.guardrail-card-icon {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 38px !important;
-  height: 38px !important;
-  border-radius: 10px !important;
-  flex-shrink: 0 !important;
-}
-
-.reviewer-saved-guardrail-card.red .guardrail-card-icon {
-  background: #fef2f2 !important;
-  color: #dc2626 !important;
-  border: 1px solid #fecaca !important;
-}
-
-.reviewer-saved-guardrail-card.amber .guardrail-card-icon {
-  background: #fffbeb !important;
-  color: #d97706 !important;
-  border: 1px solid #fef08a !important;
-}
-
-.reviewer-saved-guardrail-card.indigo .guardrail-card-icon {
-  background: #e0e7ff !important;
-  color: #4f46e5 !important;
-  border: 1px solid #c7d2fe !important;
-}
-
-.reviewer-saved-guardrail-card.rose .guardrail-card-icon {
-  background: #ffe4e6 !important;
-  color: #e11d48 !important;
-  border: 1px solid #fecdd3 !important;
-}
-
-.guardrail-card-body {
+/* Safety Rules Kept - Minimal Borderless List */
+.reviewer-saved-guardrail-list {
   display: flex !important;
   flex-direction: column !important;
-  gap: 2px !important;
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
+  gap: 0 !important;
+  margin-top: 8px !important;
 }
 
-.guardrail-card-body strong {
-  font-size: 0.95rem !important;
-  font-weight: 700 !important;
-  color: #0f172a !important;
+.reviewer-guardrail-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 4px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
 }
 
-.guardrail-card-body p {
-  font-size: 0.82rem !important;
-  color: #64748b !important;
-  margin: 0 !important;
+.reviewer-guardrail-row:last-child {
+  border-bottom: 0 !important;
 }
 
-.guardrail-card-badge {
-  display: inline-flex !important;
+.guardrail-row-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.guardrail-row-icon {
+  display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  min-width: 32px !important;
-  height: 28px !important;
-  padding: 0 10px !important;
-  border-radius: 20px !important;
-  font-size: 0.92rem !important;
-  font-weight: 800 !important;
+  color: #64748b !important;
   flex-shrink: 0 !important;
-  background: #f1f5f9 !important;
-  color: #475569 !important;
-  border: 1px solid #e2e8f0 !important;
 }
 
-.reviewer-saved-guardrail-card.has-count .guardrail-card-badge {
-  background: #0f172a !important;
-  color: #ffffff !important;
-  border-color: #0f172a !important;
+.guardrail-row-left strong {
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  display: block !important;
+}
+
+.guardrail-row-left p {
+  font-size: 0.82rem !important;
+  color: #64748b !important;
+  margin: 2px 0 0 0 !important;
+}
+
+.guardrail-row-count {
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  color: #94a3b8 !important;
+  min-width: 24px !important;
+  text-align: right !important;
+}
+
+.guardrail-row-count.has-value {
+  color: #0f172a !important;
+  font-weight: 800 !important;
 }

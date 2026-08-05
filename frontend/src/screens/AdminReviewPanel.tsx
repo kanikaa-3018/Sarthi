@@ -1959,29 +1959,25 @@ function SavedGuardrailList({ queue }: { queue: AdminReviewQueue }) {
       label: "Senior review",
       value: queue.summary.senior_routed,
       detail: "High-risk cases cannot auto-clear.",
-      icon: <ShieldAlert size={18} />,
-      tone: "red"
+      icon: <ShieldAlert size={16} />
     },
     {
       label: "Blocked items",
       value: queue.summary.blocked_items,
       detail: "Missing or conflicting evidence stays visible.",
-      icon: <AlertTriangle size={18} />,
-      tone: "amber"
+      icon: <AlertTriangle size={16} />
     },
     {
       label: "Buyer proof waits",
       value: queue.summary.buyer_requests_waiting,
       detail: "Open buyer doubts stay attached to the product.",
-      icon: <FileText size={18} />,
-      tone: "indigo"
+      icon: <FileText size={16} />
     },
     {
       label: "SLA misses",
       value: queue.summary.breached_sla_count,
       detail: "Overdue cases remain easy to spot.",
-      icon: <Clock size={18} />,
-      tone: "rose"
+      icon: <Clock size={16} />
     }
   ];
 
@@ -1993,16 +1989,18 @@ function SavedGuardrailList({ queue }: { queue: AdminReviewQueue }) {
           <p>Sarthi can assist, but these cases remain accountable.</p>
         </div>
       </div>
-      <div className="reviewer-saved-guardrail-grid">
+      <div className="reviewer-saved-guardrail-list">
         {rows.map((row) => (
-          <article key={row.label} className={`reviewer-saved-guardrail-card ${row.tone} ${row.value > 0 ? "has-count" : "zero-count"}`}>
-            <div className="guardrail-card-icon">{row.icon}</div>
-            <div className="guardrail-card-body">
-              <strong>{row.label}</strong>
-              <p>{row.detail}</p>
+          <div key={row.label} className="reviewer-guardrail-row">
+            <div className="guardrail-row-left">
+              <span className="guardrail-row-icon">{row.icon}</span>
+              <div>
+                <strong>{row.label}</strong>
+                <p>{row.detail}</p>
+              </div>
             </div>
-            <span className="guardrail-card-badge">{row.value}</span>
-          </article>
+            <span className={`guardrail-row-count ${row.value > 0 ? "has-value" : ""}`}>{row.value}</span>
+          </div>
         ))}
       </div>
     </section>
