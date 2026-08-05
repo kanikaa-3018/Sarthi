@@ -104,7 +104,6 @@ export function SarthiSavedWorkspacePanel({
   const result = autoScan.status === "ready" ? autoScan.result : null;
   const winnerProduct = result ? productForVariant(result.ranking.winner, similarProducts) : null;
   const winnerCandidate = result && winnerProduct ? candidateForProduct(result, winnerProduct) : null;
-  const score = winnerCandidate ? trustScorePercent(winnerCandidate) : null;
   const radarPick = wishlistRadar?.candidates.find((candidate) => candidate.is_recommended) ?? wishlistRadar?.candidates[0] ?? null;
   const recommendedProduct = winnerProduct ?? radarPick?.product ?? savedProduct;
   const recommendedSeller = recommendedProduct.seller_name;
@@ -126,6 +125,9 @@ export function SarthiSavedWorkspacePanel({
     : inspectedRadarCandidate
       ? Math.floor(inspectedRadarCandidate.score * 100)
       : null;
+  const score = winnerCandidate
+    ? trustScorePercent(winnerCandidate)
+    : inspectedScore ?? (radarPick ? Math.floor(radarPick.score * 100) : null);
   const inspectedContext = knowledgeGraph?.seller_context.find((item) => item.product.product_id === inspectedProduct.product_id) ?? null;
   const returnSignal = inspectedContext
     ? returnSignalLabel(inspectedContext.evidence.delivered_orders_90d, inspectedContext.evidence.return_rate)

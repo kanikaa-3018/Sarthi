@@ -504,6 +504,22 @@ export function FeedScreen({ buyerId, ready, language, experienceMode }: Props) 
       return;
     }
 
+    try {
+      const fallbackResult = await compareCluster(buyerId, product.cluster_id, product.product_id, options.selectedVariantId);
+      if (requestId !== decisionRequestRef.current) return;
+      setComparison(fallbackResult);
+      setAutoScan({
+        status: "ready",
+        clusterId: product.cluster_id,
+        title: product.title.split("-")[0].trim(),
+        listingCount: clusterListingCount(products, product.cluster_id),
+        result: fallbackResult
+      });
+      return;
+    } catch {
+      // ignore fallback error
+    }
+
     const message = decisionOutcome.reason instanceof Error ? decisionOutcome.reason.message : "Unable to check this product";
     if (requestId !== decisionRequestRef.current) return;
     setAutoScan({
