@@ -2169,16 +2169,19 @@ button,
 }
 
 .simple-proof-actions button {
-  background: transparent;
-  border: 0;
+  background: var(--bg-surface-muted);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: 10px;
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 700;
   min-height: 34px;
-  padding: 0;
+  padding: 0 12px;
 }
 
 .simple-proof-actions button + button {
+  background: color-mix(in srgb, var(--bg-surface-muted) 70%, var(--bg-surface));
+  border-color: var(--border-subtle);
   color: var(--text-secondary);
 }
 
@@ -2243,13 +2246,80 @@ button,
   padding: 10px !important;
 }
 
+.trust-receipt-actions {
+  align-items: center;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keep-proof-link,
+.trust-receipt-actions button,
+.trust-contributors-toggle,
+.trust-share-button,
+.proof-detail-toggle,
+.trust-proof-button {
+  align-items: center;
+  background: var(--bg-surface) !important;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 86%, transparent) !important;
+  border-radius: 10px !important;
+  color: var(--text-primary) !important;
+  display: inline-flex !important;
+  gap: 6px !important;
+  min-height: 36px !important;
+  padding: 0 12px !important;
+  cursor: pointer !important;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.keep-proof-link:hover,
+.trust-receipt-actions button:hover,
+.trust-contributors-toggle:hover,
+.trust-share-button:hover,
+.trust-proof-button:hover,
+.proof-detail-toggle:hover {
+  background: color-mix(in srgb, var(--bg-surface-muted) 82%, var(--bg-surface)) !important;
+  border-color: color-mix(in srgb, var(--text-primary) 24%, var(--border-subtle)) !important;
+}
+
+.keep-proof-link:focus-visible,
+.trust-receipt-actions button:focus-visible,
+.trust-contributors-toggle:focus-visible,
+.trust-share-button:focus-visible,
+.trust-proof-button:focus-visible,
+.proof-detail-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-primary) 32%, transparent);
+  outline-offset: 2px;
+}
+
+.trust-proof-button,
+.trust-receipt-actions .trust-proof-button,
+.keep-proof-link.trust-proof-button {
+  background: var(--text-primary) !important;
+  border-color: var(--text-primary) !important;
+  color: var(--bg-surface) !important;
+}
+
+.trust-proof-button:hover {
+  background: color-mix(in srgb, var(--text-primary) 88%, transparent) !important;
+  border-color: var(--text-primary) !important;
+  color: var(--bg-surface) !important;
+}
+
+.keep-proof-link:disabled,
+.trust-contributors-toggle:disabled,
+.trust-share-button:disabled,
+.trust-receipt-actions button:disabled,
+.trust-proof-button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55 !important;
+}
+
 .keep-proof-link,
 .proof-detail-toggle,
 .btn-action-secondary {
-  background: transparent !important;
-  border: 0 !important;
-  color: var(--text-secondary) !important;
-  padding-inline: 0 !important;
+  color: var(--text-primary) !important;
+  padding-inline: 12px !important;
 }
 
 .avoidable-issue-card {
@@ -40466,4 +40536,180 @@ body .compare-integrity-note em {
     grid-column: 2 !important;
     justify-self: start !important;
   }
+}
+
+/* Proof controls and proof-side actions: enforce clear button affordance */
+body .trust-center-v5 .proof-detail-toggle,
+body .product-detail-shell .simple-proof-actions button,
+body .product-detail-shell .response-actions button,
+body .product-detail-shell .detail-help-actions button,
+body .product-detail-shell .samvaad-missing-proof-cta-box .btn-request-proof-inline,
+body .product-detail-shell .keep-proof-link,
+body .product-detail-shell .trust-receipt-actions button,
+body .product-detail-shell .trust-contributors-toggle,
+body .product-detail-shell .trust-share-button,
+body .product-detail-shell .trust-proof-button,
+body .product-detail-shell .proof-detail-toggle,
+body .product-detail-shell .detail-help-actions button.active,
+body .product-detail-shell .btn-request-proof-inline,
+body .product-detail-shell .simple-proof-summary .simple-proof-actions button {
+  align-items: center !important;
+  background: var(--bg-surface) !important;
+  border: 1.5px solid color-mix(in srgb, var(--border-subtle) 80%, transparent) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.08) !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  font-size: 12px !important;
+  font-weight: 760 !important;
+  gap: 7px !important;
+  justify-content: center !important;
+  line-height: 1.2 !important;
+  min-height: 38px !important;
+  min-width: 0 !important;
+  padding: 0 14px !important;
+  text-decoration: none !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+}
+
+body .product-detail-shell .detail-help-actions,
+body .product-detail-shell .simple-proof-actions,
+body .product-detail-shell .trust-receipt-actions {
+  gap: 10px !important;
+}
+
+body .product-detail-shell .detail-help-actions button.active,
+body .trust-center-v5 .proof-detail-toggle,
+body .product-detail-shell .btn-request-proof-inline.requested,
+body .product-detail-shell .trust-proof-button,
+body .product-detail-shell .btn-action-secondary.trust-proof-button,
+body .trust-center-v5 .proof-detail-toggle {
+  background: var(--text-primary) !important;
+  border-color: var(--text-primary) !important;
+  color: var(--bg-surface) !important;
+}
+
+body .product-detail-shell .detail-help-actions button:hover,
+body .product-detail-shell .detail-help-actions button:focus-visible,
+body .product-detail-shell .simple-proof-actions button:hover,
+body .product-detail-shell .simple-proof-actions button:focus-visible,
+body .product-detail-shell .response-actions button:hover,
+body .product-detail-shell .response-actions button:focus-visible,
+body .product-detail-shell .samvaad-missing-proof-cta-box .btn-request-proof-inline:hover,
+body .product-detail-shell .samvaad-missing-proof-cta-box .btn-request-proof-inline:focus-visible,
+body .product-detail-shell .keep-proof-link:hover,
+body .product-detail-shell .keep-proof-link:focus-visible,
+body .product-detail-shell .trust-receipt-actions button:hover,
+body .product-detail-shell .trust-receipt-actions button:focus-visible,
+body .trust-center-v5 .proof-detail-toggle:hover,
+body .trust-center-v5 .proof-detail-toggle:focus-visible,
+body .product-detail-shell .trust-contributors-toggle:hover,
+body .product-detail-shell .trust-share-button:hover,
+body .product-detail-shell .trust-contributors-toggle:focus-visible,
+body .product-detail-shell .trust-share-button:focus-visible {
+  background: color-mix(in srgb, var(--bg-surface-muted) 84%, var(--bg-surface)) !important;
+  border-color: color-mix(in srgb, var(--text-primary) 24%, var(--border-subtle)) !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12) !important;
+  transform: translateY(-1px) !important;
+}
+
+body .product-detail-shell .btn-request-proof-inline.requested {
+  background: var(--bg-surface-muted) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-subtle) !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+body .product-detail-shell .btn-request-proof-inline:disabled,
+body .product-detail-shell .keep-proof-link:disabled,
+body .product-detail-shell .trust-proof-button:disabled,
+body .product-detail-shell .trust-contributors-toggle:disabled,
+body .product-detail-shell .trust-share-button:disabled,
+body .product-detail-shell .response-actions button:disabled,
+body .product-detail-shell .detail-help-actions button:disabled {
+  background: color-mix(in srgb, var(--bg-surface-muted) 84%, var(--bg-surface)) !important;
+  border-color: color-mix(in srgb, var(--border-subtle) 85%, transparent) !important;
+  color: color-mix(in srgb, var(--text-secondary) 58%, var(--text-muted)) !important;
+  cursor: not-allowed !important;
+  opacity: 1 !important;
+}
+
+body .product-detail-shell .samvaad-missing-proof-cta-box .btn-request-proof-inline {
+  background: #9F2089 !important;
+  border-color: #9F2089 !important;
+  color: #ffffff !important;
+  font-weight: 760 !important;
+}
+
+body .product-detail-shell .samvaad-missing-proof-cta-box .btn-request-proof-inline:hover,
+body .product-detail-shell .samvaad-missing-proof-cta-box .btn-request-proof-inline:focus-visible {
+  background: #B91C81 !important;
+  border-color: #B91C81 !important;
+}
+
+/* Feed proof controls: keep proof/detail actions looking like buttons everywhere they appear. */
+body .buyer-app-route .wishlist-actions button,
+body .buyer-app-route .proof-table-actions button,
+body .buyer-app-route .proof-row-actions button,
+body .buyer-app-route .proof-ledger-evidence-line button {
+  align-items: center !important;
+  background: var(--bg-surface-muted) !important;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent) !important;
+  border-radius: 10px !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  font-size: 13px !important;
+  font-weight: 760 !important;
+  gap: 7px !important;
+  justify-content: center !important;
+  min-height: 38px !important;
+  padding: 0 12px !important;
+  white-space: nowrap !important;
+}
+
+body .buyer-app-route .wishlist-actions button.primary,
+body .buyer-app-route .proof-table-actions button.primary,
+body .buyer-app-route .proof-row-actions button.primary,
+body .buyer-app-route .proof-ledger-evidence-line button.primary {
+  background: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  color: var(--text-on-accent) !important;
+}
+
+body .buyer-app-route .wishlist-actions,
+body .buyer-app-route .proof-table-actions,
+body .buyer-app-route .proof-row-actions,
+body .buyer-app-route .proof-ledger-evidence-line {
+  gap: 8px !important;
+}
+
+/* Stronger proof action affordance: real button rhythm + clear spacing everywhere they appear. */
+body .buyer-app-route .proof-table-actions,
+body .buyer-app-route .proof-row-actions,
+body .buyer-app-route .proof-ledger-evidence-line,
+body .buyer-app-route .wishlist-actions {
+  align-items: stretch !important;
+  display: grid !important;
+  gap: 10px !important;
+}
+
+body .buyer-app-route .wishlist-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+}
+
+body .buyer-app-route .proof-table-actions,
+body .buyer-app-route .proof-row-actions {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important;
+}
+
+body .buyer-app-route .proof-ledger-evidence-line {
+  align-items: center !important;
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) auto !important;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowLeft, Banknote, CheckCircle2, CreditCard, Gift, LockKeyhole, PackageCheck, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Banknote, CheckCircle2, CreditCard, LockKeyhole, ShieldCheck } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { createExpectationContract, getProductDetail, placeCheckoutOrder, verifyOffer } from "../api/client";
 import { t, type LanguageCode } from "../i18n";
@@ -53,7 +53,7 @@ export function CheckoutPage({ buyerId, language }: Props) {
   const [placedOrder, setPlacedOrder] = useState<BuyerOrderItem | null>(null);
 
   // --- Address State Machine ---
-  type CheckoutStep = "address" | "payment" | "otp" | "upi" | "success";
+  type CheckoutStep = "address" | "payment" | "otp" | "success";
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("address");
   const [address, setAddress] = useState({ name: "", phone: "", flat: "", area: "", city: "", pincode: "" });
   const [addressErrors, setAddressErrors] = useState<Partial<typeof address>>({});
@@ -62,11 +62,6 @@ export function CheckoutPage({ buyerId, language }: Props) {
   const [generatedOtp] = useState(() => String(Math.floor(100000 + Math.random() * 900000)));
   const [otpInput, setOtpInput] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
-
-  // UPI state
-  const [upiId, setUpiId] = useState("");
-  const [upiProcessing, setUpiProcessing] = useState(false);
-  const [upiError, setUpiError] = useState<string | null>(null);
 
   // Order invoice
   const [invoiceNo] = useState(() => `SRTH${Date.now().toString().slice(-8)}`);
@@ -206,9 +201,22 @@ export function CheckoutPage({ buyerId, language }: Props) {
       setCheckoutStep("otp");
       return;
     }
-    if (paymentMode === "prepaid") {
-      setCheckoutStep("upi");
-      return;
+    setOrdering(true);
+    try {
+      const response = await placeCheckoutOrder({
+        buyer_id: buyerId,
+        variant_id: selectedVariant!.variant_id,
+        contract_id: contract!.contract_id,
+        payment_mode: "prepaid",
+        buying_for_someone_else: wearerMode !== "self",
+        wearer_label: wearerLabelFor(wearerMode, language)
+      });
+      setPlacedOrder(response.order);
+      setCheckoutStep("success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
+    } finally {
+      setOrdering(false);
     }
   }
 
@@ -234,33 +242,6 @@ export function CheckoutPage({ buyerId, language }: Props) {
       setOtpError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
     } finally {
       setOrdering(false);
-    }
-  }
-
-  async function handleUpiConfirm() {
-    if (!upiId.trim() || !upiId.includes("@")) {
-      setUpiError("Enter a valid UPI ID (e.g. name@upi)");
-      return;
-    }
-    setUpiError(null);
-    setUpiProcessing(true);
-    // Simulate UPI processing
-    await new Promise(res => setTimeout(res, 2200));
-    try {
-      const response = await placeCheckoutOrder({
-        buyer_id: buyerId,
-        variant_id: selectedVariant!.variant_id,
-        contract_id: contract!.contract_id,
-        payment_mode: "prepaid",
-        buying_for_someone_else: wearerMode !== "self",
-        wearer_label: wearerLabelFor(wearerMode, language)
-      });
-      setPlacedOrder(response.order);
-      setCheckoutStep("success");
-    } catch (err) {
-      setUpiError(err instanceof Error ? err.message : t(language, "orderPlaceError"));
-    } finally {
-      setUpiProcessing(false);
     }
   }
 
@@ -372,57 +353,6 @@ export function CheckoutPage({ buyerId, language }: Props) {
             >
               {ordering ? "Placing order..." : "Verify & Place Order"}
             </button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // ---- Render: UPI ----
-  if (checkoutStep === "upi") {
-    return (
-      <section className="checkout-page-shell">
-        <div className="checkout-otp-shell">
-          <button type="button" className="checkout-back-link" onClick={() => { setCheckoutStep("payment"); setUpiProcessing(false); }}>
-            <ArrowLeft size={16} /> Back
-          </button>
-          <div className="checkout-otp-card">
-            <CreditCard size={28} style={{ color: "var(--accent-blue, #2563eb)" }} />
-            <h2>Pay via UPI</h2>
-            <p>Enter your UPI ID to complete the payment of <strong>Rs {payablePrice}</strong></p>
-            {upiProcessing ? (
-              <div className="checkout-upi-processing">
-                <div className="upi-spinner" />
-                <p>Processing payment...</p>
-                <small>Please wait, do not close this page.</small>
-              </div>
-            ) : (
-              <>
-                <label className="checkout-otp-label">
-                  UPI ID
-                  <input
-                    type="text"
-                    value={upiId}
-                    onChange={e => setUpiId(e.target.value)}
-                    placeholder="e.g. name@upi or phone@paytm"
-                    className="checkout-otp-input"
-                    autoFocus
-                  />
-                </label>
-                {upiError && <div className="notice error">{upiError}</div>}
-                <button
-                  type="button"
-                  className="checkout-page-primary"
-                  onClick={() => void handleUpiConfirm()}
-                  disabled={!upiId.trim()}
-                >
-                  Pay Rs {payablePrice}
-                </button>
-                <small style={{ textAlign: "center", color: "#888", marginTop: "8px" }}>
-                  <LockKeyhole size={12} style={{ verticalAlign: "middle" }} /> Secured payment
-                </small>
-              </>
-            )}
           </div>
         </div>
       </section>
@@ -922,26 +852,26 @@ function checkoutSuccessCopy(language: LanguageCode, paymentMode: "prepaid" | "c
   if (language === "hinglish") {
     return {
       title: "Order placed",
-      subtitle: paymentMode === "cod" ? "COD selected. Delivery par payment karna." : "UPI payment confirm ho gaya.",
+      subtitle: paymentMode === "cod" ? "COD selected. Delivery par payment karna." : "Online payment confirm ho gaya.",
       invoiceNo: "Invoice no.",
       trackingId: "Tracking ID",
       estimatedDelivery: "Estimated delivery",
       amount: "Amount",
       payment: "Payment",
-      paymentMode: paymentMode === "cod" ? "Cash on Delivery" : "UPI Prepaid",
+      paymentMode: paymentMode === "cod" ? "Cash on Delivery" : "Online Payment",
       deliveryTo: "Delivery to",
       trackOrder: "Track order"
     };
   }
   return {
     title: "Order placed",
-    subtitle: paymentMode === "cod" ? "Cash on delivery selected. Pay when you receive it." : "Payment confirmed via UPI.",
+    subtitle: paymentMode === "cod" ? "Cash on delivery selected. Pay when you receive it." : "Online payment confirmed.",
     invoiceNo: "Invoice no.",
     trackingId: "Tracking ID",
     estimatedDelivery: "Estimated delivery",
     amount: "Amount",
     payment: "Payment",
-    paymentMode: paymentMode === "cod" ? "Cash on Delivery" : "UPI Prepaid",
+    paymentMode: paymentMode === "cod" ? "Cash on Delivery" : "Online payment",
     deliveryTo: "Delivery to",
     trackOrder: "Track order"
   };
