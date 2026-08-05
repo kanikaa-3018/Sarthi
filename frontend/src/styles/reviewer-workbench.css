@@ -4712,3 +4712,33 @@
   color: #64748b !important;
   margin: 0 !important;
 }
+
+/* Header & Decision Banner Polish */
+.reviewer-final-action-head,
+.reviewer-decision-head {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  padding: 18px 24px !important;
+  margin: 0 0 18px 0 !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+}
+
+.reviewer-final-action-head span,
+.reviewer-decision-head span {
+  font-size: 0.75rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  color: #7c3aed !important;
+}
+
+.reviewer-final-action-head strong,
+.reviewer-decision-head strong {
+  font-size: 1.02rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  line-height: 1.4 !important;
+}
